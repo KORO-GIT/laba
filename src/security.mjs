@@ -81,7 +81,8 @@ export function isAllowedDeviceHost(host) {
 }
 
 export function safeSlug(value) {
-  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(String(value ?? ''));
+  // The DNS label also contains the five-character "-laba" suffix (63 chars total max).
+  return /^[a-z0-9](?:[a-z0-9-]{0,56}[a-z0-9])?$/.test(String(value ?? ''));
 }
 
 export function requireSameOrigin(request) {

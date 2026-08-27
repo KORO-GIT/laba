@@ -13,6 +13,8 @@ test('device slugs accept only safe DNS labels', () => {
   assert.equal(safeSlug('-camera'), false);
   assert.equal(safeSlug('camera.example'), false);
   assert.equal(safeSlug('Камера'), false);
+  assert.equal(safeSlug('a'.repeat(58)), true);
+  assert.equal(safeSlug('a'.repeat(59)), false);
 });
 
 test('device hosts stay inside configured private subnet', () => {

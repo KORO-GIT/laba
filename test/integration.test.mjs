@@ -69,6 +69,7 @@ test('development server serves portal API and protected admin writes', async (c
   const devices = await fetch(`${root}/api/devices`).then((response) => response.json());
   assert.equal(devices.length, 1);
   assert.equal(devices[0].slug, 'k1se-01');
+  assert.equal(devices[0].proxyUrl, 'https://k1se-01-laba.zpseapil.club/');
 
   const rejected = await fetch(`${root}/api/admin/devices`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'

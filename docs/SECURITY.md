@@ -23,11 +23,11 @@
 
 ## Cloudflare
 
-- Создать Self-hosted Access application для `laba.zpseapil.club` и `*.laba.zpseapil.club` (одна audience) либо две apps и указать обе audience через запятую.
+- Создать Self-hosted Access application для `laba.zpseapil.club` и частичной wildcard-зоны `*-laba.zpseapil.club` (одна audience) либо две apps и указать обе audience через запятую.
 - Политика Allow должна содержать только нужные e-mail/IdP-группы. Рекомендуется MFA и session duration 8–24 часа.
 - Добавить отдельную WAF/rate-limit политику для `/cdn-cgi/access/login` и административных API, если это поддерживает тариф.
-- DNS root и wildcard должны быть proxied. SSL/TLS mode — Full (strict).
-- Origin certificate покрывает root и wildcard; приватный ключ хранится только на VPS с mode `600`.
+- DNS `laba` и wildcard `*` должны быть proxied. Точные существующие DNS-записи имеют приоритет; Caddy отклоняет неизвестные wildcard-хосты.
+- SSL/TLS mode — Full (strict). Origin certificate покрывает `*.zpseapil.club`; приватный ключ хранится только на VPS с mode `640`, доступен `root:caddy`.
 
 ## Остаточные риски
 

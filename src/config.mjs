@@ -6,6 +6,7 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 8080),
   baseDomain: (process.env.BASE_DOMAIN ?? 'laba.zpseapil.club').toLowerCase(),
+  deviceHostSuffix: (process.env.DEVICE_HOST_SUFFIX ?? '-laba.zpseapil.club').toLowerCase(),
   authMode: process.env.AUTH_MODE ?? 'development',
   bootstrapAdminEmail: (process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@local.test').toLowerCase(),
   devUserEmail: (process.env.DEV_USER_EMAIL ?? process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@local.test').toLowerCase(),
@@ -33,6 +34,10 @@ export function validateConfig() {
 
   if (!['development', 'cloudflare'].includes(config.authMode)) {
     throw new Error('AUTH_MODE must be development or cloudflare');
+  }
+
+  if (!/^-[a-z0-9.-]+$/.test(config.deviceHostSuffix)) {
+    throw new Error('DEVICE_HOST_SUFFIX must start with a hyphen and contain only DNS characters');
   }
 
   if (config.nodeEnv === 'production' && config.authMode !== 'cloudflare') {

@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — администрирование</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.1.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.2.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -48,7 +48,7 @@
             <label class="field span-2"><span>Название</span><input id="device-name" required maxlength="80" placeholder="Creality K1 SE"></label>
             <label class="field"><span>Тип</span><select id="device-kind"><option value="printer">Принтер</option><option value="camera">Камера</option></select></label>
             <label class="field"><span>Интеграция</span><select id="device-driver"><option value="moonraker">Moonraker / Klipper</option><option value="octoprint">OctoPrint</option><option value="http">Web-интерфейс</option><option value="rtsp">RTSP-поток</option></select></label>
-            <label class="field"><span>Поддомен</span><div class="input-suffix"><input id="device-slug" required pattern="[a-z0-9][a-z0-9-]*" placeholder="k1se-01"><small>.laba…</small></div></label>
+            <label class="field"><span>Адрес устройства</span><div class="input-suffix"><input id="device-slug" required maxlength="58" pattern="[a-z0-9][a-z0-9-]*" placeholder="k1se-01"><small>-laba…</small></div></label>
             <label class="field"><span>IP-адрес</span><input id="device-host" required inputmode="decimal" placeholder="192.168.0.70"></label>
             <label class="field"><span>Протокол</span><select id="device-protocol"><option value="http">HTTP</option><option value="https">HTTPS</option><option value="rtsp">RTSP</option></select></label>
             <label class="field"><span>Web-порт</span><input id="device-ui-port" required type="number" min="1" max="65535" value="80"></label>
@@ -93,6 +93,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.1.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.2.0"></script>
 </body>
 </html>

@@ -14,13 +14,13 @@
 
 ## Подготовка Cloudflare
 
-1. DNS: proxied A/AAAA для `laba` и proxied wildcard `*.laba` на origin VPS.
+1. DNS: proxied A/AAAA для `laba` и proxied wildcard `*` на origin VPS. Точные существующие записи (`star`, `task`, `scan` и другие) продолжают иметь приоритет.
 2. SSL/TLS: Full (strict).
-3. Origin Server: сертификат на `laba.zpseapil.club` и `*.laba.zpseapil.club`, срок 15 лет.
-4. Access: Self-hosted application для root и wildcard. Политика Allow — только нужные identities, желательно с MFA.
+3. Origin Server: сертификат на `*.zpseapil.club` и `zpseapil.club`, срок 15 лет.
+4. Access: Self-hosted application для `laba.zpseapil.club` и `*-laba.zpseapil.club`. Политика Allow — только нужные identities, желательно с MFA.
 5. Скопировать Access application audience (AUD) и team domain в server `.env`.
 
-Если root и wildcard пришлось создать двумя Access applications, `CF_ACCESS_AUD` принимает обе audience через запятую.
+Если portal и device hosts пришлось создать двумя Access applications, `CF_ACCESS_AUD` принимает обе audience через запятую.
 
 ## Первая установка
 

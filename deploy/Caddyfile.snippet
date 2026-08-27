@@ -1,8 +1,30 @@
-laba.zpseapil.club, *.laba.zpseapil.club {
+laba.zpseapil.club {
 	tls /etc/caddy/certs/laba-origin.pem /etc/caddy/certs/laba-origin-key.pem
 	encode zstd gzip
 
 	reverse_proxy 127.0.0.1:3020
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+		-Server
+	}
+}
+
+*.zpseapil.club {
+	tls /etc/caddy/certs/laba-origin.pem /etc/caddy/certs/laba-origin-key.pem
+	encode zstd gzip
+
+	@laba_device host_regexp laba_device ^[a-z0-9](?:[a-z0-9-]{0,56}[a-z0-9])?-laba\.zpseapil\.club$
+	handle @laba_device {
+		reverse_proxy 127.0.0.1:3020
+	}
+	handle {
+		respond 404
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

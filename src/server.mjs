@@ -72,9 +72,8 @@ function hostOnly(value) {
 
 function subdomainSlug(headers) {
   const host = hostOnly(headers['x-forwarded-host'] ?? headers.host);
-  const suffix = `.${config.baseDomain}`;
-  if (host.endsWith(suffix) && host !== config.baseDomain) {
-    const slug = host.slice(0, -suffix.length);
+  if (host.endsWith(config.deviceHostSuffix)) {
+    const slug = host.slice(0, -config.deviceHostSuffix.length);
     return safeSlug(slug) ? slug : null;
   }
   return null;
@@ -164,7 +163,7 @@ function validateDeviceNetwork(device, reply) {
 }
 
 const deviceSchema = z.object({
-  slug: z.string().trim().toLowerCase().refine(safeSlug, 'Недопустимый поддомен'),
+  slug: z.string().trim().toLowerCase().refine(safeSlug, 'Недопустимый идентификатор адреса'),
   name: z.string().trim().min(2).max(80),
   kind: z.enum(['printer', 'camera']),
   driver: z.enum(['moonraker', 'octoprint', 'http', 'rtsp']),
@@ -267,7 +266,7 @@ app.get('/api/devices', async (request) => {
       ...serializeDevice(device),
       access,
       canOpen: canOpenDevice(request.portalUser, device),
-      proxyUrl: `https://${device.slug}.${config.baseDomain}/`,
+      proxyUrl: `https://${device.slug}${config.deviceHostSuffix}/`,
       status: await probeDevice(device)
     };
   }));
