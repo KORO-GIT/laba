@@ -1,0 +1,6 @@
+node_modules/
+data/
+.env
+deploy/certs/
+npm-debug.log*
+

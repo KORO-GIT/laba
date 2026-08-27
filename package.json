@@ -1,0 +1,28 @@
+{
+  "name": "laba-device-portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Secure multi-printer and camera portal for laba.zpseapil.club",
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "node src/server.mjs",
+    "check": "node --check src/server.mjs && node --check src/database.mjs && node --check src/security.mjs && node --check src/probes.mjs && node --check public/dashboard.js && node --check public/admin.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "^10.1.3",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.1",
+    "http-proxy": "^1.18.1",
+    "ipaddr.js": "^2.5.0",
+    "jose": "^6.2.10",
+    "zod": "^4.4.3"
+  }
+}

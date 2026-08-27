@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+  <title>LABA — администрирование</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.1.0">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar shell">
+    <a class="brand" href="/">
+      <span class="brand-mark">L</span>
+      <span><strong>LABA</strong><small>ADMIN CONSOLE</small></span>
+    </a>
+    <div class="identity">
+      <span id="identity-name">Администратор</span>
+      <a class="button button-ghost" href="/">К устройствам</a>
+    </div>
+  </header>
+
+  <main class="shell admin-shell">
+    <section class="admin-heading">
+      <p class="eyebrow">CONTROL PANEL</p>
+      <h1>Управление лабораторией</h1>
+      <p>Добавляйте устройства, назначайте людям права и проверяйте журнал изменений.</p>
+    </section>
+
+    <nav class="admin-tabs" aria-label="Разделы администрирования">
+      <button class="admin-tab active" data-panel="devices" type="button">Устройства</button>
+      <button class="admin-tab" data-panel="users" type="button">Пользователи</button>
+      <button class="admin-tab" data-panel="audit" type="button">Журнал</button>
+    </nav>
+
+    <section id="panel-devices" class="admin-panel active">
+      <div class="panel-toolbar">
+        <div><h2>Устройства</h2><p>Принтеры, камеры и их адреса в домашней сети.</p></div>
+        <button id="new-device" class="button button-primary" type="button">＋ Добавить устройство</button>
+      </div>
+      <div class="admin-layout">
+        <div id="device-list" class="record-list"></div>
+        <form id="device-form" class="editor-card hidden">
+          <div class="editor-heading"><div><p class="eyebrow">DEVICE</p><h3 id="device-form-title">Новое устройство</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрыть">×</button></div>
+          <input id="device-id" type="hidden">
+          <div class="form-grid">
+            <label class="field span-2"><span>Название</span><input id="device-name" required maxlength="80" placeholder="Creality K1 SE"></label>
+            <label class="field"><span>Тип</span><select id="device-kind"><option value="printer">Принтер</option><option value="camera">Камера</option></select></label>
+            <label class="field"><span>Интеграция</span><select id="device-driver"><option value="moonraker">Moonraker / Klipper</option><option value="octoprint">OctoPrint</option><option value="http">Web-интерфейс</option><option value="rtsp">RTSP-поток</option></select></label>
+            <label class="field"><span>Поддомен</span><div class="input-suffix"><input id="device-slug" required pattern="[a-z0-9][a-z0-9-]*" placeholder="k1se-01"><small>.laba…</small></div></label>
+            <label class="field"><span>IP-адрес</span><input id="device-host" required inputmode="decimal" placeholder="192.168.0.70"></label>
+            <label class="field"><span>Протокол</span><select id="device-protocol"><option value="http">HTTP</option><option value="https">HTTPS</option><option value="rtsp">RTSP</option></select></label>
+            <label class="field"><span>Web-порт</span><input id="device-ui-port" required type="number" min="1" max="65535" value="80"></label>
+            <label class="field"><span>API-порт</span><input id="device-api-port" type="number" min="1" max="65535" placeholder="7125"></label>
+            <label class="field"><span>Порядок</span><input id="device-sort" type="number" value="0"></label>
+            <label class="field span-2"><span>Секрет JSON <small>(не показывается после сохранения)</small></span><textarea id="device-secret" rows="3" placeholder='{"username":"user","password":"…"}'></textarea></label>
+            <label class="field span-2"><span>Заметка</span><textarea id="device-notes" rows="2" maxlength="500" placeholder="Короткое описание"></textarea></label>
+            <label class="switch-row span-2"><input id="device-enabled" type="checkbox" checked><span class="switch"></span><span>Устройство активно</span></label>
+          </div>
+          <p id="rtsp-hint" class="form-hint hidden">RTSP проверяется по TCP. Для просмотра в браузере позже понадобится WebRTC/HLS-шлюз.</p>
+          <div class="form-actions"><button id="test-device" class="button button-ghost hidden" type="button">Проверить связь</button><button class="button button-primary" type="submit">Сохранить</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-users" class="admin-panel">
+      <div class="panel-toolbar">
+        <div><h2>Пользователи</h2><p>Доступ выдаётся по e-mail, подтверждённому Cloudflare Access.</p></div>
+        <button id="new-user" class="button button-primary" type="button">＋ Добавить пользователя</button>
+      </div>
+      <div class="admin-layout">
+        <div id="user-list" class="record-list"></div>
+        <form id="user-form" class="editor-card hidden">
+          <div class="editor-heading"><div><p class="eyebrow">USER</p><h3 id="user-form-title">Новый пользователь</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрыть">×</button></div>
+          <input id="user-id" type="hidden">
+          <div class="form-grid">
+            <label class="field span-2"><span>E-mail</span><input id="user-email" required type="email" placeholder="name@example.com"></label>
+            <label class="field"><span>Имя</span><input id="user-name" maxlength="80" placeholder="Алексей"></label>
+            <label class="field"><span>Роль</span><select id="user-role"><option value="viewer">Наблюдатель</option><option value="operator">Оператор</option><option value="admin">Администратор</option></select></label>
+            <label class="switch-row span-2"><input id="user-enabled" type="checkbox" checked><span class="switch"></span><span>Учётная запись активна</span></label>
+          </div>
+          <div class="access-heading"><h4>Доступ к устройствам</h4><p>Администратор всегда имеет полный доступ.</p></div>
+          <div id="user-access" class="access-list"></div>
+          <div class="form-actions"><button class="button button-primary" type="submit">Сохранить</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-audit" class="admin-panel">
+      <div class="panel-toolbar"><div><h2>Журнал изменений</h2><p>Последние действия администраторов.</p></div><button id="refresh-audit" class="button button-ghost" type="button">Обновить</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Время</th><th>Кто</th><th>Действие</th><th>Объект</th><th>Детали</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/assets/admin.js?v=0.1.0"></script>
+</body>
+</html>
