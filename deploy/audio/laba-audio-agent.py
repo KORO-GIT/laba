@@ -6,6 +6,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -29,6 +30,8 @@ MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
 BLUETOOTH_ACTIONS = {"pair", "trust", "untrust", "connect", "disconnect", "remove"}
 PLAYER_ACTIONS = {"play", "pause", "play-pause", "next", "previous", "stop"}
+GREETING_WAV = Path("/opt/laba-audio-agent/bazhaju-zdorovya.wav")
+GREETING_DUCK_FACTOR = 0.35
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger("laba-audio-agent")
@@ -210,7 +213,7 @@ def player_status() -> dict[str, object]:
 def full_status() -> dict[str, object]:
     with COMMAND_LOCK:
         return {
-            "version": 2,
+            "version": 3,
             "adapter": bluetooth_adapter(),
             "devices": bluetooth_devices(),
             "audio": pipewire_status(),
@@ -306,6 +309,69 @@ def player_action(action: str) -> None:
 def clap_play_pause() -> None:
     with COMMAND_LOCK:
         player_action("play-pause")
+
+
+def playing_player_volumes() -> list[tuple[str, float]]:
+    """Return exact MPRIS volumes for players that are currently playing."""
+    output = run_command(["/usr/bin/playerctl", "--list-all"], check=False)
+    players: list[tuple[str, float]] = []
+    for name in output.splitlines()[:16]:
+        name = name.strip()
+        if not name:
+            continue
+        status = run_command(["/usr/bin/playerctl", "--player", name, "status"], check=False)
+        if status.strip().lower() != "playing":
+            continue
+        raw_volume = run_command(["/usr/bin/playerctl", "--player", name, "volume"], check=False)
+        try:
+            volume = float(raw_volume.strip())
+        except ValueError:
+            LOGGER.warning("Cannot read MPRIS volume for %s", name)
+            continue
+        if math.isfinite(volume) and volume >= 0:
+            players.append((name, volume))
+    return players
+
+
+def set_player_volume(name: str, volume: float) -> None:
+    run_command([
+        "/usr/bin/playerctl",
+        "--player", name,
+        "volume", f"{max(0.0, volume):.6f}",
+    ])
+
+
+def clap_greeting() -> None:
+    """Duck active music, play the local greeting, then restore exact volumes."""
+    if not GREETING_WAV.is_file():
+        raise AgentError("Файл привітання не встановлено", HTTPStatus.SERVICE_UNAVAILABLE)
+    if not Path("/usr/bin/pw-play").exists():
+        raise AgentError("PipeWire player недоступний", HTTPStatus.SERVICE_UNAVAILABLE)
+
+    with COMMAND_LOCK:
+        playing = playing_player_volumes()
+        ducked: list[tuple[str, float]] = []
+        try:
+            for name, original_volume in playing:
+                try:
+                    set_player_volume(name, original_volume * GREETING_DUCK_FACTOR)
+                    ducked.append((name, original_volume))
+                except AgentError:
+                    LOGGER.exception("Cannot duck MPRIS player %s", name)
+            if ducked:
+                time.sleep(0.18)
+            run_command([
+                "/usr/bin/pw-play",
+                "--target", "@DEFAULT_AUDIO_SINK@",
+                "--volume", "1.0",
+                str(GREETING_WAV),
+            ], timeout=8)
+        finally:
+            for name, original_volume in ducked:
+                try:
+                    set_player_volume(name, original_volume)
+                except AgentError:
+                    LOGGER.exception("Cannot restore MPRIS volume for %s", name)
 
 
 def rate_allowed(address: str) -> bool:
@@ -445,7 +511,7 @@ def main() -> None:
     global CLAP_LISTENER
     server = ThreadingHTTPServer((LISTEN_ADDRESS, LISTEN_PORT), RequestHandler)
     server.daemon_threads = True
-    CLAP_LISTENER = ClapListener(clap_play_pause)
+    CLAP_LISTENER = ClapListener(clap_play_pause, clap_greeting)
     CLAP_LISTENER.start()
     LOGGER.info("LABA audio agent listening on %s:%s", LISTEN_ADDRESS, LISTEN_PORT)
     try:

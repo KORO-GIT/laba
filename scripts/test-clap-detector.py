@@ -41,6 +41,13 @@ def test_music_does_not_trigger() -> None:
     assert events == [], events
 
 
+def impulse_samples(random_source: random.Random, burst: bool) -> list[float]:
+    return [
+        random_source.gauss(0.0, 0.55 if burst and index < 60 else 0.008)
+        for index in range(MODULE.FRAME_SAMPLES)
+    ]
+
+
 def test_double_clap_triggers_once() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(7)
@@ -48,16 +55,26 @@ def test_double_clap_triggers_once() -> None:
     for frame_number in range(250):
         now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
         burst = 2.00 <= now < 2.02 or 2.42 <= now < 2.44
-        samples = [
-            random_source.gauss(0.0, 0.55 if burst and index < 60 else 0.008)
-            for index in range(MODULE.FRAME_SAMPLES)
-        ]
-        event = detector.process(pcm_frame(samples), now)
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
         if event:
             events.append(event)
-    assert events == ["clap", "double-clap"], events
+    assert events == ["clap", "clap-pair", "double-clap"], events
+
+
+def test_triple_clap_supersedes_double_clap() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(11)
+    events: list[str] = []
+    for frame_number in range(300):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = any(start <= now < start + 0.02 for start in (2.00, 2.42, 2.84))
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert events == ["clap", "clap-pair", "triple-clap"], events
 
 
 test_music_does_not_trigger()
 test_double_clap_triggers_once()
+test_triple_clap_supersedes_double_clap()
 print("Clap detector tests passed")

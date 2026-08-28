@@ -129,6 +129,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.9.0` не змінює схему БД. Вона додає локальний адаптивний детектор подвійного хлопка з USB-мікрофона Logitech C270. Два імпульси з інтервалом `0,16–0,90` секунди виконують MPRIS `play-pause`; після спрацювання діє двосекундний cooldown.
 
+Версія `0.10.0` не змінює схему БД. Вона розрізняє подвійний і потрійний хлопки: подвійний виконує `play-pause`, а потрійний приглушує активний MPRIS-програвач до 35%, відтворює локальний WAV «Бажаю здоров'я!» та в `finally` повертає точну попередню гучність.
+
 ## Робочий стіл Raspberry Pi
 
 WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурації та browser-only unit на Pi:
@@ -210,6 +212,7 @@ Agent працює як `laba-audio-agent.service` від користувача
 ```bash
 scp /opt/laba/deploy/audio/laba-audio-agent.py \
   /opt/laba/deploy/audio/laba_clap_detector.py \
+  /opt/laba/deploy/audio/assets/bazhaju-zdorovya.wav \
   /opt/laba/deploy/audio/laba-audio-agent.service \
   /opt/laba/deploy/audio/provision-token.py \
   korob@192.168.0.63:/tmp/
@@ -223,6 +226,7 @@ sudo apt-get install --yes playerctl
 sudo install -d -o root -g root -m 0755 /opt/laba-audio-agent
 sudo install -o root -g root -m 0755 /tmp/laba-audio-agent.py /opt/laba-audio-agent/laba-audio-agent.py
 sudo install -o root -g root -m 0644 /tmp/laba_clap_detector.py /opt/laba-audio-agent/laba_clap_detector.py
+sudo install -o root -g root -m 0644 /tmp/bazhaju-zdorovya.wav /opt/laba-audio-agent/bazhaju-zdorovya.wav
 sudo install -o root -g root -m 0644 /tmp/laba-audio-agent.service /etc/systemd/system/laba-audio-agent.service
 sudo rfkill unblock bluetooth
 sudo python3 /tmp/provision-token.py
@@ -238,7 +242,7 @@ systemctl is-active laba-audio-agent.service
 scp korob@192.168.0.63:/tmp/laba-audio-agent-token /tmp/laba-audio-agent-token
 node /opt/laba/scripts/configure-audio-agent.mjs /tmp/laba-audio-agent-token
 rm -- /tmp/laba-audio-agent-token
-ssh korob@192.168.0.63 'sudo rm -f /tmp/laba-audio-agent-token /tmp/laba-audio-agent.py /tmp/laba_clap_detector.py /tmp/laba-audio-agent.service /tmp/provision-token.py'
+ssh korob@192.168.0.63 'sudo rm -f /tmp/laba-audio-agent-token /tmp/laba-audio-agent.py /tmp/laba_clap_detector.py /tmp/bazhaju-zdorovya.wav /tmp/laba-audio-agent.service /tmp/provision-token.py'
 systemctl restart laba-portal.service
 systemctl is-active laba-portal.service
 ```

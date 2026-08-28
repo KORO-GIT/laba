@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Adaptive double-clap detector for the LABA USB webcam microphone."""
+"""Adaptive double/triple-clap detector for the LABA USB webcam microphone."""
 
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ DEFAULT_SOURCE = "alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.mono-fallba
 
 
 class AdaptiveClapDetector:
-    """Detect two short broadband impulses without reacting to steady music."""
+    """Detect short broadband impulse gestures without reacting to steady music."""
 
     def __init__(self) -> None:
         self.noise_rms: deque[float] = deque(maxlen=150)
         self.noise_high: deque[float] = deque(maxlen=150)
         self.previous_sample = 0.0
         self.last_impulse_at = -10.0
-        self.first_clap_at: float | None = None
+        self.clap_times: list[float] = []
         self.cooldown_until = 0.0
         self.last_metrics: dict[str, float] = {}
 
@@ -105,27 +105,39 @@ class AdaptiveClapDetector:
             self.noise_rms.append(rms)
             self.noise_high.append(high_rms)
 
-        if self.first_clap_at is not None and now - self.first_clap_at > 0.90:
-            self.first_clap_at = None
+        if len(self.clap_times) == 2 and now - self.clap_times[-1] > 0.90:
+            self.clap_times.clear()
+            self.cooldown_until = now + 2.0
+            return "double-clap"
+        if len(self.clap_times) == 1 and now - self.clap_times[0] > 0.90:
+            self.clap_times.clear()
         if not impulse:
             return None
 
         self.last_impulse_at = now
-        if self.first_clap_at is None:
-            self.first_clap_at = now
+        if not self.clap_times:
+            self.clap_times.append(now)
             return "clap"
 
-        interval = now - self.first_clap_at
+        interval = now - self.clap_times[-1]
         if interval < 0.16:
             return None
-        self.first_clap_at = None
+        if interval > 0.90:
+            self.clap_times[:] = [now]
+            return "clap"
+        self.clap_times.append(now)
+        if len(self.clap_times) == 2:
+            return "clap-pair"
+
+        self.clap_times.clear()
         self.cooldown_until = now + 2.0
-        return "double-clap"
+        return "triple-clap"
 
 
 class ClapListener:
-    def __init__(self, on_double_clap: Callable[[], None]) -> None:
+    def __init__(self, on_double_clap: Callable[[], None], on_triple_clap: Callable[[], None]) -> None:
         self.on_double_clap = on_double_clap
+        self.on_triple_clap = on_triple_clap
         self.source = os.environ.get("LABA_CLAP_SOURCE", DEFAULT_SOURCE)
         self.enabled = os.environ.get("LABA_CLAP_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
         self.lock = threading.Lock()
@@ -133,7 +145,10 @@ class ClapListener:
         self.error: str | None = None
         self.last_clap_at: str | None = None
         self.last_gesture_at: str | None = None
+        self.last_gesture: str | None = None
         self.trigger_count = 0
+        self.double_clap_count = 0
+        self.triple_clap_count = 0
         self.thread: threading.Thread | None = None
 
     @staticmethod
@@ -148,7 +163,10 @@ class ClapListener:
                 "source": "Webcam C270 Mono",
                 "lastClapAt": self.last_clap_at,
                 "lastGestureAt": self.last_gesture_at,
+                "lastGesture": self.last_gesture,
                 "triggerCount": self.trigger_count,
+                "doubleClapCount": self.double_clap_count,
+                "tripleClapCount": self.triple_clap_count,
                 "error": self.error,
             }
 
@@ -162,6 +180,24 @@ class ClapListener:
         with self.lock:
             self.listening = listening
             self.error = error
+
+    @staticmethod
+    def _run_action(callback: Callable[[], None], success_message: str, error_message: str) -> None:
+        try:
+            callback()
+            LOGGER.info(success_message)
+        except Exception:
+            LOGGER.exception(error_message)
+
+    def _dispatch_action(self, callback: Callable[[], None], success_message: str, error_message: str) -> None:
+        # Keep consuming microphone frames while a greeting is playing. Otherwise
+        # pw-record can buffer the speaker output and feed it back as stale input.
+        threading.Thread(
+            target=self._run_action,
+            args=(callback, success_message, error_message),
+            name="laba-clap-action",
+            daemon=True,
+        ).start()
 
     def _record_once(self) -> None:
         command = [
@@ -190,19 +226,33 @@ class ClapListener:
             if len(pcm) != FRAME_BYTES:
                 break
             event = detector.process(pcm, time.monotonic())
-            if event == "clap":
+            if event in {"clap", "clap-pair"}:
                 with self.lock:
                     self.last_clap_at = self._timestamp()
             elif event == "double-clap":
                 with self.lock:
                     self.last_clap_at = self._timestamp()
                     self.last_gesture_at = self.last_clap_at
+                    self.last_gesture = "play-pause"
                     self.trigger_count += 1
-                try:
-                    self.on_double_clap()
-                    LOGGER.info("Double clap detected: play/pause sent to MPRIS")
-                except Exception:
-                    LOGGER.exception("Double clap action failed")
+                    self.double_clap_count += 1
+                self._dispatch_action(
+                    self.on_double_clap,
+                    "Double clap detected: play/pause sent to MPRIS",
+                    "Double clap action failed",
+                )
+            elif event == "triple-clap":
+                with self.lock:
+                    self.last_clap_at = self._timestamp()
+                    self.last_gesture_at = self.last_clap_at
+                    self.last_gesture = "greeting"
+                    self.trigger_count += 1
+                    self.triple_clap_count += 1
+                self._dispatch_action(
+                    self.on_triple_clap,
+                    "Triple clap detected: Ukrainian greeting played",
+                    "Triple clap action failed",
+                )
 
         return_code = process.wait(timeout=3)
         error_output = b""

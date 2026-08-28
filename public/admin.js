@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.9.0';
+import { initDesktop } from './desktop.js?v=0.10.0';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null };
 const toast = document.querySelector('#toast');
@@ -301,12 +301,13 @@ function renderAudio() {
   clapState.classList.toggle('off', !clapOnline);
   document.querySelector('#clap-status-dot').classList.toggle('online', clapOnline);
   document.querySelector('#clap-status').textContent = clapOnline
-    ? `${clap.source || 'Webcam C270 Mono'} · два хлопки → Play / Pause`
+    ? `${clap.source || 'Webcam C270 Mono'} · 2 хлопки → Play / Pause · 3 → привітання`
     : clap.error || 'Детектор хлопків вимкнений';
   const lastGesture = clap.lastGestureAt ? new Date(clap.lastGestureAt).toLocaleString('uk-UA') : null;
+  const lastGestureName = clap.lastGesture === 'greeting' ? 'привітання' : 'Play / Pause';
   document.querySelector('#clap-details').textContent = lastGesture
-    ? `Остання команда: ${lastGesture}. Спрацювань після запуску: ${clap.triggerCount || 0}.`
-    : 'Два чіткі хлопки з інтервалом 0,16–0,90 секунди перемикають Play / Pause. Після команди діє захист від повтору на 2 секунди.';
+    ? `Остання команда: ${lastGestureName}, ${lastGesture}. Подвійних: ${clap.doubleClapCount || 0}, потрійних: ${clap.tripleClapCount || 0}.`
+    : 'Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Інтервал між хлопками: 0,16–0,90 секунди.';
 }
 
 async function loadAudio({ quiet = false } = {}) {
