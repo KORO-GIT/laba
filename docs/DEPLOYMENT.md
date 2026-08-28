@@ -125,6 +125,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.8.1` не змінює схему БД. Вона монтує модулі noVNC через явний файловий route, щоб загальний SPA fallback порталу ніколи не повертав HTML замість JavaScript-модуля.
 
+Версія `0.8.2` не змінює схему БД. Вона виправляє нульову висоту внутрішнього viewport noVNC та встановлює перевірену збірку WayVNC `0.9.1-1+rpt5`, яка починає capture для headless-виходу labwc зі станом живлення `UNKNOWN`.
+
 ## Робочий стіл Raspberry Pi
 
 WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурації та browser-only unit на Pi:
@@ -135,10 +137,18 @@ scp /opt/laba/deploy/desktop/wayvnc-config \
   /opt/laba/deploy/desktop/laba-wayvnc-web.service \
   /opt/laba/deploy/desktop/laba-wayvnc-attach.py \
   /opt/laba/deploy/desktop/laba-wayvnc-attach.service \
+  /opt/laba/deploy/desktop/wayvnc-power-unknown.patch \
+  /opt/laba/scripts/build-wayvnc-pi.sh \
   korob@192.168.0.63:/tmp/
 ```
 
-На Pi встановити exact LAN-конфігурацію та запустити vendor service. Приватні ключі й сертифікат генерує `wayvnc-generate-keys.service` безпосередньо на Pi:
+На Pi спочатку зібрати й встановити зафіксовану patched-версію WayVNC. Скрипт завантажує exact Raspberry Pi source package, перевіряє SHA-256 усіх архівів, застосовує єдиний patch і встановлює binary у `/usr/local/lib/laba/wayvnc`:
+
+```bash
+sudo /bin/sh /tmp/build-wayvnc-pi.sh /tmp/wayvnc-power-unknown.patch
+```
+
+Потім встановити exact LAN-конфігурацію та запустити vendor і LABA services. Приватні ключі й сертифікат генерує `wayvnc-generate-keys.service` безпосередньо на Pi:
 
 ```bash
 sudo install -d -o root -g root -m 0755 /etc/wayvnc
@@ -152,7 +162,8 @@ sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-attach.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
 sudo rm -- /tmp/wayvnc-config /tmp/wayvnc-web-config /tmp/laba-wayvnc-web.service \
-  /tmp/laba-wayvnc-attach.py /tmp/laba-wayvnc-attach.service
+  /tmp/laba-wayvnc-attach.py /tmp/laba-wayvnc-attach.service \
+  /tmp/wayvnc-power-unknown.patch /tmp/build-wayvnc-pi.sh
 systemctl is-active wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
 ss -lnt | grep '192.168.0.63:5900'
 ss -lnt | grep '192.168.0.63:5901'

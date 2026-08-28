@@ -11,7 +11,7 @@ Group=vnc
 Environment=XDG_RUNTIME_DIR=/run/laba-wayvnc-web
 RuntimeDirectory=laba-wayvnc-web
 RuntimeDirectoryMode=0700
-ExecStart=/usr/bin/wayvnc --detached --config /etc/wayvnc/laba-web-config --socket /run/laba-wayvnc-web/wayvncctl.sock
+ExecStart=/usr/local/lib/laba/wayvnc --detached --config /etc/wayvnc/laba-web-config --socket /run/laba-wayvnc-web/wayvncctl.sock
 Restart=always
 RestartSec=3s
 KillSignal=INT

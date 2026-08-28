@@ -35,7 +35,7 @@
 - Віддалений VNC обмежений двома одночасними з’єднаннями та вісьмома спробами на хвилину для одного адміністратора; кожне прийняте з’єднання записується до аудиту.
 - `websockify` слухає лише `127.0.0.1:6080`, а systemd IP policy дозволяє йому лише loopback та exact target `192.168.0.63/32`. На Pi browser endpoint `5901` має окрему systemd IP policy: лише VPS Tailscale IP та локальні адреси самого Pi. UFW/Caddy не публікують порти `5900`, `5901` або `6080`.
 - noVNC підтримує PAM subtype VeNCrypt Plain, але не вкладений X509Plain. Тому `5901` дозволяє Plain лише всередині вже зашифрованого каналу HTTPS/WSS → loopback VPS → Tailscale/WireGuard; звичайний LAN endpoint `5900` зберігає X.509 encryption і не вмикає `relax_encryption`.
-- Browser-only WayVNC запускається без другого GPU/H.264 encoder. Окремий attach-agent працює як `vnc`, не має мережевих address families або capabilities, виконує лише fixed `wayvncctl output-list/attach` і прив’язує endpoint до наявного Wayland socket, доступ до якого вже надає vendor `wayvnc-control.service`.
+- Browser-only WayVNC запускається без другого GPU/H.264 encoder. Його pinned source archives перевіряються за SHA-256, а локальний patch змінює тільки запуск capture для стану живлення `UNKNOWN`. Окремий attach-agent працює як `vnc`, не має мережевих address families або capabilities, виконує лише fixed `wayvncctl output-list/attach` і прив’язує endpoint до наявного Wayland socket, доступ до якого вже надає vendor `wayvnc-control.service`.
 - Облікові дані VNC запитує сам протокол RFB. LABA не зберігає їх у SQLite, `.env`, cookies, localStorage або аудиті; поле пароля очищається одразу після передачі noVNC.
 
 ## Cloudflare

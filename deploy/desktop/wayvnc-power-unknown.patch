@@ -1,0 +1,23 @@
+--- a/src/main.c
++++ b/src/main.c
+@@ -1029,12 +1029,18 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
+ 
+ 	struct output* output = self->selected_output;
+ 	int rc = output_acquire_power_on(output);
+-	if (rc == 0) {
++	if (rc == 0 && output->power == OUTPUT_POWER_OFF) {
+ 		nvnc_log(NVNC_LOG_DEBUG, "Acquired power state management. Waiting for power event to start capturing");
+ 		return 0;
+-	} else if (rc > 0 && output->power != OUTPUT_POWER_ON) {
++	} else if (rc > 0 && output->power == OUTPUT_POWER_OFF) {
+ 		nvnc_log(NVNC_LOG_DEBUG, "Output power state management already acquired, but not yet powered on");
+ 		return 0;
++	} else if (output->power == OUTPUT_POWER_UNKNOWN) {
++		/* labwc headless outputs on Raspberry Pi OS Trixie may never emit an
++		 * initial power event. Waiting in that state leaves every VNC client
++		 * with a permanently black framebuffer even though capture works. */
++		nvnc_log(NVNC_LOG_WARNING,
++				"Output power state is unknown. Starting capture immediately.");
+ 	} else if (rc < 0) {
+ 		nvnc_log(NVNC_LOG_WARNING, "Failed to acquire power state control. Capturing may fail.");
+ 	}

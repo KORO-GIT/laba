@@ -355,6 +355,7 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .desktop-screen {
   position: relative;
   width: 100%;
+  height: min(68vh, 720px);
   min-height: min(68vh, 720px);
   overflow: hidden;
   border: 1px solid var(--line-strong);
@@ -364,8 +365,9 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
   box-shadow: var(--shadow);
 }
 .desktop-screen:focus-visible { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(242,100,48,.12), var(--shadow); }
+.desktop-screen > div:not(.desktop-placeholder) { position: absolute !important; inset: 0; width: auto !important; height: auto !important; }
 .desktop-screen > canvas { margin: auto; }
-.desktop-screen:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+.desktop-screen:fullscreen { width: 100vw; height: 100vh; min-height: 0; border: 0; border-radius: 0; }
 .desktop-placeholder { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; padding: 30px; text-align: center; }
 .desktop-placeholder-mark { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 18px; border: 1px solid rgba(242,100,48,.28); border-radius: 20px; color: var(--accent-light); background: rgba(242,100,48,.09); font-size: 24px; font-weight: 900; }
 .desktop-placeholder h3 { margin: 0 0 7px; font-size: 18px; }
@@ -415,7 +417,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .desktop-local-card { align-items: stretch; flex-direction: column; }
   .desktop-credentials { grid-template-columns: 1fr; }
   .desktop-credentials > div:first-child { grid-column: auto; }
-  .desktop-screen { min-height: 58vh; }
+  .desktop-screen { height: 58vh; min-height: 320px; }
   .footer { flex-direction: column; }
 }
 
