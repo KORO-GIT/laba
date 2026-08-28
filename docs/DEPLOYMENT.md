@@ -138,6 +138,7 @@ scp /opt/laba/deploy/desktop/wayvnc-config \
   /opt/laba/deploy/desktop/laba-wayvnc-attach.py \
   /opt/laba/deploy/desktop/laba-wayvnc-attach.service \
   /opt/laba/deploy/desktop/wayvnc-power-unknown.patch \
+  /opt/laba/deploy/desktop/wayvnc-patched-binary.conf \
   /opt/laba/scripts/build-wayvnc-pi.sh \
   korob@192.168.0.63:/tmp/
 ```
@@ -157,13 +158,16 @@ sudo install -o root -g root -m 0644 /tmp/wayvnc-web-config /etc/wayvnc/laba-web
 sudo install -o root -g root -m 0644 /tmp/laba-wayvnc-web.service /etc/systemd/system/laba-wayvnc-web.service
 sudo install -o root -g root -m 0755 /tmp/laba-wayvnc-attach.py /usr/local/lib/laba-wayvnc-attach.py
 sudo install -o root -g root -m 0644 /tmp/laba-wayvnc-attach.service /etc/systemd/system/laba-wayvnc-attach.service
+sudo install -d -o root -g root -m 0755 /etc/systemd/system/wayvnc.service.d
+sudo install -o root -g root -m 0644 /tmp/wayvnc-patched-binary.conf /etc/systemd/system/wayvnc.service.d/10-laba-patched-binary.conf
 sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-web.service
 sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-attach.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
 sudo rm -- /tmp/wayvnc-config /tmp/wayvnc-web-config /tmp/laba-wayvnc-web.service \
   /tmp/laba-wayvnc-attach.py /tmp/laba-wayvnc-attach.service \
-  /tmp/wayvnc-power-unknown.patch /tmp/build-wayvnc-pi.sh
+  /tmp/wayvnc-power-unknown.patch /tmp/wayvnc-patched-binary.conf \
+  /tmp/build-wayvnc-pi.sh
 systemctl is-active wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
 ss -lnt | grep '192.168.0.63:5900'
 ss -lnt | grep '192.168.0.63:5901'
