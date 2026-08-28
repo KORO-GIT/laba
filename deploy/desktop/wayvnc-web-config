@@ -3,6 +3,3 @@ port=5901
 enable_auth=true
 enable_pam=true
 relax_encryption=true
-private_key_file=/etc/wayvnc/tls_key.pem
-certificate_file=/etc/wayvnc/tls_cert.pem
-rsa_private_key_file=/etc/wayvnc/rsa_key.pem
