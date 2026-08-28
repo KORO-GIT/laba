@@ -1,9 +1,7 @@
 [Unit]
 Description=Attach LABA browser WayVNC to the active Wayland compositor
 After=laba-wayvnc-web.service wayvnc-control.service
-Requires=laba-wayvnc-web.service
-Wants=wayvnc-control.service
-BindsTo=laba-wayvnc-web.service
+Wants=laba-wayvnc-web.service wayvnc-control.service
 
 [Service]
 Type=simple

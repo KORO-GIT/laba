@@ -35,14 +35,24 @@ def wayland_displays():
 
 
 def attach_any_display():
-    return any(run_control("attach", display) for display in wayland_displays())
+    for display in wayland_displays():
+        if run_control("attach", display):
+            print(f"Attached browser WayVNC to {display}", flush=True)
+            return True
+    return False
 
 
 def main():
     while True:
         if not run_control("output-list"):
+            # wayvnc creates its control socket before all encoders and the
+            # detached compositor state are ready. Attaching immediately can
+            # trigger an upstream wayvnc race, so wait and verify once more.
+            time.sleep(3)
+            if run_control("output-list"):
+                continue
             attach_any_display()
-            time.sleep(2)
+            time.sleep(3)
             continue
         time.sleep(10)
 
