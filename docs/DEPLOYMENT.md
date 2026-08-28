@@ -156,7 +156,7 @@ systemctl daemon-reload
 systemctl enable --now laba-ustreamer.service go2rtc.service
 ```
 
-До production `ALLOWED_DEVICE_SUBNETS` додається лише `100.69.168.10/32`, не весь CGNAT-діапазон `100.64.0.0/10`. У LABA камера має host `100.69.168.10`, port `1984`, stream `printer-usb-camera`, mode `mjpeg` і parent `Creality K1 SE`. Пароль go2rtc зберігається в AES-256-GCM secret LABA.
+До production `ALLOWED_DEVICE_SUBNETS` додається лише `100.69.168.10/32`, не весь CGNAT-діапазон `100.64.0.0/10`. У LABA камера принтера має slug `k1se-camera`, host `100.69.168.10`, port `1984`, stream `printer-usb-camera`, mode `mjpeg` і parent `Creality K1 SE`. Slug `labacam` зарезервований за окремою камерою відеоспостереження. Пароль go2rtc зберігається в AES-256-GCM secret LABA.
 
 Під час первинного налаштування пароль gateway тимчасово передається на VPS у root-only файл на tmpfs і читається deployment-скриптом без потрапляння до argv або shell history:
 

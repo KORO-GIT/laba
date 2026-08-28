@@ -64,7 +64,7 @@ Moonraker під час останньої перевірки повертав `
 
 На Pi `laba-ustreamer.service` слухає тільки `127.0.0.1:8080`, а go2rtc `v1.9.14` — Tailscale IP `100.69.168.10:1984`. go2rtc не запускає RTSP, WebRTC, exec або ffmpeg. Потік `printer-usb-camera` доступний LABA через Basic Auth і exact API allowlist. Порти камери не опубліковані в Archer/UFW.
 
-У LABA камера є окремим device і дочірнім пристроєм `Creality K1 SE`: dashboard показує її у підгрупі принтера, grants принтера успадковуються камерою. Mainsail використовує same-origin URL `/laba-camera/stream` та `/laba-camera/snapshot`, які LABA серверно прив’язує до дозволеного потоку go2rtc.
+У LABA камера `k1se-camera` є окремим device і дочірнім пристроєм `Creality K1 SE`: dashboard показує її у підгрупі принтера, grants принтера успадковуються камерою. Окремий device `labacam` належить камері відеоспостереження і не має parent. Mainsail використовує same-origin URL `/laba-camera/stream` та `/laba-camera/snapshot`, які LABA серверно прив’язує до дозволеного потоку go2rtc.
 
 WebSocket Mainsail проходить через LABA: портал перевіряє, що браузерний `Origin` збігається з адресою пристрою, видаляє службові заголовки Cloudflare та підмінює upstream `Origin` на локальну адресу принтера. Без цієї підміни Moonraker відповідає `Cross origin websockets not allowed`.
 
