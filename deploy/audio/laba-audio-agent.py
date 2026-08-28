@@ -186,7 +186,7 @@ def player_status() -> dict[str, object]:
     template = "{{playerName}}\t{{status}}\t{{xesam:title}}\t{{xesam:artist}}"
     output = run_command(["/usr/bin/playerctl", "-a", "metadata", "--format", template], check=False)
     line = next((item for item in output.splitlines() if item.strip()), "")
-    if not line:
+    if not line or "No players found" in line or "Could not connect" in line:
         return {"available": False, "status": "Stopped", "player": None, "title": None, "artist": None}
     parts = (line.split("\t") + ["", "", "", ""])[:4]
     return {
