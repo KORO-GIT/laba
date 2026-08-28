@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.5.0`.
+- Поточна версія застосунку: `0.6.0`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
@@ -60,11 +60,11 @@ VPS приймає маршрут `192.168.0.0/24`. Порти принтері�
 - Moonraker API: `http://192.168.0.70:7125`;
 - захищена адреса: `https://k1se-01-laba.zpseapil.club`.
 
-Moonraker під час останньої перевірки повертав `klippy_state: ready`. До Raspberry Pi підключена Logitech C270, USB ID `046d:0825`, стабільний path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. Вона працює як hardware MJPEG 1280×720@30; `exposure_dynamic_framerate=0` запобігає падінню FPS у слабкому освітленні.
+Moonraker під час останньої перевірки повертав `klippy_state: ready`. До Raspberry Pi підключена Logitech C270, USB ID `046d:0825`, стабільний path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. uStreamer захоплює hardware MJPEG 1280×720@30, а окремий FFmpeg через `h264_v4l2m2m` формує H.264 High 1280×720 приблизно 25 FPS / 2 Мбіт/с; `exposure_dynamic_framerate=0` запобігає падінню FPS у слабкому освітленні.
 
-На Pi `laba-ustreamer.service` слухає тільки `127.0.0.1:8080`, а go2rtc `v1.9.14` — Tailscale IP `100.69.168.10:1984`. go2rtc не запускає RTSP, WebRTC, exec або ffmpeg. Потік `printer-usb-camera` доступний LABA через Basic Auth і exact API allowlist. Порти камери не опубліковані в Archer/UFW.
+На Pi `laba-ustreamer.service` слухає тільки `127.0.0.1:8080`, `laba-h264-encoder.service` — тільки `127.0.0.1:8556`, а go2rtc `v1.9.14` — Tailscale IP `100.69.168.10:1984`. RTSP-server, WebRTC, exec і вбудований ffmpeg go2rtc вимкнені. Потоки `printer-usb-camera` та `labacam-01` доступні LABA через Basic Auth і exact API allowlist; systemd egress go2rtc окремо дозволяє лише VPS, loopback/Tailscale та `192.168.0.138/32`. Пароль RTSP-камери передається go2rtc через зашифрований systemd credential, а не зберігається відкритим текстом у YAML.
 
-У LABA камера `k1se-camera` є окремим device і дочірнім пристроєм `Creality K1 SE`: dashboard показує її у підгрупі принтера, grants принтера успадковуються камерою. Окремий device `labacam` належить камері відеоспостереження і не має parent. Mainsail використовує same-origin URL `/laba-camera/stream` та `/laba-camera/snapshot`, які LABA серверно прив’язує до дозволеного потоку go2rtc.
+У LABA камера `k1se-camera` є окремим device і дочірнім пристроєм `Creality K1 SE`: dashboard показує її у підгрупі принтера, grants принтера успадковуються камерою. Окремий device `labacam` належить камері відеоспостереження і не має parent; її основний RTSP-профіль — H.264 High 1920×1080@25. Mainsail використовує same-origin HLS `/laba-camera/api/stream.m3u8` і `/laba-camera/snapshot`, які LABA серверно прив’язує до дозволеного потоку go2rtc.
 
 WebSocket Mainsail проходить через LABA: портал перевіряє, що браузерний `Origin` збігається з адресою пристрою, видаляє службові заголовки Cloudflare та підмінює upstream `Origin` на локальну адресу принтера. Без цієї підміни Moonraker відповідає `Cross origin websockets not allowed`.
 
@@ -92,7 +92,7 @@ LABA використовує окремі точний і wildcard-блоки C
 ## Найближчі наступні кроки
 
 - Завершити вхід головного адміністратора через One-time PIN на новий e-mail, якщо поточна Access-сесія закінчилася.
-- Після зміни положення або освітлення камери перевірити різкість, експозицію і стабільні 30 FPS під час реального друку.
+- Після зміни положення або освітлення камери перевірити різкість, експозицію і стабільні 25 FPS H.264 під час реального друку.
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 

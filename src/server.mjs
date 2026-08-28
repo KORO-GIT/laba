@@ -105,6 +105,28 @@ const browserCameraHlsPaths = new Map([
   ['/gateway/hls/segment.m4s', '/api/hls/segment.m4s']
 ]);
 
+const printerCameraHlsPaths = new Map([
+  ['/laba-camera/api/hls/playlist.m3u8', '/api/hls/playlist.m3u8'],
+  ['/laba-camera/api/hls/segment.ts', '/api/hls/segment.ts'],
+  ['/laba-camera/api/hls/init.mp4', '/api/hls/init.mp4'],
+  ['/laba-camera/api/hls/segment.m4s', '/api/hls/segment.m4s']
+]);
+
+function hlsSessionUpstreamUrl(url, upstreamPath) {
+  const sessionIds = url.searchParams.getAll('id');
+  if (sessionIds.length !== 1 || !/^[a-zA-Z0-9_-]{6,128}$/.test(sessionIds[0])) return null;
+
+  const segmentNumbers = url.searchParams.getAll('n');
+  const isSegment = upstreamPath.endsWith('/segment.ts') || upstreamPath.endsWith('/segment.m4s');
+  if (segmentNumbers.length > (isSegment ? 1 : 0)) return null;
+  if (segmentNumbers.length === 1 && !/^\d{1,12}$/.test(segmentNumbers[0])) return null;
+  if (![...url.searchParams.keys()].every((key) => key === 'id' || (isSegment && key === 'n'))) return null;
+
+  const params = new URLSearchParams({ id: sessionIds[0] });
+  if (segmentNumbers.length === 1) params.set('n', segmentNumbers[0]);
+  return `${upstreamPath}?${params}`;
+}
+
 function requestUrl(value) {
   return new URL(String(value ?? '/'), 'http://portal.invalid');
 }
@@ -554,12 +576,11 @@ function proxyBrowserCameraHttp(request, reply, device) {
   }
   const upstreamHlsPath = browserCameraHlsPaths.get(url.pathname);
   if ((request.method === 'GET' || request.method === 'HEAD') && upstreamHlsPath) {
-    const sessionIds = url.searchParams.getAll('id');
-    const onlySessionId = [...url.searchParams.keys()].every((key) => key === 'id');
-    if (sessionIds.length !== 1 || !onlySessionId || !/^[a-zA-Z0-9_-]{6,128}$/.test(sessionIds[0])) {
+    const upstreamUrl = hlsSessionUpstreamUrl(url, upstreamHlsPath);
+    if (!upstreamUrl) {
       return reply.code(400).send({ error: 'Некоректна HLS-сесія' });
     }
-    request.raw.url = `${upstreamHlsPath}?id=${encodeURIComponent(sessionIds[0])}`;
+    request.raw.url = upstreamUrl;
     request.raw.portalDevice = device;
     reply.hijack();
     proxy.web(request.raw, reply.raw, { target: proxyTarget(device) });
@@ -585,6 +606,32 @@ async function proxyHttp(request, reply) {
   if (!device || !device.enabled) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Немає доступу до пристрою' });
   const pathname = requestUrl(request.raw.url).pathname;
+  if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD')
+    && pathname === '/laba-camera/api/stream.m3u8') {
+    const camera = statements.cameraByParent.get(device.id);
+    if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
+      return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
+    }
+    request.raw.url = `/api/stream.m3u8?src=${encodeURIComponent(camera.stream_name)}`;
+    request.raw.portalDevice = camera;
+    reply.hijack();
+    proxy.web(request.raw, reply.raw, { target: proxyTarget(camera) });
+    return;
+  }
+  const printerHlsPath = printerCameraHlsPaths.get(pathname);
+  if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD') && printerHlsPath) {
+    const camera = statements.cameraByParent.get(device.id);
+    if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
+      return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
+    }
+    const upstreamUrl = hlsSessionUpstreamUrl(requestUrl(request.raw.url), printerHlsPath);
+    if (!upstreamUrl) return reply.code(400).send({ error: 'Некоректна HLS-сесія' });
+    request.raw.url = upstreamUrl;
+    request.raw.portalDevice = camera;
+    reply.hijack();
+    proxy.web(request.raw, reply.raw, { target: proxyTarget(camera) });
+    return;
+  }
   if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD')
     && ['/laba-camera/stream', '/laba-camera/snapshot'].includes(pathname)) {
     const camera = statements.cameraByParent.get(device.id);

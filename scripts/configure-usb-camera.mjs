@@ -21,8 +21,8 @@ const cameraId = db.transaction(() => {
       UPDATE devices SET
         name = 'Камера Creality K1 SE', kind = 'camera', driver = 'http',
         host = '100.69.168.10', protocol = 'http', ui_port = 1984, api_port = NULL,
-        stream_name = 'printer-usb-camera', stream_mode = 'mjpeg', parent_device_id = ?,
-        secret_enc = ?, notes = 'Logitech C270 · USB · 1280×720 · 30 FPS',
+        stream_name = 'printer-usb-camera', stream_mode = 'auto', parent_device_id = ?,
+        secret_enc = ?, notes = 'Logitech C270 · H.264 · 1280×720 · 25 FPS',
         enabled = 1, sort_order = 11, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(printer.id, encrypted, existing.id);
@@ -35,8 +35,8 @@ const cameraId = db.transaction(() => {
        stream_mode, parent_device_id, secret_enc, notes, enabled, sort_order)
     VALUES
       (?, 'Камера Creality K1 SE', 'camera', 'http', '100.69.168.10',
-       'http', 1984, NULL, 'printer-usb-camera', 'mjpeg', ?, ?,
-       'Logitech C270 · USB · 1280×720 · 30 FPS', 1, 11)
+       'http', 1984, NULL, 'printer-usb-camera', 'auto', ?, ?,
+       'Logitech C270 · H.264 · 1280×720 · 25 FPS', 1, 11)
   `).run(cameraSlug, printer.id, encrypted).lastInsertRowid);
 })();
 

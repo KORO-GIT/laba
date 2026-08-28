@@ -258,6 +258,40 @@ test('development server serves portal API and protected admin writes', async (c
     authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
   });
 
+  const linkedHlsMaster = await fetch(`${root}/laba-camera/api/stream.m3u8?src=attacker-controlled`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(linkedHlsMaster.status, 200);
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/stream.m3u8?src=camera-main',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+
+  const linkedHlsPlaylist = await fetch(`${root}/laba-camera/api/hls/playlist.m3u8?id=session-1`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(linkedHlsPlaylist.status, 200);
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/hls/playlist.m3u8?id=session-1',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+
+  const linkedHlsSegment = await fetch(`${root}/laba-camera/api/hls/segment.ts?id=session-1&n=4`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(linkedHlsSegment.status, 200);
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/hls/segment.ts?id=session-1&n=4',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+
+  const upstreamCountBeforeInvalidPrinterHls = upstreamRequests.length;
+  const invalidPrinterHls = await fetch(`${root}/laba-camera/api/hls/segment.ts?id=session-1&n=4&src=other`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(invalidPrinterHls.status, 400);
+  assert.equal(upstreamRequests.length, upstreamCountBeforeInvalidPrinterHls);
+
   const upstreamCountBeforeBlockedApi = upstreamRequests.length;
   const blockedGatewayApi = await fetch(`${root}/api/streams`, {
     headers: { 'X-Forwarded-Host': gatewayHost }

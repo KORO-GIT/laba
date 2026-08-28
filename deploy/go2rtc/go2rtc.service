@@ -1,7 +1,7 @@
 [Unit]
 Description=LABA private go2rtc camera gateway
-After=network-online.target tailscaled.service laba-ustreamer.service
-Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service laba-ustreamer.service laba-h264-encoder.service
+Wants=network-online.target tailscaled.service laba-h264-encoder.service
 Requires=laba-ustreamer.service
 
 [Service]
@@ -10,6 +10,7 @@ DynamicUser=true
 WorkingDirectory=/etc/go2rtc
 ExecStart=/usr/local/bin/go2rtc -config /etc/go2rtc/go2rtc.yaml
 LoadCredentialEncrypted=GO2RTC_API_PASSWORD:/etc/credstore.encrypted/go2rtc-api-password
+LoadCredentialEncrypted=LABACAM_PASSWORD:/etc/credstore.encrypted/labacam-password
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
@@ -38,6 +39,7 @@ IPAddressDeny=any
 IPAddressAllow=127.0.0.0/8
 IPAddressAllow=100.68.61.33/32
 IPAddressAllow=100.69.168.10/32
+IPAddressAllow=192.168.0.138/32
 UMask=0077
 MemoryMax=256M
 

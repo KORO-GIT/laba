@@ -34,8 +34,8 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       │ 192.168.0.0/24
                                       ├── 3D-принтери
                                       ├── камери
-                                      └── Logitech C270 → uStreamer → go2rtc
-                                                           на Tailscale IP Pi
+                                      └── Logitech C270 → uStreamer → hardware H.264
+                                                           → go2rtc на Tailscale IP Pi
 ```
 
 VPS не публікує порти пристроїв. В інтернет відкриті лише Caddy та захищені домени LABA.
@@ -97,11 +97,11 @@ npm.cmd audit --omit=dev
 - адресу шлюзу `100.69.168.10` — Tailscale IP Raspberry Pi;
 - HTTP-порт `1984`;
 - назву потоку `printer-usb-camera`, що точно збігається з `deploy/go2rtc/go2rtc.yaml`;
-- формат `MJPEG без перекодування`;
+- формат `Автовибір MSE / HLS / MJPEG`;
 - підгрупу принтера `Creality K1 SE`;
 - Basic Auth go2rtc у секреті JSON: ім’я `laba-vps` і згенерований локально пароль.
 
-LABA віддає власну сторінку плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери LABA також надає Mainsail same-origin URL `/laba-camera/stream` і `/laba-camera/snapshot`; реальна адреса go2rtc та його пароль у браузер не потрапляють.
+LABA віддає власну сторінку плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери LABA також надає Mainsail same-origin HLS URL `/laba-camera/api/stream.m3u8` і snapshot URL `/laba-camera/snapshot`; реальна адреса go2rtc та його пароль у браузер не потрапляють. MJPEG URL `/laba-camera/stream` збережено лише як сумісний резервний варіант.
 
 ## Production
 

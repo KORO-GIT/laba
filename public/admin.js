@@ -182,7 +182,7 @@ function toggleDeviceIntegration(applyDefaults = false) {
     formValue('device-protocol', 'http');
     formValue('device-ui-port', 1984);
     formValue('device-stream-name', 'printer-usb-camera');
-    formValue('device-stream-mode', 'mjpeg');
+    formValue('device-stream-mode', 'auto');
   }
 }
 

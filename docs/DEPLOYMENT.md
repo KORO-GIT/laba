@@ -117,6 +117,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.5.0` додає `devices.stream_mode` і `devices.parent_device_id` до створеної у `0.4.0` колонки `devices.stream_name`. Перед першим запуском цієї версії SQLite backup обов’язковий. Міграція не змінює наявні пристрої та не перебудовує таблицю.
 
+Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на апаратний H.264, додає exact HLS proxy для Mainsail і підключає окремий H.264 RTSP-потік камери відеоспостереження.
+
 ## go2rtc на Raspberry Pi
 
 Підготовлена конфігурація використовує go2rtc `v1.9.14` для Linux ARM64. Бінарний файл pinned за SHA-256:
@@ -125,23 +127,24 @@ journalctl -u laba-portal.service -n 80 --no-pager
 359fabade8a7a51e81a55fe6df6b0ef81764a5e1d63179577534eaaa71904b50
 ```
 
-Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. Камера апаратно видає MJPEG 1280×720@30, тому перекодування не використовується. `laba-ustreamer.service` вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`.
+Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. `laba-ustreamer.service` захоплює hardware MJPEG 1280×720@30, вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`. `laba-h264-encoder.service` використовує Raspberry Pi `h264_v4l2m2m`, кодує 1280×720 приблизно у 2 Мбіт/с і слухає тільки `127.0.0.1:8556`. MJPEG залишається другим codec source тільки для snapshot і резервної сумісності.
 
 Підготовлені файли:
 
 - `deploy/go2rtc/laba-ustreamer.service` — захоплення C270 через hardware MJPEG без мережевої публікації;
-- `deploy/go2rtc/go2rtc.yaml` — API тільки на Tailscale IP Pi `100.69.168.10:1984`, exact allowlist endpoint’ів, без WebUI, RTSP-server, WebRTC, exec і ffmpeg;
+- `deploy/go2rtc/laba-h264-encoder.service` — апаратне H.264-кодування через `/dev/video11` у sandboxed FFmpeg;
+- `deploy/go2rtc/go2rtc.yaml` — API тільки на Tailscale IP Pi `100.69.168.10:1984`, exact allowlist endpoint’ів, без WebUI, RTSP-server, WebRTC, exec і вбудованого ffmpeg;
 - `deploy/go2rtc/go2rtc.service` — DynamicUser, encrypted credentials, IP-фільтр і systemd sandbox;
-- назва потоку — `printer-usb-camera`;
+- назви потоків — `printer-usb-camera` і `labacam-01`;
 - API user — `laba-vps`;
-- єдиний секрет — `GO2RTC_API_PASSWORD` у `/etc/credstore.encrypted/go2rtc-api-password`.
+- секрети — `GO2RTC_API_PASSWORD` у `/etc/credstore.encrypted/go2rtc-api-password` і `LABACAM_PASSWORD` у `/etc/credstore.encrypted/labacam-password`.
 
-systemd створює для unit приватний `CREDENTIALS_DIRECTORY`; go2rtc при його наявності сам підставляє `${GO2RTC_API_PASSWORD}` з однойменного credential-файлу. Дублювати секрет у `Environment=`, YAML або wrapper script не потрібно.
+systemd створює для unit приватний `CREDENTIALS_DIRECTORY`; go2rtc при його наявності сам підставляє `${GO2RTC_API_PASSWORD}` і `${LABACAM_PASSWORD}` з однойменних credential-файлів. Дублювати секрети у `Environment=`, YAML або wrapper script не потрібно.
 
 Встановлення на Pi виконується від root:
 
 ```bash
-apt-get install --yes ustreamer v4l-utils curl
+apt-get install --yes ustreamer v4l-utils ffmpeg curl jq
 curl --fail --location --output /tmp/go2rtc_linux_arm64 \
   https://github.com/AlexxIT/go2rtc/releases/download/v1.9.14/go2rtc_linux_arm64
 echo '359fabade8a7a51e81a55fe6df6b0ef81764a5e1d63179577534eaaa71904b50  /tmp/go2rtc_linux_arm64' | sha256sum --check
@@ -149,14 +152,19 @@ install -o root -g root -m 0755 /tmp/go2rtc_linux_arm64 /usr/local/bin/go2rtc
 install -d -o root -g root -m 0755 /etc/go2rtc /etc/credstore.encrypted
 install -o root -g root -m 0644 deploy/go2rtc/go2rtc.yaml /etc/go2rtc/go2rtc.yaml
 install -o root -g root -m 0644 deploy/go2rtc/laba-ustreamer.service /etc/systemd/system/laba-ustreamer.service
+install -o root -g root -m 0644 deploy/go2rtc/laba-h264-encoder.service /etc/systemd/system/laba-h264-encoder.service
 install -o root -g root -m 0644 deploy/go2rtc/go2rtc.service /etc/systemd/system/go2rtc.service
 openssl rand -base64 36 | systemd-creds encrypt --name=GO2RTC_API_PASSWORD - /etc/credstore.encrypted/go2rtc-api-password
+read -rsp 'Пароль admin камери відеоспостереження: ' LABACAM_PASSWORD
+printf '%s' "$LABACAM_PASSWORD" | systemd-creds encrypt --name=LABACAM_PASSWORD - /etc/credstore.encrypted/labacam-password
+unset LABACAM_PASSWORD
+echo
 rm -- /tmp/go2rtc_linux_arm64
 systemctl daemon-reload
-systemctl enable --now laba-ustreamer.service go2rtc.service
+systemctl enable --now laba-ustreamer.service laba-h264-encoder.service go2rtc.service
 ```
 
-До production `ALLOWED_DEVICE_SUBNETS` додається лише `100.69.168.10/32`, не весь CGNAT-діапазон `100.64.0.0/10`. У LABA камера принтера має slug `k1se-camera`, host `100.69.168.10`, port `1984`, stream `printer-usb-camera`, mode `mjpeg` і parent `Creality K1 SE`. Slug `labacam` зарезервований за окремою камерою відеоспостереження. Пароль go2rtc зберігається в AES-256-GCM secret LABA.
+До production `ALLOWED_DEVICE_SUBNETS` додається лише `100.69.168.10/32`, не весь CGNAT-діапазон `100.64.0.0/10`. У LABA камера принтера має slug `k1se-camera`, host `100.69.168.10`, port `1984`, stream `printer-usb-camera`, mode `auto` і parent `Creality K1 SE`. Slug `labacam` використовує окремий H.264-потік `labacam-01` і не має parent. Пароль go2rtc зберігається в AES-256-GCM secret LABA.
 
 Під час первинного налаштування пароль gateway тимчасово передається на VPS у root-only файл на tmpfs і читається deployment-скриптом без потрапляння до argv або shell history:
 
@@ -166,12 +174,15 @@ GO2RTC_API_PASSWORD_FILE=/run/laba-go2rtc-api-password \
 shred --remove --zero /run/laba-go2rtc-api-password
 ```
 
-Moonraker/Mainsail отримує same-origin URL через LABA:
+Moonraker/Mainsail отримує same-origin HLS через LABA. Оновлювати слід наявний database webcam за `uid`, щоб не створити дублікат:
 
 ```bash
-curl --fail --request POST http://192.168.0.70:7125/server/webcams/item \
-  --header 'Content-Type: application/json' \
-  --data '{"name":"LABA USB Camera","location":"printer","service":"mjpegstreamer","enabled":true,"target_fps":30,"target_fps_idle":5,"stream_url":"/laba-camera/stream","snapshot_url":"/laba-camera/snapshot","flip_horizontal":false,"flip_vertical":false,"rotation":0,"aspect_ratio":"16:9"}'
+CAM_UID="$(curl --fail --silent http://192.168.0.70:7125/server/webcams/list | jq -r '.result.webcams[] | select(.name == "LABA USB Camera") | .uid' | head -n 1)"
+test -n "$CAM_UID"
+jq -nc --arg uid "$CAM_UID" '{uid:$uid,name:"LABA USB Camera",location:"printer",service:"hlsstream",enabled:true,target_fps:25,target_fps_idle:5,stream_url:"/laba-camera/api/stream.m3u8",snapshot_url:"/laba-camera/snapshot",flip_horizontal:false,flip_vertical:false,rotation:0,aspect_ratio:"16:9"}' \
+  | curl --fail --request POST http://192.168.0.70:7125/server/webcams/item \
+      --header 'Content-Type: application/json' --data-binary @-
+unset CAM_UID
 ```
 
 Перевірки до ввімкнення пристрою в адмінпанелі:
@@ -179,11 +190,14 @@ curl --fail --request POST http://192.168.0.70:7125/server/webcams/item \
 ```bash
 systemd-analyze verify /etc/systemd/system/go2rtc.service
 systemd-analyze verify /etc/systemd/system/laba-ustreamer.service
+systemd-analyze verify /etc/systemd/system/laba-h264-encoder.service
 systemctl status laba-ustreamer.service --no-pager
+systemctl status laba-h264-encoder.service --no-pager
 systemctl status go2rtc.service --no-pager
 ss -lntp | grep '127.0.0.1:8080'
+ss -lntp | grep '127.0.0.1:8556'
 ss -lntp | grep '100.69.168.10:1984'
-journalctl -u laba-ustreamer.service -u go2rtc.service -n 80 --no-pager
+journalctl -u laba-ustreamer.service -u laba-h264-encoder.service -u go2rtc.service -n 80 --no-pager
 ```
 
 На VPS перевірити, що API без Basic Auth повертає `401`, а WebUI та config endpoint не відкриті. Не додавати UFW-правило для `1984`, `554`, `8554` або `8555` на VPS чи Archer.
