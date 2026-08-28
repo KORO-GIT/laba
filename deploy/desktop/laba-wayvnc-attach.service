@@ -15,7 +15,9 @@ PrivateDevices=true
 PrivateTmp=true
 ProtectClock=true
 ProtectControlGroups=true
-ProtectHome=true
+# The active Wayland socket lives under /run/user/<uid>. Keep it visible but
+# read-only; ProtectHome=true hides /run/user entirely from this helper.
+ProtectHome=read-only
 ProtectHostname=true
 ProtectKernelLogs=true
 ProtectKernelModules=true
