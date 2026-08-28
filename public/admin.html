@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.6.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.7.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -30,6 +30,7 @@
 
     <nav class="admin-tabs" aria-label="Розділи адміністрування">
       <button class="admin-tab active" data-panel="devices" type="button">Пристрої</button>
+      <button class="admin-tab" data-panel="audio" type="button">Аудіо</button>
       <button class="admin-tab" data-panel="users" type="button">Користувачі</button>
       <button class="admin-tab" data-panel="audit" type="button">Журнал</button>
     </nav>
@@ -68,6 +69,58 @@
       </div>
     </section>
 
+    <section id="panel-audio" class="admin-panel">
+      <div class="panel-toolbar">
+        <div><h2>Bluetooth та аудіо</h2><p>Колонки, аудіовихід Raspberry Pi та керування програвачем.</p></div>
+        <button id="refresh-audio" class="button button-ghost" type="button">Оновити</button>
+      </div>
+
+      <div class="audio-layout">
+        <article class="editor-card audio-card">
+          <div class="audio-card-heading">
+            <div><p class="eyebrow">RASPBERRY PI</p><h3>Bluetooth</h3></div>
+            <label class="switch-row"><input id="bluetooth-power" type="checkbox"><span class="switch"></span><span id="bluetooth-power-label">Вимкнено</span></label>
+          </div>
+          <div class="audio-summary">
+            <span id="bluetooth-status-dot" class="audio-status-dot"></span>
+            <span id="bluetooth-status">Завантаження…</span>
+          </div>
+          <div class="audio-actions">
+            <button id="scan-bluetooth" class="button button-primary" type="button">Знайти пристрої</button>
+            <button id="stop-bluetooth-scan" class="button button-ghost hidden" type="button">Зупинити пошук</button>
+          </div>
+          <p class="form-hint">Перед пошуком переведіть колонку в режим pairing. Нові пристрої отримують довіру лише після натискання «Під’єднати».</p>
+          <div id="bluetooth-device-list" class="bluetooth-list"></div>
+        </article>
+
+        <article class="editor-card audio-card">
+          <div class="audio-card-heading">
+            <div><p class="eyebrow">PIPEWIRE</p><h3>Виведення звуку</h3></div>
+            <span id="audio-stack-state" class="record-state off">НЕМАЄ</span>
+          </div>
+          <label class="field"><span>Активний аудіовихід</span><select id="audio-sink"></select></label>
+          <div class="volume-row">
+            <label for="audio-volume">Гучність</label>
+            <output id="audio-volume-value" for="audio-volume">—</output>
+          </div>
+          <input id="audio-volume" type="range" min="0" max="100" step="1" value="40">
+          <div class="audio-actions">
+            <button id="audio-mute" class="button button-ghost" type="button">Вимкнути звук</button>
+          </div>
+
+          <div class="player-card">
+            <div><p class="eyebrow">ПРОГРАВАЧ</p><h4 id="player-title">Нічого не відтворюється</h4><p id="player-meta">Сумісний MPRIS-програвач не знайдено.</p></div>
+            <div class="player-controls" aria-label="Керування програвачем">
+              <button class="icon-button" data-player-action="previous" type="button" aria-label="Попередній трек">‹</button>
+              <button class="button button-primary" data-player-action="play-pause" type="button">Play / Pause</button>
+              <button class="icon-button" data-player-action="next" type="button" aria-label="Наступний трек">›</button>
+              <button class="icon-button" data-player-action="stop" type="button" aria-label="Зупинити">■</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section id="panel-users" class="admin-panel">
       <div class="panel-toolbar">
         <div><h2>Користувачі</h2><p>Доступ надається за e-mail, підтвердженим Cloudflare Access.</p></div>
@@ -97,6 +150,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.6.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.7.0"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
+import { audioAgentRequest } from './audio-agent.mjs';
 import { config, validateConfig } from './config.mjs';
 import { audit, db, serializeDevice, serializeUser, statements } from './database.mjs';
 import { clearProbeCache, probeDevice } from './probes.mjs';
@@ -318,6 +319,20 @@ const userSchema = z.object({
   }
 });
 
+const bluetoothPowerSchema = z.object({ enabled: z.boolean() }).strict();
+const bluetoothScanSchema = z.object({
+  enabled: z.boolean(),
+  seconds: z.coerce.number().int().min(5).max(30).optional().default(15)
+}).strict();
+const bluetoothAddressSchema = z.string().trim().toUpperCase().regex(/^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/);
+const bluetoothActionSchema = z.enum(['pair', 'trust', 'untrust', 'connect', 'disconnect', 'remove']);
+const audioVolumeSchema = z.object({ percent: z.coerce.number().int().min(0).max(100) }).strict();
+const audioMuteSchema = z.object({ enabled: z.boolean() }).strict();
+const audioSinkSchema = z.object({ nodeId: z.coerce.number().int().min(1).max(1_000_000) }).strict();
+const playerActionSchema = z.object({
+  action: z.enum(['play', 'pause', 'play-pause', 'next', 'previous', 'stop'])
+}).strict();
+
 function secretPayload(raw) {
   if (!raw) return null;
   try {
@@ -531,6 +546,92 @@ app.get('/api/admin/audit', { preHandler: requireAdmin }, async (request) => {
     details: JSON.parse(row.details_json || '{}'),
     details_json: undefined
   }));
+});
+
+app.get('/api/admin/audio', {
+  preHandler: requireAdmin,
+  config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+}, async () => audioAgentRequest('/v1/status'));
+
+app.post('/api/admin/audio/bluetooth/power', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(bluetoothPowerSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/bluetooth/power', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.bluetooth.power', 'audio', null, { enabled: body.enabled });
+  return result;
+});
+
+app.post('/api/admin/audio/bluetooth/scan', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(bluetoothScanSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/bluetooth/scan', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.bluetooth.scan', 'audio', null, { enabled: body.enabled });
+  return result;
+});
+
+app.post('/api/admin/audio/bluetooth/devices/:address/:action', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const address = parseOrReply(bluetoothAddressSchema, request.params.address, reply);
+  const action = parseOrReply(bluetoothActionSchema, request.params.action, reply);
+  if (!address || !action) return;
+  const result = await audioAgentRequest(
+    `/v1/bluetooth/devices/${address}/${action}`,
+    { method: 'POST', body: {} }
+  );
+  audit(request.portalUser.email, `audio.bluetooth.${action}`, 'bluetooth-device', address);
+  return result;
+});
+
+app.post('/api/admin/audio/volume', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(audioVolumeSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/audio/volume', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.volume', 'audio', null, { percent: body.percent });
+  return result;
+});
+
+app.post('/api/admin/audio/mute', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(audioMuteSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/audio/mute', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.mute', 'audio', null, { enabled: body.enabled });
+  return result;
+});
+
+app.post('/api/admin/audio/default-sink', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(audioSinkSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/audio/default-sink', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.default-sink', 'audio', body.nodeId);
+  return result;
+});
+
+app.post('/api/admin/audio/player', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(playerActionSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/player/action', { method: 'POST', body });
+  audit(request.portalUser.email, `audio.player.${body.action}`, 'audio', null);
+  return result;
 });
 
 const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true, changeOrigin: true });

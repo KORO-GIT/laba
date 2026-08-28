@@ -1,0 +1,49 @@
+[Unit]
+Description=LABA private Bluetooth and audio control agent
+After=network-online.target tailscaled.service bluetooth.service sound.target
+Wants=network-online.target tailscaled.service bluetooth.service
+
+[Service]
+Type=simple
+User=korob
+Group=korob
+SupplementaryGroups=audio netdev
+ExecStart=/usr/bin/python3 /opt/laba-audio-agent/laba-audio-agent.py
+LoadCredentialEncrypted=AUDIO_AGENT_TOKEN:/etc/credstore.encrypted/laba-audio-agent-token
+Environment=LABA_AUDIO_LISTEN_ADDRESS=100.69.168.10
+Environment=LABA_AUDIO_LISTEN_PORT=1985
+Environment=LABA_AUDIO_ALLOWED_CLIENT_IP=100.68.61.33
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=100.68.61.33/32
+IPAddressAllow=100.69.168.10/32
+UMask=0077
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

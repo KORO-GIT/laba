@@ -73,7 +73,34 @@ test('development server serves portal API and protected admin writes', async (c
   let upstreamUpgradeUrl = null;
   let upstreamUpgradeAuthorization = null;
   const upstreamRequests = [];
-  const upstream = http.createServer((request, response) => {
+  const audioRequests = [];
+  const audioStatus = {
+    version: 1,
+    adapter: { available: true, powered: true, discovering: false, pairable: true, name: 'PiLABA4B' },
+    devices: [{
+      address: 'AA:BB:CC:DD:EE:FF', name: 'Test Speaker', paired: true,
+      bonded: true, trusted: true, connected: true, audio: true, icon: 'audio-card'
+    }],
+    audio: {
+      available: true, sinks: [{ id: 57, name: 'Test Speaker', default: true }],
+      defaultSinkId: 57, volume: 40, muted: false
+    },
+    player: { available: false, status: 'Stopped', player: null, title: null, artist: null }
+  };
+  const upstream = http.createServer(async (request, response) => {
+    if (request.url.startsWith('/v1/')) {
+      let rawBody = '';
+      for await (const chunk of request) rawBody += chunk;
+      audioRequests.push({
+        method: request.method,
+        url: request.url,
+        authorization: request.headers.authorization,
+        body: rawBody ? JSON.parse(rawBody) : null
+      });
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(audioStatus));
+      return;
+    }
     upstreamRequests.push({ url: request.url, authorization: request.headers.authorization });
     if (request.url.startsWith('/api/hls/')) {
       response.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
@@ -111,7 +138,9 @@ test('development server serves portal API and protected admin writes', async (c
       DB_PATH: path.join(temp, 'portal.db'),
       BOOTSTRAP_ADMIN_EMAIL: 'admin@test.local',
       DEV_USER_EMAIL: 'admin@test.local',
-      ALLOWED_DEVICE_SUBNETS: '127.0.0.0/8'
+      ALLOWED_DEVICE_SUBNETS: '127.0.0.0/8',
+      AUDIO_AGENT_URL: `http://127.0.0.1:${upstreamPort}`,
+      AUDIO_AGENT_TOKEN: 'test-audio-agent-token-with-at-least-32-characters'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -136,6 +165,35 @@ test('development server serves portal API and protected admin writes', async (c
   const me = await fetch(`${root}/api/me`).then((response) => response.json());
   assert.equal(me.role, 'admin');
   assert.equal(me.displayName, 'Власник');
+
+  const audio = await fetch(`${root}/api/admin/audio`).then((response) => response.json());
+  assert.equal(audio.adapter.powered, true);
+  assert.equal(audio.devices[0].name, 'Test Speaker');
+  assert.deepEqual(audioRequests.at(-1), {
+    method: 'GET', url: '/v1/status',
+    authorization: 'Bearer test-audio-agent-token-with-at-least-32-characters', body: null
+  });
+
+  const rejectedAudioWrite = await fetch(`${root}/api/admin/audio/bluetooth/power`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false })
+  });
+  assert.equal(rejectedAudioWrite.status, 403);
+
+  const poweredOff = await fetch(`${root}/api/admin/audio/bluetooth/power`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ enabled: false })
+  });
+  assert.equal(poweredOff.status, 200);
+  assert.deepEqual(audioRequests.at(-1), {
+    method: 'POST', url: '/v1/bluetooth/power',
+    authorization: 'Bearer test-audio-agent-token-with-at-least-32-characters', body: { enabled: false }
+  });
+
+  const invalidBluetoothAddress = await fetch(`${root}/api/admin/audio/bluetooth/devices/not-a-mac/connect`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root }, body: '{}'
+  });
+  assert.equal(invalidBluetoothAddress.status, 400);
 
   const homepage = await fetch(root).then((response) => response.text());
   assert.match(homepage, /Фільтри пристроїв/);

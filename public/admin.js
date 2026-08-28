@@ -1,5 +1,6 @@
-const state = { me: null, devices: [], users: [], audit: [] };
+const state = { me: null, devices: [], users: [], audit: [], audio: null };
 const toast = document.querySelector('#toast');
+let audioPollTimer = null;
 
 function showToast(message, isError = false) {
   toast.textContent = message;
@@ -191,6 +192,129 @@ async function loadDevices() {
   renderDevices();
 }
 
+function audioButton(label, className, action, device) {
+  const button = el('button', className, label);
+  button.type = 'button';
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      state.audio = await api(
+        `/api/admin/audio/bluetooth/devices/${encodeURIComponent(device.address)}/${action}`,
+        { method: 'POST', body: '{}' }
+      );
+      renderAudio();
+      showToast(action === 'remove' ? 'Пристрій видалено' : 'Bluetooth-пристрій оновлено');
+    } catch (error) { showToast(error.message, true); }
+    finally { button.disabled = false; }
+  });
+  return button;
+}
+
+function renderBluetoothDevices() {
+  const list = document.querySelector('#bluetooth-device-list');
+  const devices = state.audio?.devices || [];
+  const rows = devices.map((device) => {
+    const row = el('div', `bluetooth-device${device.connected ? ' connected' : ''}`);
+    const description = el('div', 'bluetooth-device-main');
+    const flags = [
+      device.connected ? 'під’єднано' : null,
+      device.paired ? 'paired' : 'новий',
+      device.audio ? 'аудіо' : null
+    ].filter(Boolean).join(' · ');
+    description.append(el('strong', '', device.name), el('small', '', `${device.address} · ${flags}`));
+    const actions = el('div', 'bluetooth-device-actions');
+    if (!device.paired) {
+      actions.append(audioButton('Під’єднати', 'button button-primary', 'pair', device));
+    } else if (device.connected) {
+      actions.append(audioButton('Від’єднати', 'button button-ghost', 'disconnect', device));
+    } else {
+      actions.append(audioButton('З’єднати', 'button button-primary', 'connect', device));
+    }
+    if (device.paired) actions.append(audioButton('Забути', 'button button-danger', 'remove', device));
+    row.append(description, actions);
+    return row;
+  });
+  list.replaceChildren(...rows);
+  if (!rows.length) list.append(el('p', 'audio-empty', 'Bluetooth-пристроїв поки не знайдено.'));
+}
+
+function renderAudio() {
+  const adapter = state.audio?.adapter || {};
+  const audio = state.audio?.audio || {};
+  const player = state.audio?.player || {};
+  const power = document.querySelector('#bluetooth-power');
+  power.checked = Boolean(adapter.powered);
+  power.disabled = !adapter.available;
+  document.querySelector('#bluetooth-power-label').textContent = adapter.powered ? 'Увімкнено' : 'Вимкнено';
+  const dot = document.querySelector('#bluetooth-status-dot');
+  dot.classList.toggle('online', Boolean(adapter.powered));
+  dot.classList.toggle('searching', Boolean(adapter.discovering));
+  document.querySelector('#bluetooth-status').textContent = !adapter.available
+    ? 'Bluetooth-адаптер недоступний'
+    : adapter.discovering
+      ? 'Пошук пристроїв…'
+      : adapter.powered
+        ? `${adapter.name || 'Raspberry Pi'} · готовий`
+        : 'Адаптер вимкнено';
+  document.querySelector('#scan-bluetooth').disabled = !adapter.powered || adapter.discovering;
+  document.querySelector('#stop-bluetooth-scan').classList.toggle('hidden', !adapter.discovering);
+  renderBluetoothDevices();
+
+  const audioState = document.querySelector('#audio-stack-state');
+  audioState.textContent = audio.available ? 'АКТИВНО' : 'НЕМАЄ';
+  audioState.classList.toggle('off', !audio.available);
+  const sink = document.querySelector('#audio-sink');
+  const sinkOptions = (audio.sinks || []).map((item) => {
+    const option = el('option', '', item.name);
+    option.value = String(item.id);
+    option.selected = item.id === audio.defaultSinkId;
+    return option;
+  });
+  sink.replaceChildren(...sinkOptions);
+  if (!sinkOptions.length) {
+    const option = el('option', '', 'Аудіовиходи не знайдено');
+    option.value = '';
+    sink.append(option);
+  }
+  sink.disabled = !audio.available || !sinkOptions.length;
+  const volume = document.querySelector('#audio-volume');
+  volume.value = String(audio.volume ?? 0);
+  volume.disabled = !audio.available || audio.volume == null;
+  document.querySelector('#audio-volume-value').textContent = audio.volume == null ? '—' : `${audio.volume}%`;
+  const mute = document.querySelector('#audio-mute');
+  mute.disabled = !audio.available;
+  mute.textContent = audio.muted ? 'Увімкнути звук' : 'Вимкнути звук';
+  mute.dataset.muted = audio.muted ? '1' : '0';
+
+  document.querySelector('#player-title').textContent = player.title || 'Нічого не відтворюється';
+  document.querySelector('#player-meta').textContent = player.available
+    ? [player.artist, player.player, player.status].filter(Boolean).join(' · ')
+    : 'Сумісний MPRIS-програвач не знайдено.';
+  document.querySelectorAll('[data-player-action]').forEach((button) => { button.disabled = !player.available; });
+}
+
+async function loadAudio({ quiet = false } = {}) {
+  try {
+    state.audio = await api('/api/admin/audio');
+    renderAudio();
+  } catch (error) {
+    if (!quiet) showToast(error.message, true);
+  }
+}
+
+function startAudioPolling() {
+  clearInterval(audioPollTimer);
+  audioPollTimer = setInterval(() => {
+    if (document.querySelector('#panel-audio').classList.contains('active')) loadAudio({ quiet: true });
+  }, 4_000);
+}
+
+async function audioMutation(path, body, successMessage) {
+  state.audio = await api(path, { method: 'POST', body: JSON.stringify(body) });
+  renderAudio();
+  if (successMessage) showToast(successMessage);
+}
+
 function renderUsers(selectedId = Number(document.querySelector('#user-id').value || 0)) {
   const list = document.querySelector('#user-list');
   list.replaceChildren(...state.users.map((user) => recordButton({
@@ -291,7 +415,11 @@ function actionLabel(action) {
   return {
     'device.create': 'Пристрій додано', 'device.update': 'Пристрій змінено',
     'device.test': 'Перевірка зв’язку', 'user.create': 'Користувача додано',
-    'user.update': 'Користувача змінено'
+    'user.update': 'Користувача змінено', 'audio.bluetooth.power': 'Живлення Bluetooth',
+    'audio.bluetooth.scan': 'Пошук Bluetooth', 'audio.bluetooth.pair': 'Bluetooth pairing',
+    'audio.bluetooth.connect': 'Bluetooth під’єднано', 'audio.bluetooth.disconnect': 'Bluetooth від’єднано',
+    'audio.bluetooth.remove': 'Bluetooth-пристрій видалено', 'audio.volume': 'Гучність змінено',
+    'audio.mute': 'Mute змінено', 'audio.default-sink': 'Аудіовихід змінено'
   }[action] || action;
 }
 
@@ -320,6 +448,7 @@ document.querySelectorAll('.admin-tab').forEach((button) => {
     document.querySelectorAll('.admin-panel').forEach((panel) => panel.classList.remove('active'));
     button.classList.add('active');
     document.querySelector(`#panel-${button.dataset.panel}`).classList.add('active');
+    if (button.dataset.panel === 'audio') await loadAudio();
     if (button.dataset.panel === 'audit') await loadAudit().catch((error) => showToast(error.message, true));
   });
 });
@@ -333,6 +462,44 @@ document.querySelector('#device-driver').addEventListener('change', () => toggle
 document.querySelector('#device-kind').addEventListener('change', () => toggleDeviceIntegration(false));
 document.querySelector('#user-role').addEventListener('change', toggleAdminAccess);
 document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал оновлено')).catch((error) => showToast(error.message, true)));
+document.querySelector('#refresh-audio').addEventListener('click', () => loadAudio().then(() => showToast('Аудіостан оновлено')));
+document.querySelector('#bluetooth-power').addEventListener('change', async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    await audioMutation('/api/admin/audio/bluetooth/power', { enabled: event.currentTarget.checked }, 'Bluetooth оновлено');
+  } catch (error) { showToast(error.message, true); await loadAudio({ quiet: true }); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#scan-bluetooth').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
+  try { await audioMutation('/api/admin/audio/bluetooth/scan', { enabled: true, seconds: 20 }, 'Пошук Bluetooth розпочато'); }
+  catch (error) { showToast(error.message, true); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#stop-bluetooth-scan').addEventListener('click', async () => {
+  try { await audioMutation('/api/admin/audio/bluetooth/scan', { enabled: false, seconds: 15 }, 'Пошук зупинено'); }
+  catch (error) { showToast(error.message, true); }
+});
+document.querySelector('#audio-volume').addEventListener('input', (event) => {
+  document.querySelector('#audio-volume-value').textContent = `${event.currentTarget.value}%`;
+});
+document.querySelector('#audio-volume').addEventListener('change', async (event) => {
+  try { await audioMutation('/api/admin/audio/volume', { percent: Number(event.currentTarget.value) }, 'Гучність змінено'); }
+  catch (error) { showToast(error.message, true); }
+});
+document.querySelector('#audio-mute').addEventListener('click', async (event) => {
+  try { await audioMutation('/api/admin/audio/mute', { enabled: event.currentTarget.dataset.muted !== '1' }); }
+  catch (error) { showToast(error.message, true); }
+});
+document.querySelector('#audio-sink').addEventListener('change', async (event) => {
+  if (!event.currentTarget.value) return;
+  try { await audioMutation('/api/admin/audio/default-sink', { nodeId: Number(event.currentTarget.value) }, 'Аудіовихід змінено'); }
+  catch (error) { showToast(error.message, true); }
+});
+document.querySelectorAll('[data-player-action]').forEach((button) => button.addEventListener('click', async () => {
+  try { await audioMutation('/api/admin/audio/player', { action: button.dataset.playerAction }); }
+  catch (error) { showToast(error.message, true); }
+}));
 document.querySelectorAll('[data-close-editor]').forEach((button) => button.addEventListener('click', () => button.closest('form').classList.add('hidden')));
 
 async function start() {
@@ -341,6 +508,7 @@ async function start() {
     if (state.me.role !== 'admin') throw new Error('Потрібні права адміністратора');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
     await Promise.all([loadDevices(), loadUsers()]);
+    startAudioPolling();
   } catch (error) { showToast(error.message, true); }
 }
 

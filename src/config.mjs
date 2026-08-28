@@ -19,6 +19,8 @@ export const config = {
     .filter(Boolean),
   sessionSecret: process.env.SESSION_SECRET ?? 'development-only-session-secret-change-me',
   deviceSecretKey: process.env.DEVICE_SECRET_KEY ?? '',
+  audioAgentUrl: (process.env.AUDIO_AGENT_URL ?? '').replace(/\/$/, ''),
+  audioAgentToken: process.env.AUDIO_AGENT_TOKEN ?? '',
   allowedSubnets: (process.env.ALLOWED_DEVICE_SUBNETS ?? '192.168.0.0/24')
     .split(',')
     .map((value) => value.trim())
@@ -50,8 +52,17 @@ export function validateConfig() {
     if (!config.cfAccessAudience.length) missing.push('CF_ACCESS_AUD');
     if (config.sessionSecret.length < 32) missing.push('SESSION_SECRET');
     if (!config.deviceSecretKey) missing.push('DEVICE_SECRET_KEY');
+    if (!config.audioAgentUrl) missing.push('AUDIO_AGENT_URL');
+    if (config.audioAgentToken.length < 32) missing.push('AUDIO_AGENT_TOKEN');
     if (missing.length) throw new Error(`Missing production settings: ${missing.join(', ')}`);
     const decoded = Buffer.from(config.deviceSecretKey, 'base64');
     if (decoded.length !== 32) throw new Error('DEVICE_SECRET_KEY must decode to exactly 32 bytes');
+  }
+
+  if (config.audioAgentUrl) {
+    const url = new URL(config.audioAgentUrl);
+    if (url.protocol !== 'http:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error('AUDIO_AGENT_URL must be an HTTP origin without credentials, path, query, or fragment');
+    }
   }
 }

@@ -119,6 +119,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на low-latency H.264, додає захищений same-origin MSE player під service-worker-safe префіксом `/webcam` і HLS fallback для Mainsail та підключає окремий H.264 RTSP-потік камери відеоспостереження.
 
+Версія `0.7.0` не змінює схему БД. Вона додає адміністративний розділ Bluetooth/Audio та приватний audio agent на Raspberry Pi. Agent доступний лише VPS через Tailscale, вимагає окремий bearer credential і надає тільки allowlisted операції BlueZ, PipeWire та MPRIS.
+
 ## go2rtc на Raspberry Pi
 
 Підготовлена конфігурація використовує go2rtc `v1.9.14` для Linux ARM64. Бінарний файл pinned за SHA-256:
