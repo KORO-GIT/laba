@@ -174,6 +174,12 @@ GO2RTC_API_PASSWORD_FILE=/run/laba-go2rtc-api-password \
 shred --remove --zero /run/laba-go2rtc-api-password
 ```
 
+Для наступних оновлень уже наявної `k1se-camera` достатньо запустити скрипт без `GO2RTC_API_PASSWORD_FILE`; він збереже поточний AES-256-GCM secret і оновить лише несекретні параметри камери:
+
+```bash
+node --env-file=/opt/laba/.env /opt/laba/scripts/configure-usb-camera.mjs
+```
+
 Moonraker/Mainsail отримує same-origin HLS через LABA. Оновлювати слід наявний database webcam за `uid`, щоб не створити дублікат:
 
 ```bash

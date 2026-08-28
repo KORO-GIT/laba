@@ -3,19 +3,22 @@ import { audit, db } from '../src/database.mjs';
 import { encryptSecret } from '../src/security.mjs';
 
 const passwordPath = process.env.GO2RTC_API_PASSWORD_FILE;
-if (!passwordPath) throw new Error('GO2RTC_API_PASSWORD_FILE is required');
-
-const gatewayPassword = fs.readFileSync(passwordPath, 'utf8').trim();
-if (gatewayPassword.length < 32) throw new Error('go2rtc password is unexpectedly short');
+let encrypted = null;
+if (passwordPath) {
+  const gatewayPassword = fs.readFileSync(passwordPath, 'utf8').trim();
+  if (gatewayPassword.length < 32) throw new Error('go2rtc password is unexpectedly short');
+  encrypted = encryptSecret(JSON.stringify({ username: 'laba-vps', password: gatewayPassword }));
+}
 
 const printer = db.prepare("SELECT * FROM devices WHERE slug = 'k1se-01' COLLATE NOCASE").get();
 if (!printer || printer.kind !== 'printer') throw new Error('Creality K1 SE device is missing');
 
-const encrypted = encryptSecret(JSON.stringify({ username: 'laba-vps', password: gatewayPassword }));
 const cameraSlug = 'k1se-camera';
 
 const cameraId = db.transaction(() => {
   const existing = db.prepare('SELECT * FROM devices WHERE slug = ? COLLATE NOCASE').get(cameraSlug);
+  if (!encrypted && existing?.secret_enc) encrypted = existing.secret_enc;
+  if (!encrypted) throw new Error('GO2RTC_API_PASSWORD_FILE is required for initial camera setup');
   if (existing) {
     db.prepare(`
       UPDATE devices SET
