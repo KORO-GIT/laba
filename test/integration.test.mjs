@@ -220,26 +220,18 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(invalidParent.status, 400);
 
   const gatewayHost = 'camera-live-laba.zpseapil.club';
-  const cameraPage = await fetch(`${root}/?embed=1`, { headers: { 'X-Forwarded-Host': gatewayHost } });
+  const cameraPage = await fetch(root, { headers: { 'X-Forwarded-Host': gatewayHost } });
   assert.equal(cameraPage.status, 200);
   assert.match(cameraPage.headers.get('content-security-policy'), /media-src 'self' data: blob:/);
-  assert.match(
-    cameraPage.headers.get('content-security-policy'),
-    /frame-ancestors 'self' https:\/\/k1se-01-laba\.zpseapil\.club/
-  );
-  assert.equal(cameraPage.headers.get('x-frame-options'), null);
+  assert.match(cameraPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(cameraPage.headers.get('x-frame-options'), 'SAMEORIGIN');
   assert.match(await cameraPage.text(), /ЗАХИЩЕНИЙ ПЕРЕГЛЯД/);
-
-  const standaloneCameraPage = await fetch(root, { headers: { 'X-Forwarded-Host': gatewayHost } });
-  assert.equal(standaloneCameraPage.status, 200);
-  assert.match(standaloneCameraPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-  assert.equal(standaloneCameraPage.headers.get('x-frame-options'), 'SAMEORIGIN');
 
   const cameraAsset = await fetch(`${root}/assets/camera.js`, {
     headers: { 'X-Forwarded-Host': gatewayHost }
   });
   assert.equal(cameraAsset.status, 200);
-  assert.match(await cameraAsset.text(), /player\.src = '\/gateway\/ws'/);
+  assert.match(await cameraAsset.text(), /gatewayPath.*\/ws/);
 
   const gatewayMeta = await fetch(`${root}/gateway/meta`, {
     headers: { 'X-Forwarded-Host': gatewayHost }
@@ -266,6 +258,22 @@ test('development server serves portal API and protected admin writes', async (c
   assert.deepEqual(upstreamRequests.at(-1), {
     url: '/api/frame.jpeg?src=camera-main',
     authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+
+  const embeddedPlayer = await fetch(`${root}/webcam/laba/player`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(embeddedPlayer.status, 200);
+  assert.match(embeddedPlayer.headers.get('content-security-policy'), /frame-ancestors 'self'/);
+  assert.match(await embeddedPlayer.text(), /camera-player/);
+
+  const embeddedMeta = await fetch(`${root}/webcam/laba/meta`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.deepEqual(await embeddedMeta.json(), {
+    name: 'Camera Live',
+    portalUrl: 'https://laba.zpseapil.club/',
+    modes: 'mjpeg'
   });
 
   const linkedHlsMaster = await fetch(`${root}/laba-camera/api/stream.m3u8?src=attacker-controlled`, {
@@ -326,6 +334,20 @@ test('development server serves portal API and protected admin writes', async (c
   });
   assert.equal(invalidHls.status, 404);
   assert.equal(upstreamRequests.length, upstreamCountBeforeInvalidHls);
+
+  const printerCameraWebsocket = await websocketHandshake(
+    port,
+    'k1se-01-laba.zpseapil.club',
+    'http://k1se-01-laba.zpseapil.club',
+    '/webcam/laba/ws?src=attacker-controlled'
+  );
+  assert.match(printerCameraWebsocket, /^HTTP\/1\.1 101 /, logs.join(''));
+  assert.equal(upstreamUpgradeUrl, '/api/ws?src=camera-main');
+  assert.equal(upstreamUpgradeOrigin, `http://127.0.0.1:${upstreamPort}`);
+  assert.equal(
+    upstreamUpgradeAuthorization,
+    `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  );
 
   const gatewayWebsocket = await websocketHandshake(
     port,

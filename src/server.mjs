@@ -63,10 +63,6 @@ await app.register(fastifyStatic, {
 app.addHook('onSend', async (request, reply, payload) => {
   reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
   if (!request.url.startsWith('/assets/')) reply.header('Cache-Control', 'no-store');
-  if (request.cameraFrameAncestor) {
-    reply.removeHeader('X-Frame-Options');
-    reply.header('Content-Security-Policy', cameraContentSecurityPolicy(request.cameraFrameAncestor));
-  }
   return payload;
 });
 
@@ -102,21 +98,19 @@ function browserCameraMeta(device) {
   };
 }
 
-function cameraContentSecurityPolicy(frameAncestor) {
-  return [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "connect-src 'self'",
-    "font-src 'self'",
-    "form-action 'none'",
-    `frame-ancestors 'self' ${frameAncestor}`,
-    "img-src 'self' data: blob:",
-    "media-src 'self' data: blob:",
-    "object-src 'none'",
-    "script-src 'self'",
-    "style-src 'self'"
-  ].join('; ');
-}
+const embeddedCameraContentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "form-action 'none'",
+  "frame-ancestors 'self'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' data: blob:",
+  "object-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'"
+].join('; ');
 
 const browserCameraAssets = new Set([
   '/assets/styles.css',
@@ -593,10 +587,6 @@ function proxyTarget(device) {
 function proxyBrowserCameraHttp(request, reply, device) {
   const url = requestUrl(request.raw.url);
   if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/') {
-    const parent = device.parent_device_id ? statements.deviceById.get(device.parent_device_id) : null;
-    if (url.searchParams.get('embed') === '1' && parent?.kind === 'printer' && parent.enabled && safeSlug(parent.slug)) {
-      request.cameraFrameAncestor = `https://${parent.slug}${config.deviceHostSuffix}`;
-    }
     return reply.sendFile('camera.html');
   }
   if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/gateway/meta') {
@@ -634,6 +624,22 @@ async function proxyHttp(request, reply) {
   if (!device || !device.enabled) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Немає доступу до пристрою' });
   const pathname = requestUrl(request.raw.url).pathname;
+  if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD')
+    && pathname === '/webcam/laba/player') {
+    const camera = statements.cameraByParent.get(device.id);
+    if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
+      return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
+    }
+    reply.header('Content-Security-Policy', embeddedCameraContentSecurityPolicy);
+    return reply.sendFile('camera.html');
+  }
+  if (device.kind === 'printer' && request.method === 'GET' && pathname === '/webcam/laba/meta') {
+    const camera = statements.cameraByParent.get(device.id);
+    if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
+      return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
+    }
+    return reply.send(browserCameraMeta(camera));
+  }
   if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD')
     && pathname === '/laba-camera/api/stream.m3u8') {
     const camera = statements.cameraByParent.get(device.id);
@@ -704,6 +710,14 @@ app.server.on('upgrade', async (request, socket, head) => {
     const device = statements.deviceBySlug.get(slug);
     if (!device || !device.enabled || !canOpenDevice(user, device)) throw new Error('Forbidden');
     const url = requestUrl(request.url);
+    if (device.kind === 'printer' && url.pathname === '/webcam/laba/ws') {
+      const camera = statements.cameraByParent.get(device.id);
+      if (!isBrowserCamera(camera) || !canOpenDevice(user, camera)) throw new Error('Printer camera unavailable');
+      request.url = `/api/ws?src=${encodeURIComponent(camera.stream_name)}`;
+      request.portalDevice = camera;
+      proxy.ws(request, socket, head, { target: proxyTarget(camera) });
+      return;
+    }
     const target = proxyTarget(device);
     if (!target) throw new Error('No browser stream configured');
     if (isBrowserCamera(device)) {

@@ -101,7 +101,7 @@ npm.cmd audit --omit=dev
 - підгрупу принтера `Creality K1 SE`;
 - Basic Auth go2rtc у секреті JSON: ім’я `laba-vps` і згенерований локально пароль.
 
-LABA віддає власну сторінку MSE-плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери цей player можна вбудувати лише в exact origin її батьківського принтера; Mainsail використовує URL `https://k1se-camera-laba.zpseapil.club/?embed=1`. LABA також зберігає same-origin HLS URL `/laba-camera/api/stream.m3u8`, snapshot URL `/laba-camera/snapshot` і MJPEG `/laba-camera/stream` як резервні варіанти. Реальна адреса go2rtc та його пароль у браузер не потрапляють.
+LABA віддає власну сторінку MSE-плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери Mainsail використовує same-origin URL `/webcam/laba/player`; префікс `/webcam` входить до denylist service worker Mainsail і тому player не замінюється кешованою оболонкою PWA. LABA також зберігає HLS URL `/laba-camera/api/stream.m3u8`, snapshot URL `/laba-camera/snapshot` і MJPEG `/laba-camera/stream` як резервні варіанти. Реальна адреса go2rtc та його пароль у браузер не потрапляють.
 
 ## Production
 

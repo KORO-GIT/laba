@@ -33,16 +33,8 @@ laba.zpseapil.club {
 		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
 		-Server
 	}
-	@laba_camera_embed {
-		host k1se-camera-laba.zpseapil.club
-		path /
-	}
-	header @laba_camera_embed -X-Frame-Options
-	@not_laba_camera_embed {
-		not {
-			host k1se-camera-laba.zpseapil.club
-			path /
-		}
-	}
+	@laba_camera_embed path /webcam/laba/player
+	header @laba_camera_embed X-Frame-Options "SAMEORIGIN"
+	@not_laba_camera_embed not path /webcam/laba/player
 	header @not_laba_camera_embed X-Frame-Options "DENY"
 }
