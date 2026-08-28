@@ -15,6 +15,7 @@ encrypted_path = Path("/etc/credstore.encrypted/laba-audio-agent-token")
 encrypted_temp_path = encrypted_path.with_name(f".{encrypted_path.name}.tmp")
 token = secrets.token_urlsafe(48)
 
+plain_path.unlink(missing_ok=True)
 plain_path.write_text(f"{token}\n", encoding="utf-8")
 os.chmod(plain_path, 0o600)
 encrypted_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
