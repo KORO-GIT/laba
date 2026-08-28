@@ -1,5 +1,5 @@
 app:
-  modules: [api, ws, http, rtsp, mp4, hls, mjpeg]
+  modules: [api, ws, http, mjpeg]
 
 api:
   listen: "100.69.168.10:1984"
@@ -9,16 +9,11 @@ api:
   allow_paths:
     - /api/streams
     - /api/ws
-    - /api/hls/playlist.m3u8
-    - /api/hls/segment.ts
-    - /api/hls/init.mp4
-    - /api/hls/segment.m4s
+    - /api/stream.mjpeg
+    - /api/frame.jpeg
 
 streams:
-  camera-01: ${CAMERA_RTSP_URL}
-
-rtsp:
-  listen: ""
+  printer-usb-camera: http://127.0.0.1:8080/stream
 
 log:
   format: json

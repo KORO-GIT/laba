@@ -1,0 +1,45 @@
+[Unit]
+Description=LABA Logitech C270 MJPEG source
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=true
+SupplementaryGroups=video
+ExecStartPre=/usr/bin/v4l2-ctl --device /dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0 --set-ctrl=exposure_dynamic_framerate=0
+ExecStart=/usr/bin/ustreamer --device /dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0 --resolution 1280x720 --format MJPEG --desired-fps 30 --encoder HW --host 127.0.0.1 --port 8080 --persistent --device-timeout 2 --server-timeout 30 --tcp-nodelay --no-log-colors
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=true
+MemoryDenyWriteExecute=true
+PrivateTmp=true
+PrivateDevices=false
+DevicePolicy=closed
+DeviceAllow=/dev/video0 rw
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+UMask=0077
+MemoryMax=192M
+
+[Install]
+WantedBy=multi-user.target

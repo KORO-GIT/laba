@@ -120,11 +120,16 @@ h1, h2, h3, h4, p { margin-top: 0; }
 }
 .tab.active, .admin-tab.active { color: var(--ink); background: rgba(244,240,232,.085); }
 
-.device-grid {
+.device-catalog { display: flex; flex-direction: column; gap: 26px; padding: 18px 0 70px; }
+.device-group { padding: 20px; border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); background: rgba(255,255,255,.018); }
+.device-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 2px 4px 18px; }
+.device-group-heading h2 { margin: 0 0 5px; font-size: 18px; letter-spacing: -.02em; }
+.device-group-heading p { margin: 0; color: var(--muted); font-size: 11px; }
+.device-group-count { min-width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 99px; color: var(--accent-light); font-size: 11px; font-weight: 800; }
+.device-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
-  padding: 18px 0 70px;
 }
 .device-card {
   position: relative;
@@ -288,7 +293,8 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
 @keyframes pulse { 50% { opacity: .45; } }
 
 @media (max-width: 850px) {
-  .device-grid { grid-template-columns: 1fr; }
+  .device-row { grid-template-columns: 1fr; }
+  .device-group { padding: 14px; }
   .admin-layout { grid-template-columns: 1fr; }
 }
 

@@ -118,7 +118,11 @@ function userAccessMap(user) {
 
 function effectiveAccess(user, deviceId) {
   if (user.role === 'admin') return 'admin';
-  const grant = statements.accessForUserAndDevice.get(user.id, deviceId)?.access_level ?? 'none';
+  const device = statements.deviceById.get(deviceId);
+  let grant = statements.accessForUserAndDevice.get(user.id, deviceId)?.access_level ?? 'none';
+  if (grant === 'none' && device?.kind === 'camera' && device.parent_device_id) {
+    grant = statements.accessForUserAndDevice.get(user.id, device.parent_device_id)?.access_level ?? 'none';
+  }
   const roleCap = user.role === 'operator' ? 'operator' : 'viewer';
   return accessRank(grant) < accessRank(roleCap) ? grant : roleCap;
 }
@@ -206,6 +210,8 @@ const deviceSchema = z.object({
   uiPort: z.coerce.number().int().min(1).max(65535),
   apiPort: z.union([z.coerce.number().int().min(1).max(65535), z.literal(null)]).optional(),
   streamName: z.string().trim().max(128).optional().default(''),
+  streamMode: z.enum(['auto', 'mjpeg']).optional().default('auto'),
+  parentDeviceId: z.union([z.coerce.number().int().positive(), z.literal(null)]).optional().default(null),
   secret: z.string().max(4096).optional(),
   keepSecret: z.boolean().optional().default(true),
   notes: z.string().trim().max(500).optional().default(''),
@@ -230,7 +236,23 @@ const deviceSchema = z.object({
   if (device.streamName && !['http', 'https'].includes(device.protocol)) {
     context.addIssue({ code: 'custom', path: ['protocol'], message: 'Для go2rtc потрібен HTTP або HTTPS' });
   }
+  if (device.streamMode !== 'auto' && !device.streamName) {
+    context.addIssue({ code: 'custom', path: ['streamMode'], message: 'Режим потоку доступний лише для go2rtc' });
+  }
+  if (device.parentDeviceId && device.kind !== 'camera') {
+    context.addIssue({ code: 'custom', path: ['parentDeviceId'], message: 'До принтера можна прив’язати лише камеру' });
+  }
 });
+
+function validateDeviceRelation(device, reply) {
+  if (!device.parentDeviceId) return true;
+  const parent = statements.deviceById.get(device.parentDeviceId);
+  if (!parent || parent.kind !== 'printer') {
+    reply.code(400).send({ error: 'Батьківський пристрій має бути наявним принтером' });
+    return false;
+  }
+  return true;
+}
 
 const userSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -302,7 +324,8 @@ app.get('/api/devices', async (request) => {
   const grants = userAccessMap(request.portalUser);
   const visible = request.portalUser.role === 'admin'
     ? rows
-    : rows.filter((device) => grants.has(device.id));
+    : rows.filter((device) => grants.has(device.id)
+      || (device.kind === 'camera' && device.parent_device_id && grants.has(device.parent_device_id)));
 
   return Promise.all(visible.map(async (device) => {
     const access = effectiveAccess(request.portalUser, device.id);
@@ -325,15 +348,17 @@ app.post('/api/admin/devices', {
   config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
 }, async (request, reply) => {
   const body = parseOrReply(deviceSchema, request.body, reply);
-  if (!body || !validateDeviceNetwork(body, reply)) return;
+  if (!body || !validateDeviceNetwork(body, reply) || !validateDeviceRelation(body, reply)) return;
   try {
     const result = db.prepare(`
       INSERT INTO devices
-        (slug, name, kind, driver, host, protocol, ui_port, api_port, stream_name, secret_enc, notes, enabled, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (slug, name, kind, driver, host, protocol, ui_port, api_port, stream_name,
+         stream_mode, parent_device_id, secret_enc, notes, enabled, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       body.slug, body.name, body.kind, body.driver, body.host, body.protocol,
-      body.uiPort, body.apiPort ?? null, body.streamName || null, secretPayload(body.secret), body.notes,
+      body.uiPort, body.apiPort ?? null, body.streamName || null, body.streamMode,
+      body.parentDeviceId, secretPayload(body.secret), body.notes,
       body.enabled ? 1 : 0, body.sortOrder
     );
     audit(request.portalUser.email, 'device.create', 'device', result.lastInsertRowid, { slug: body.slug });
@@ -351,17 +376,19 @@ app.patch('/api/admin/devices/:id', {
   const existing = statements.deviceById.get(Number(request.params.id));
   if (!existing) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   const body = parseOrReply(deviceSchema, request.body, reply);
-  if (!body || !validateDeviceNetwork(body, reply)) return;
+  if (!body || !validateDeviceNetwork(body, reply) || !validateDeviceRelation(body, reply)) return;
   const encrypted = body.keepSecret && !body.secret ? existing.secret_enc : secretPayload(body.secret);
   try {
     db.prepare(`
       UPDATE devices SET
         slug = ?, name = ?, kind = ?, driver = ?, host = ?, protocol = ?, ui_port = ?,
-        api_port = ?, stream_name = ?, secret_enc = ?, notes = ?, enabled = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        api_port = ?, stream_name = ?, stream_mode = ?, parent_device_id = ?, secret_enc = ?,
+        notes = ?, enabled = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       body.slug, body.name, body.kind, body.driver, body.host, body.protocol, body.uiPort,
-      body.apiPort ?? null, body.streamName || null, encrypted, body.notes,
+      body.apiPort ?? null, body.streamName || null, body.streamMode, body.parentDeviceId,
+      encrypted, body.notes,
       body.enabled ? 1 : 0, body.sortOrder, existing.id
     );
   } catch (error) {
@@ -519,7 +546,11 @@ function proxyBrowserCameraHttp(request, reply, device) {
     return reply.sendFile('camera.html');
   }
   if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/gateway/meta') {
-    return reply.send({ name: device.name, portalUrl: `https://${config.baseDomain}/` });
+    return reply.send({
+      name: device.name,
+      portalUrl: `https://${config.baseDomain}/`,
+      modes: device.stream_mode === 'mjpeg' ? 'mjpeg' : 'mse,hls,mjpeg'
+    });
   }
   const upstreamHlsPath = browserCameraHlsPaths.get(url.pathname);
   if ((request.method === 'GET' || request.method === 'HEAD') && upstreamHlsPath) {
@@ -553,6 +584,20 @@ async function proxyHttp(request, reply) {
   const device = statements.deviceBySlug.get(slug);
   if (!device || !device.enabled) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Немає доступу до пристрою' });
+  const pathname = requestUrl(request.raw.url).pathname;
+  if (device.kind === 'printer' && (request.method === 'GET' || request.method === 'HEAD')
+    && ['/laba-camera/stream', '/laba-camera/snapshot'].includes(pathname)) {
+    const camera = statements.cameraByParent.get(device.id);
+    if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
+      return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
+    }
+    const upstreamPath = pathname.endsWith('/snapshot') ? '/api/frame.jpeg' : '/api/stream.mjpeg';
+    request.raw.url = `${upstreamPath}?src=${encodeURIComponent(camera.stream_name)}`;
+    request.raw.portalDevice = camera;
+    reply.hijack();
+    proxy.web(request.raw, reply.raw, { target: proxyTarget(camera) });
+    return;
+  }
   if (isBrowserCamera(device)) return proxyBrowserCameraHttp(request, reply, device);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     && request.headers['sec-fetch-site'] === 'cross-site') {

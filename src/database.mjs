@@ -33,6 +33,8 @@ db.exec(`
     ui_port INTEGER NOT NULL,
     api_port INTEGER,
     stream_name TEXT,
+    stream_mode TEXT NOT NULL DEFAULT 'auto' CHECK (stream_mode IN ('auto', 'mjpeg')),
+    parent_device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL,
     secret_enc TEXT,
     notes TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -66,6 +68,13 @@ const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => c
 if (!deviceColumns.has('stream_name')) {
   db.exec('ALTER TABLE devices ADD COLUMN stream_name TEXT');
 }
+if (!deviceColumns.has('stream_mode')) {
+  db.exec("ALTER TABLE devices ADD COLUMN stream_mode TEXT NOT NULL DEFAULT 'auto' CHECK (stream_mode IN ('auto', 'mjpeg'))");
+}
+if (!deviceColumns.has('parent_device_id')) {
+  db.exec('ALTER TABLE devices ADD COLUMN parent_device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL');
+}
+db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices(parent_device_id, sort_order)');
 
 const bootstrap = db.prepare('SELECT id FROM users WHERE email = ?').get(config.bootstrapAdminEmail);
 if (!bootstrap) {
@@ -110,6 +119,12 @@ export const statements = {
   listDevices: db.prepare('SELECT * FROM devices ORDER BY sort_order, name'),
   deviceById: db.prepare('SELECT * FROM devices WHERE id = ?'),
   deviceBySlug: db.prepare('SELECT * FROM devices WHERE slug = ? COLLATE NOCASE AND enabled = 1'),
+  cameraByParent: db.prepare(`
+    SELECT * FROM devices
+    WHERE parent_device_id = ? AND kind = 'camera' AND enabled = 1
+    ORDER BY sort_order, id
+    LIMIT 1
+  `),
   accessForUser: db.prepare(`
     SELECT a.device_id, a.access_level
     FROM user_device_access a
@@ -164,6 +179,7 @@ export function serializeDevice(row, includePrivate = false) {
     kind: row.kind,
     driver: row.driver,
     enabled: Boolean(row.enabled),
+    parentDeviceId: row.parent_device_id ?? null,
     notes: row.notes,
     sortOrder: row.sort_order
   };
@@ -175,6 +191,7 @@ export function serializeDevice(row, includePrivate = false) {
       uiPort: row.ui_port,
       apiPort: row.api_port,
       streamName: row.stream_name ?? '',
+      streamMode: row.stream_mode ?? 'auto',
       hasSecret: Boolean(row.secret_enc)
     });
   }

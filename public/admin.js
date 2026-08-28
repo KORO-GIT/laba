@@ -59,6 +59,21 @@ function formValue(id, value) {
   else input.value = value ?? '';
 }
 
+function renderParentDevices(selectedId = null) {
+  const select = document.querySelector('#device-parent');
+  const standalone = el('option', '', 'Окрема камера');
+  standalone.value = '';
+  const printers = state.devices
+    .filter((device) => device.kind === 'printer')
+    .map((device) => {
+      const option = el('option', '', device.name);
+      option.value = String(device.id);
+      return option;
+    });
+  select.replaceChildren(standalone, ...printers);
+  select.value = selectedId == null ? '' : String(selectedId);
+}
+
 function renderDevices(selectedId = Number(document.querySelector('#device-id').value || 0)) {
   const list = document.querySelector('#device-list');
   list.replaceChildren(...state.devices.map((device) => recordButton({
@@ -80,12 +95,14 @@ function editDevice(device = null) {
   formValue('device-name', device?.name);
   formValue('device-kind', device?.kind || 'printer');
   formValue('device-driver', device ? deviceIntegration(device) : 'moonraker');
+  renderParentDevices(device?.parentDeviceId);
   formValue('device-slug', device?.slug);
   formValue('device-host', device?.host || '192.168.0.');
   formValue('device-protocol', device?.protocol || 'http');
   formValue('device-ui-port', device?.uiPort || 80);
   formValue('device-api-port', device?.apiPort);
   formValue('device-stream-name', device?.streamName);
+  formValue('device-stream-mode', device?.streamMode || 'auto');
   formValue('device-sort', device?.sortOrder || 0);
   formValue('device-secret', '');
   formValue('device-notes', device?.notes);
@@ -99,6 +116,7 @@ function editDevice(device = null) {
 function devicePayload() {
   const apiPort = document.querySelector('#device-api-port').value;
   const integration = document.querySelector('#device-driver').value;
+  const parentDeviceId = document.querySelector('#device-parent').value;
   return {
     name: document.querySelector('#device-name').value,
     kind: document.querySelector('#device-kind').value,
@@ -109,6 +127,10 @@ function devicePayload() {
     uiPort: Number(document.querySelector('#device-ui-port').value),
     apiPort: apiPort ? Number(apiPort) : null,
     streamName: integration === 'go2rtc' ? document.querySelector('#device-stream-name').value : '',
+    streamMode: integration === 'go2rtc' ? document.querySelector('#device-stream-mode').value : 'auto',
+    parentDeviceId: document.querySelector('#device-kind').value === 'camera' && parentDeviceId
+      ? Number(parentDeviceId)
+      : null,
     sortOrder: Number(document.querySelector('#device-sort').value || 0),
     secret: document.querySelector('#device-secret').value,
     keepSecret: true,
@@ -147,14 +169,20 @@ function toggleDeviceIntegration(applyDefaults = false) {
   const integration = document.querySelector('#device-driver').value;
   const isRtsp = integration === 'rtsp';
   const isGo2rtc = integration === 'go2rtc';
+  const isCamera = document.querySelector('#device-kind').value === 'camera' || (isGo2rtc && applyDefaults);
   document.querySelector('#rtsp-hint').classList.toggle('hidden', !isRtsp);
   document.querySelector('#go2rtc-hint').classList.toggle('hidden', !isGo2rtc);
   document.querySelector('#stream-name-field').classList.toggle('hidden', !isGo2rtc);
+  document.querySelector('#stream-mode-field').classList.toggle('hidden', !isGo2rtc);
+  document.querySelector('#parent-device-field').classList.toggle('hidden', !isCamera);
   document.querySelector('#device-stream-name').required = isGo2rtc;
   if (isGo2rtc && applyDefaults) {
     formValue('device-kind', 'camera');
+    formValue('device-host', '100.69.168.10');
     formValue('device-protocol', 'http');
     formValue('device-ui-port', 1984);
+    formValue('device-stream-name', 'printer-usb-camera');
+    formValue('device-stream-mode', 'mjpeg');
   }
 }
 
@@ -302,6 +330,7 @@ document.querySelector('#device-form').addEventListener('submit', saveDevice);
 document.querySelector('#user-form').addEventListener('submit', saveUser);
 document.querySelector('#test-device').addEventListener('click', testDevice);
 document.querySelector('#device-driver').addEventListener('change', () => toggleDeviceIntegration(true));
+document.querySelector('#device-kind').addEventListener('change', () => toggleDeviceIntegration(false));
 document.querySelector('#user-role').addEventListener('change', toggleAdminAccess);
 document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал оновлено')).catch((error) => showToast(error.message, true)));
 document.querySelectorAll('[data-close-editor]').forEach((button) => button.addEventListener('click', () => button.closest('form').classList.add('hidden')));

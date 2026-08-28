@@ -193,12 +193,31 @@ test('development server serves portal API and protected admin writes', async (c
       slug: 'camera-live', name: 'Camera Live', kind: 'camera', driver: 'http',
       host: '127.0.0.1', protocol: 'http', uiPort: upstreamPort, apiPort: null,
       streamName: 'camera-main',
+      streamMode: 'mjpeg', parentDeviceId: devices[0].id,
       secret: JSON.stringify({ username: 'gateway-user', password: 'gateway-pass' }),
       notes: '', enabled: true, sortOrder: 30
     })
   });
   assert.equal(gatewayCreated.status, 201);
-  assert.equal((await gatewayCreated.json()).streamName, 'camera-main');
+  const gatewayDevice = await gatewayCreated.json();
+  assert.equal(gatewayDevice.streamName, 'camera-main');
+  assert.equal(gatewayDevice.streamMode, 'mjpeg');
+  assert.equal(gatewayDevice.parentDeviceId, devices[0].id);
+
+  const invalidParent = await fetch(`${root}/api/admin/devices`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Request': '1',
+      Origin: root
+    },
+    body: JSON.stringify({
+      slug: 'camera-orphan', name: 'Camera Orphan', kind: 'camera', driver: 'http',
+      host: '127.0.0.1', protocol: 'http', uiPort: upstreamPort, apiPort: null,
+      parentDeviceId: 999999, notes: '', enabled: true, sortOrder: 40
+    })
+  });
+  assert.equal(invalidParent.status, 400);
 
   const gatewayHost = 'camera-live-laba.zpseapil.club';
   const cameraPage = await fetch(root, { headers: { 'X-Forwarded-Host': gatewayHost } });
@@ -216,7 +235,27 @@ test('development server serves portal API and protected admin writes', async (c
     headers: { 'X-Forwarded-Host': gatewayHost }
   });
   assert.deepEqual(await gatewayMeta.json(), {
-    name: 'Camera Live', portalUrl: 'https://laba.zpseapil.club/'
+    name: 'Camera Live',
+    portalUrl: 'https://laba.zpseapil.club/',
+    modes: 'mjpeg'
+  });
+
+  const linkedStream = await fetch(`${root}/laba-camera/stream`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(linkedStream.status, 200);
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/stream.mjpeg?src=camera-main',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+
+  const linkedSnapshot = await fetch(`${root}/laba-camera/snapshot?cache-bust=1`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(linkedSnapshot.status, 200);
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/frame.jpeg?src=camera-main',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
   });
 
   const upstreamCountBeforeBlockedApi = upstreamRequests.length;

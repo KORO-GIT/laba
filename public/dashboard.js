@@ -105,11 +105,55 @@ function deviceCard(device) {
   return card;
 }
 
+function deviceGroup(title, subtitle, entries) {
+  const section = document.createElement('section');
+  section.className = 'device-group';
+  const heading = document.createElement('div');
+  heading.className = 'device-group-heading';
+  const text = document.createElement('div');
+  const name = document.createElement('h2');
+  name.textContent = title;
+  const description = document.createElement('p');
+  description.textContent = subtitle;
+  text.append(name, description);
+  const count = document.createElement('span');
+  count.className = 'device-group-count';
+  count.textContent = String(entries.length);
+  heading.append(text, count);
+  const row = document.createElement('div');
+  row.className = 'device-row';
+  row.append(...entries.map(deviceCard));
+  section.append(heading, row);
+  return section;
+}
+
 function render() {
-  const visible = devices.filter((device) => activeFilter === 'all' || device.kind === activeFilter);
-  grid.replaceChildren(...visible.map(deviceCard));
-  grid.classList.toggle('hidden', visible.length === 0);
-  emptyState.classList.toggle('hidden', visible.length !== 0);
+  const printers = devices.filter((device) => device.kind === 'printer');
+  const cameras = devices.filter((device) => device.kind === 'camera');
+  const visiblePrinterIds = new Set(printers.map((printer) => printer.id));
+  const groups = [];
+
+  if (activeFilter !== 'camera') {
+    for (const printer of printers) {
+      const children = cameras.filter((camera) => camera.parentDeviceId === printer.id);
+      groups.push(deviceGroup(
+        printer.name,
+        children.length ? 'Принтер і пов’язані камери' : 'Принтер',
+        [printer, ...children]
+      ));
+    }
+  }
+
+  const standaloneCameras = cameras.filter((camera) => !visiblePrinterIds.has(camera.parentDeviceId));
+  if (activeFilter === 'camera' && cameras.length) {
+    groups.push(deviceGroup('Камери', 'Усі доступні відеопотоки', cameras));
+  } else if (activeFilter === 'all' && standaloneCameras.length) {
+    groups.push(deviceGroup('Окремі камери', 'Камери без прив’язки до принтера', standaloneCameras));
+  }
+
+  grid.replaceChildren(...groups);
+  grid.classList.toggle('hidden', groups.length === 0);
+  emptyState.classList.toggle('hidden', groups.length !== 0);
 }
 
 async function loadDevices(manual = false) {

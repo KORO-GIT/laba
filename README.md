@@ -15,6 +15,7 @@
 - перевірка Cloudflare Access JWT за підписом, issuer та audience;
 - proxy HTTP/WebSocket для Mainsail, OctoPrint і вебінтерфейсів камер;
 - захищений browser-viewer камер через go2rtc: MSE, HLS або MJPEG без публікації RTSP/WebRTC-портів;
+- прив’язка камери до принтера: спільна підгрупа на dashboard, успадкування доступу та відео безпосередньо в Mainsail;
 - шифрування облікових даних пристроїв AES-256-GCM;
 - SSRF-захист: дозволено лише literal IP із заданих підмереж;
 - SQLite WAL, rate limiting, CSP, anti-indexing і systemd hardening.
@@ -33,7 +34,8 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       │ 192.168.0.0/24
                                       ├── 3D-принтери
                                       ├── камери
-                                      └── go2rtc на Tailscale IP Pi
+                                      └── Logitech C270 → uStreamer → go2rtc
+                                                           на Tailscale IP Pi
 ```
 
 VPS не публікує порти пристроїв. В інтернет відкриті лише Caddy та захищені домени LABA.
@@ -94,10 +96,12 @@ npm.cmd audit --omit=dev
 
 - адресу шлюзу `100.69.168.10` — Tailscale IP Raspberry Pi;
 - HTTP-порт `1984`;
-- назву потоку `camera-01`, що точно збігається з `deploy/go2rtc/go2rtc.yaml`;
+- назву потоку `printer-usb-camera`, що точно збігається з `deploy/go2rtc/go2rtc.yaml`;
+- формат `MJPEG без перекодування`;
+- підгрупу принтера `Creality K1 SE`;
 - Basic Auth go2rtc у секреті JSON: ім’я `laba-vps` і згенерований локально пароль.
 
-LABA віддає власну сторінку плеєра, серверно підставляє дозволену назву потоку й проксіює лише WebSocket MSE/MJPEG та потрібні HLS-сегменти. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Облікові дані самої камери зберігаються тільки на Raspberry Pi як зашифрований systemd credential.
+LABA віддає власну сторінку плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери LABA також надає Mainsail same-origin URL `/laba-camera/stream` і `/laba-camera/snapshot`; реальна адреса go2rtc та його пароль у браузер не потрапляють.
 
 ## Production
 

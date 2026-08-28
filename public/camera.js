@@ -14,7 +14,7 @@ async function start() {
     document.querySelector('#camera-name').textContent = meta.name;
     document.querySelector('#portal-link').href = meta.portalUrl;
 
-    player.mode = 'mse,hls,mjpeg';
+    player.mode = meta.modes || 'mse,hls,mjpeg';
     player.media = 'video,audio';
     player.src = '/gateway/ws';
     state.textContent = 'Захищений live-потік';

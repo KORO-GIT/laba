@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.4.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.5.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -48,12 +48,14 @@
             <label class="field span-2"><span>Назва</span><input id="device-name" required maxlength="80" placeholder="Creality K1 SE"></label>
             <label class="field"><span>Тип</span><select id="device-kind"><option value="printer">Принтер</option><option value="camera">Камера</option></select></label>
             <label class="field"><span>Інтеграція</span><select id="device-driver"><option value="moonraker">Moonraker / Klipper</option><option value="octoprint">OctoPrint</option><option value="http">Вебінтерфейс</option><option value="rtsp">RTSP-потік</option><option value="go2rtc">go2rtc — браузерне відео</option></select></label>
+            <label id="parent-device-field" class="field hidden"><span>Підгрупа принтера</span><select id="device-parent"><option value="">Окрема камера</option></select></label>
             <label class="field"><span>Адреса пристрою</span><div class="input-suffix"><input id="device-slug" required maxlength="58" pattern="[a-z0-9][a-z0-9-]*" placeholder="k1se-01"><small>-laba…</small></div></label>
             <label class="field"><span>IP-адреса</span><input id="device-host" required inputmode="decimal" placeholder="192.168.0.70"></label>
             <label class="field"><span>Протокол</span><select id="device-protocol"><option value="http">HTTP</option><option value="https">HTTPS</option><option value="rtsp">RTSP</option></select></label>
             <label class="field"><span>Вебпорт</span><input id="device-ui-port" required type="number" min="1" max="65535" value="80"></label>
             <label class="field"><span>Порт API</span><input id="device-api-port" type="number" min="1" max="65535" placeholder="7125"></label>
-            <label id="stream-name-field" class="field hidden"><span>Назва потоку go2rtc</span><input id="device-stream-name" maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" placeholder="camera-01"></label>
+            <label id="stream-name-field" class="field hidden"><span>Назва потоку go2rtc</span><input id="device-stream-name" maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" placeholder="printer-usb-camera"></label>
+            <label id="stream-mode-field" class="field hidden"><span>Формат потоку</span><select id="device-stream-mode"><option value="auto">Автовибір MSE / HLS / MJPEG</option><option value="mjpeg">MJPEG без перекодування</option></select></label>
             <label class="field"><span>Порядок</span><input id="device-sort" type="number" value="0"></label>
             <label class="field span-2"><span>Секрет JSON <small>(не відображається після збереження)</small></span><textarea id="device-secret" rows="3" placeholder='{"username":"user","password":"…"}'></textarea></label>
             <label class="field span-2"><span>Примітка</span><textarea id="device-notes" rows="2" maxlength="500" placeholder="Короткий опис"></textarea></label>
@@ -95,6 +97,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.4.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.5.0"></script>
 </body>
 </html>
