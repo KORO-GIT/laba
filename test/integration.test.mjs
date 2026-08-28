@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -16,6 +17,38 @@ function freePort() {
       const { port } = server.address();
       server.close(() => resolve(port));
     });
+  });
+}
+
+function websocketHandshake(port, host, origin) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1');
+    let response = '';
+    socket.setTimeout(2_000);
+    socket.once('connect', () => {
+      socket.write([
+        'GET /websocket HTTP/1.1',
+        `Host: ${host}`,
+        `Origin: ${origin}`,
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        'Sec-WebSocket-Version: 13',
+        'Sec-WebSocket-Key: SGVsbG9Xb3JsZDEyMzQ1Ng==',
+        '', ''
+      ].join('\r\n'));
+    });
+    socket.on('data', (chunk) => {
+      response += chunk.toString('latin1');
+      if (response.includes('\r\n\r\n')) {
+        socket.destroy();
+        resolve(response);
+      }
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      reject(new Error('WebSocket handshake timed out'));
+    });
+    socket.once('error', reject);
   });
 }
 
@@ -36,9 +69,24 @@ test('development server serves portal API and protected admin writes', async (c
   const upstreamPort = await freePort();
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'laba-test-'));
   const logs = [];
+  let upstreamUpgradeOrigin = null;
   const upstream = http.createServer((request, response) => {
     response.writeHead(200, { 'Content-Type': 'text/javascript' });
     response.end(`window.deviceAsset = ${JSON.stringify(request.url)};`);
+  });
+  upstream.on('upgrade', (request, socket) => {
+    upstreamUpgradeOrigin = request.headers.origin;
+    const accept = crypto
+      .createHash('sha1')
+      .update(`${request.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest('base64');
+    socket.end([
+      'HTTP/1.1 101 Switching Protocols',
+      'Connection: Upgrade',
+      'Upgrade: websocket',
+      `Sec-WebSocket-Accept: ${accept}`,
+      '', ''
+    ].join('\r\n'));
   });
   upstream.listen(upstreamPort, '127.0.0.1');
   await once(upstream, 'listening');
@@ -114,6 +162,14 @@ test('development server serves portal API and protected admin writes', async (c
   });
   assert.equal(proxiedAsset.status, 200);
   assert.equal(await proxiedAsset.text(), 'window.deviceAsset = "/assets/device.js";');
+
+  const websocketHost = 'camera-01-laba.zpseapil.club';
+  const websocketResponse = await websocketHandshake(port, websocketHost, `http://${websocketHost}`);
+  assert.match(websocketResponse, /^HTTP\/1\.1 101 /, logs.join(''));
+  assert.equal(upstreamUpgradeOrigin, `http://127.0.0.1:${upstreamPort}`);
+
+  const rejectedWebsocket = await websocketHandshake(port, websocketHost, 'https://attacker.example');
+  assert.match(rejectedWebsocket, /^HTTP\/1\.1 403 /);
 
   const disabled = await fetch(`${root}/api/admin/devices/${createdDevice.id}`, {
     method: 'PATCH',

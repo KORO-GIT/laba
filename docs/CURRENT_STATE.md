@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.3.1`.
+- Поточна версія застосунку: `0.3.2`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
@@ -61,6 +61,8 @@ VPS приймає маршрут `192.168.0.0/24`. Порти принтері�
 - захищена адреса: `https://k1se-01-laba.zpseapil.club`.
 
 Moonraker під час останньої перевірки повертав `klippy_state: ready`. Камера ще не підключена. Архітектура й адмінпанель уже підтримують кілька принтерів і камер. Для прямого RTSP у браузері потрібен окремий WebRTC/HLS-шлюз, рекомендовано go2rtc.
+
+WebSocket Mainsail проходить через LABA: портал перевіряє, що браузерний `Origin` збігається з адресою пристрою, видаляє службові заголовки Cloudflare та підмінює upstream `Origin` на локальну адресу принтера. Без цієї підміни Moonraker відповідає `Cross origin websockets not allowed`.
 
 ## Caddy і сусідні сервіси
 

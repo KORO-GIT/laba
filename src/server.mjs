@@ -418,7 +418,7 @@ app.get('/api/admin/audit', { preHandler: requireAdmin }, async (request) => {
 
 const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true, changeOrigin: true });
 
-proxy.on('proxyReq', (proxyRequest, request) => {
+function sanitizeProxyHeaders(proxyRequest, request) {
   proxyRequest.removeHeader('cf-access-jwt-assertion');
   proxyRequest.removeHeader('authorization');
   const cookies = String(request.headers.cookie ?? '')
@@ -441,6 +441,15 @@ proxy.on('proxyReq', (proxyRequest, request) => {
   } catch {
     // A malformed optional credential must not take down the proxy.
   }
+}
+
+proxy.on('proxyReq', sanitizeProxyHeaders);
+proxy.on('proxyReqWs', (proxyRequest, request) => {
+  sanitizeProxyHeaders(proxyRequest, request);
+  // Moonraker rejects a public browser Origin unless it is explicitly listed
+  // in the printer's local configuration. The portal validates that public
+  // Origin first, then presents the upstream target as same-origin.
+  proxyRequest.setHeader('Origin', new URL(proxyTarget(request.portalDevice)).origin);
 });
 
 proxy.on('error', (error, request, response) => {
@@ -453,6 +462,16 @@ proxy.on('error', (error, request, response) => {
 function proxyTarget(device) {
   if (device.protocol === 'rtsp') return null;
   return `${device.protocol}://${device.host}:${device.ui_port}`;
+}
+
+function isSameOriginWebSocket(headers) {
+  try {
+    const origin = new URL(String(headers.origin ?? ''));
+    const requestHost = hostOnly(headers['x-forwarded-host'] ?? headers.host);
+    return ['http:', 'https:'].includes(origin.protocol) && hostOnly(origin.host) === requestHost;
+  } catch {
+    return false;
+  }
 }
 
 async function proxyHttp(request, reply) {
@@ -486,6 +505,7 @@ app.server.on('upgrade', async (request, socket, head) => {
   try {
     const slug = subdomainSlug(request.headers);
     if (!slug) throw new Error('Unknown host');
+    if (!isSameOriginWebSocket(request.headers)) throw new Error('Cross-origin websocket rejected');
     const user = await resolveUser(request.headers);
     const device = statements.deviceBySlug.get(slug);
     if (!device || !device.enabled || !canOpenDevice(user, device)) throw new Error('Forbidden');
@@ -493,7 +513,8 @@ app.server.on('upgrade', async (request, socket, head) => {
     if (!target) throw new Error('No browser stream configured');
     request.portalDevice = device;
     proxy.ws(request, socket, head, { target });
-  } catch {
+  } catch (error) {
+    app.log.warn({ err: error, host: request.headers.host }, 'Device websocket rejected');
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     socket.destroy();
   }
