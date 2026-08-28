@@ -14,6 +14,12 @@ function secretObject(device) {
   }
 }
 
+function basicAuthHeaders(secret) {
+  if (!secret.username || !secret.password) return {};
+  const token = Buffer.from(`${secret.username}:${secret.password}`).toString('base64');
+  return { Authorization: `Basic ${token}` };
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -103,12 +109,31 @@ async function httpProbe(device) {
   };
 }
 
+async function go2rtcProbe(device) {
+  const secret = secretObject(device);
+  const base = `${device.protocol}://${device.host}:${device.ui_port}`;
+  const streams = await fetchJson(`${base}/api/streams`, {
+    headers: basicAuthHeaders(secret)
+  });
+  if (!Object.hasOwn(streams, device.stream_name)) {
+    throw new Error('Stream is not configured');
+  }
+  return {
+    online: true,
+    state: 'online',
+    message: 'Відеошлюз доступний, потік налаштовано',
+    telemetry: {}
+  };
+}
+
 async function uncachedProbe(device) {
   const started = performance.now();
   let result;
 
   if (!device.enabled) {
     result = { online: false, state: 'disabled', message: 'Вимкнено', telemetry: {} };
+  } else if (device.stream_name) {
+    result = await go2rtcProbe(device);
   } else if (device.driver === 'moonraker') {
     result = await moonrakerProbe(device);
   } else if (device.driver === 'octoprint') {

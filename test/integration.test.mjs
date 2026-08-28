@@ -20,14 +20,14 @@ function freePort() {
   });
 }
 
-function websocketHandshake(port, host, origin) {
+function websocketHandshake(port, host, origin, requestPath = '/websocket') {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, '127.0.0.1');
     let response = '';
     socket.setTimeout(2_000);
     socket.once('connect', () => {
       socket.write([
-        'GET /websocket HTTP/1.1',
+        `GET ${requestPath} HTTP/1.1`,
         `Host: ${host}`,
         `Origin: ${origin}`,
         'Connection: Upgrade',
@@ -70,12 +70,23 @@ test('development server serves portal API and protected admin writes', async (c
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'laba-test-'));
   const logs = [];
   let upstreamUpgradeOrigin = null;
+  let upstreamUpgradeUrl = null;
+  let upstreamUpgradeAuthorization = null;
+  const upstreamRequests = [];
   const upstream = http.createServer((request, response) => {
+    upstreamRequests.push({ url: request.url, authorization: request.headers.authorization });
+    if (request.url.startsWith('/api/hls/')) {
+      response.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+      response.end('#EXTM3U\n');
+      return;
+    }
     response.writeHead(200, { 'Content-Type': 'text/javascript' });
     response.end(`window.deviceAsset = ${JSON.stringify(request.url)};`);
   });
   upstream.on('upgrade', (request, socket) => {
     upstreamUpgradeOrigin = request.headers.origin;
+    upstreamUpgradeUrl = request.url;
+    upstreamUpgradeAuthorization = request.headers.authorization;
     const accept = crypto
       .createHash('sha1')
       .update(`${request.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
@@ -170,6 +181,90 @@ test('development server serves portal API and protected admin writes', async (c
 
   const rejectedWebsocket = await websocketHandshake(port, websocketHost, 'https://attacker.example');
   assert.match(rejectedWebsocket, /^HTTP\/1\.1 403 /);
+
+  const gatewayCreated = await fetch(`${root}/api/admin/devices`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Request': '1',
+      Origin: root
+    },
+    body: JSON.stringify({
+      slug: 'camera-live', name: 'Camera Live', kind: 'camera', driver: 'http',
+      host: '127.0.0.1', protocol: 'http', uiPort: upstreamPort, apiPort: null,
+      streamName: 'camera-main',
+      secret: JSON.stringify({ username: 'gateway-user', password: 'gateway-pass' }),
+      notes: '', enabled: true, sortOrder: 30
+    })
+  });
+  assert.equal(gatewayCreated.status, 201);
+  assert.equal((await gatewayCreated.json()).streamName, 'camera-main');
+
+  const gatewayHost = 'camera-live-laba.zpseapil.club';
+  const cameraPage = await fetch(root, { headers: { 'X-Forwarded-Host': gatewayHost } });
+  assert.equal(cameraPage.status, 200);
+  assert.match(cameraPage.headers.get('content-security-policy'), /media-src 'self' data: blob:/);
+  assert.match(await cameraPage.text(), /ЗАХИЩЕНИЙ ПЕРЕГЛЯД/);
+
+  const cameraAsset = await fetch(`${root}/assets/camera.js`, {
+    headers: { 'X-Forwarded-Host': gatewayHost }
+  });
+  assert.equal(cameraAsset.status, 200);
+  assert.match(await cameraAsset.text(), /gateway\/ws/);
+
+  const gatewayMeta = await fetch(`${root}/gateway/meta`, {
+    headers: { 'X-Forwarded-Host': gatewayHost }
+  });
+  assert.deepEqual(await gatewayMeta.json(), {
+    name: 'Camera Live', portalUrl: 'https://laba.zpseapil.club/'
+  });
+
+  const upstreamCountBeforeBlockedApi = upstreamRequests.length;
+  const blockedGatewayApi = await fetch(`${root}/api/streams`, {
+    headers: { 'X-Forwarded-Host': gatewayHost }
+  });
+  assert.equal(blockedGatewayApi.status, 404);
+  assert.equal(upstreamRequests.length, upstreamCountBeforeBlockedApi);
+
+  const hls = await fetch(`${root}/gateway/hls/playlist.m3u8?id=session-1`, {
+    headers: { 'X-Forwarded-Host': gatewayHost }
+  });
+  assert.equal(hls.status, 200);
+  assert.equal(await hls.text(), '#EXTM3U\n');
+  assert.deepEqual(upstreamRequests.at(-1), {
+    url: '/api/hls/playlist.m3u8?id=session-1',
+    authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  });
+  assert.equal(hls.headers.get('cache-control'), 'no-store');
+
+  const upstreamCountBeforeInvalidHls = upstreamRequests.length;
+  const invalidHls = await fetch(`${root}/gateway/hls/private.m3u8?id=session-1`, {
+    headers: { 'X-Forwarded-Host': gatewayHost }
+  });
+  assert.equal(invalidHls.status, 404);
+  assert.equal(upstreamRequests.length, upstreamCountBeforeInvalidHls);
+
+  const gatewayWebsocket = await websocketHandshake(
+    port,
+    gatewayHost,
+    `http://${gatewayHost}`,
+    '/gateway/ws?src=attacker-controlled'
+  );
+  assert.match(gatewayWebsocket, /^HTTP\/1\.1 101 /, logs.join(''));
+  assert.equal(upstreamUpgradeUrl, '/api/ws?src=camera-main');
+  assert.equal(upstreamUpgradeOrigin, `http://127.0.0.1:${upstreamPort}`);
+  assert.equal(
+    upstreamUpgradeAuthorization,
+    `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
+  );
+
+  const blockedGatewayWebsocket = await websocketHandshake(
+    port,
+    gatewayHost,
+    `http://${gatewayHost}`,
+    '/api/ws?src=camera-main'
+  );
+  assert.match(blockedGatewayWebsocket, /^HTTP\/1\.1 403 /);
 
   const disabled = await fetch(`${root}/api/admin/devices/${createdDevice.id}`, {
     method: 'PATCH',

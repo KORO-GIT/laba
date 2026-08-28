@@ -188,6 +188,17 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .empty-glyph { display: block; margin-bottom: 18px; color: var(--accent); font-size: 48px; font-weight: 200; }
 .footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px 0 34px; border-top: 1px solid var(--line); color: var(--faint); font-size: 9px; letter-spacing: .12em; }
 
+.camera-shell { padding: 48px 0 54px; }
+.camera-heading { margin-bottom: 24px; }
+.camera-heading h1 { margin: 7px 0 10px; font-size: clamp(32px, 5vw, 58px); line-height: 1; letter-spacing: -.045em; }
+.camera-heading > p:last-child { max-width: 720px; margin: 0; color: var(--muted); line-height: 1.6; }
+.camera-stage { overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #050605; box-shadow: var(--shadow); }
+.camera-stage video-stream { position: relative; width: 100%; min-height: min(68vh, 760px); display: block; aspect-ratio: 16 / 9; background: #000; }
+.camera-stage video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.stream-info { position: absolute; z-index: 2; top: 14px; right: 14px; left: 14px; display: flex; justify-content: space-between; gap: 12px; color: #fff; pointer-events: none; font-size: 11px; font-weight: 800; text-shadow: 0 1px 6px #000; }
+.stream-mode { margin-left: auto; padding: 5px 8px; border-radius: 7px; background: rgba(0,0,0,.58); }
+.stream-status { padding: 5px 8px; color: #ffb0b0; }
+
 .admin-shell { padding-bottom: 70px; }
 .admin-heading { padding: 58px 0 42px; }
 .admin-heading h1 { margin-bottom: 10px; font-size: clamp(36px, 5vw, 63px); line-height: 1; letter-spacing: -.05em; }

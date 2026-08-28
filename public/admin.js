@@ -34,7 +34,11 @@ function roleLabel(role) {
 }
 
 function driverLabel(driver) {
-  return { moonraker: 'Moonraker', octoprint: 'OctoPrint', http: 'Web', rtsp: 'RTSP' }[driver] || driver;
+  return { moonraker: 'Moonraker', octoprint: 'OctoPrint', http: 'Web', rtsp: 'RTSP', go2rtc: 'go2rtc' }[driver] || driver;
+}
+
+function deviceIntegration(device) {
+  return device.streamName ? 'go2rtc' : device.driver;
 }
 
 function recordButton({ symbol, title, subtitle, enabled, selected, onClick }) {
@@ -60,7 +64,7 @@ function renderDevices(selectedId = Number(document.querySelector('#device-id').
   list.replaceChildren(...state.devices.map((device) => recordButton({
     symbol: device.kind === 'camera' ? 'CAM' : '3D',
     title: device.name,
-    subtitle: `${device.host}:${device.uiPort} · ${driverLabel(device.driver)}`,
+    subtitle: `${device.host}:${device.uiPort} · ${driverLabel(deviceIntegration(device))}`,
     enabled: device.enabled,
     selected: device.id === selectedId,
     onClick: () => editDevice(device)
@@ -75,33 +79,36 @@ function editDevice(device = null) {
   formValue('device-id', device?.id);
   formValue('device-name', device?.name);
   formValue('device-kind', device?.kind || 'printer');
-  formValue('device-driver', device?.driver || 'moonraker');
+  formValue('device-driver', device ? deviceIntegration(device) : 'moonraker');
   formValue('device-slug', device?.slug);
   formValue('device-host', device?.host || '192.168.0.');
   formValue('device-protocol', device?.protocol || 'http');
   formValue('device-ui-port', device?.uiPort || 80);
   formValue('device-api-port', device?.apiPort);
+  formValue('device-stream-name', device?.streamName);
   formValue('device-sort', device?.sortOrder || 0);
   formValue('device-secret', '');
   formValue('device-notes', device?.notes);
   formValue('device-enabled', device ? device.enabled : true);
   document.querySelector('#test-device').classList.toggle('hidden', !device);
-  toggleRtspHint();
+  toggleDeviceIntegration();
   renderDevices(device?.id || 0);
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function devicePayload() {
   const apiPort = document.querySelector('#device-api-port').value;
+  const integration = document.querySelector('#device-driver').value;
   return {
     name: document.querySelector('#device-name').value,
     kind: document.querySelector('#device-kind').value,
-    driver: document.querySelector('#device-driver').value,
+    driver: integration === 'go2rtc' ? 'http' : integration,
     slug: document.querySelector('#device-slug').value,
     host: document.querySelector('#device-host').value,
     protocol: document.querySelector('#device-protocol').value,
     uiPort: Number(document.querySelector('#device-ui-port').value),
     apiPort: apiPort ? Number(apiPort) : null,
+    streamName: integration === 'go2rtc' ? document.querySelector('#device-stream-name').value : '',
     sortOrder: Number(document.querySelector('#device-sort').value || 0),
     secret: document.querySelector('#device-secret').value,
     keepSecret: true,
@@ -136,8 +143,19 @@ async function testDevice() {
   finally { button.disabled = false; }
 }
 
-function toggleRtspHint() {
-  document.querySelector('#rtsp-hint').classList.toggle('hidden', document.querySelector('#device-driver').value !== 'rtsp');
+function toggleDeviceIntegration(applyDefaults = false) {
+  const integration = document.querySelector('#device-driver').value;
+  const isRtsp = integration === 'rtsp';
+  const isGo2rtc = integration === 'go2rtc';
+  document.querySelector('#rtsp-hint').classList.toggle('hidden', !isRtsp);
+  document.querySelector('#go2rtc-hint').classList.toggle('hidden', !isGo2rtc);
+  document.querySelector('#stream-name-field').classList.toggle('hidden', !isGo2rtc);
+  document.querySelector('#device-stream-name').required = isGo2rtc;
+  if (isGo2rtc && applyDefaults) {
+    formValue('device-kind', 'camera');
+    formValue('device-protocol', 'http');
+    formValue('device-ui-port', 1984);
+  }
 }
 
 async function loadDevices() {
@@ -283,7 +301,7 @@ document.querySelector('#new-user').addEventListener('click', () => editUser());
 document.querySelector('#device-form').addEventListener('submit', saveDevice);
 document.querySelector('#user-form').addEventListener('submit', saveUser);
 document.querySelector('#test-device').addEventListener('click', testDevice);
-document.querySelector('#device-driver').addEventListener('change', toggleRtspHint);
+document.querySelector('#device-driver').addEventListener('change', () => toggleDeviceIntegration(true));
 document.querySelector('#user-role').addEventListener('change', toggleAdminAccess);
 document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал оновлено')).catch((error) => showToast(error.message, true)));
 document.querySelectorAll('[data-close-editor]').forEach((button) => button.addEventListener('click', () => button.closest('form').classList.add('hidden')));

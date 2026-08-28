@@ -115,6 +115,41 @@ curl --fail --silent http://127.0.0.1:3020/healthz
 journalctl -u laba-portal.service -n 80 --no-pager
 ```
 
+Версія `0.4.0` автоматично додає nullable-колонку `devices.stream_name`. Перед першим запуском цієї версії SQLite backup обов’язковий. Міграція не змінює наявні пристрої та не перебудовує таблицю.
+
+## go2rtc на Raspberry Pi
+
+Підготовлена конфігурація використовує go2rtc `v1.9.14` для Linux ARM64. Бінарний файл pinned за SHA-256:
+
+```text
+359fabade8a7a51e81a55fe6df6b0ef81764a5e1d63179577534eaaa71904b50
+```
+
+Встановлення виконувати лише після визначення реального IP камери, RTSP path і перевірки потоку. RTSP URL з логіном і паролем не вводити в аргументи процесу, shell history, YAML або Git. Він має потрапити до encrypted systemd credential `CAMERA_RTSP_URL`.
+
+Підготовлені файли:
+
+- `deploy/go2rtc/go2rtc.yaml` — API тільки на Tailscale IP Pi `100.69.168.10:1984`, exact allowlist endpoint’ів, без WebUI, RTSP-server, WebRTC, exec і ffmpeg;
+- `deploy/go2rtc/go2rtc.service` — DynamicUser, encrypted credentials, IP-фільтр і systemd sandbox;
+- назва потоку — `camera-01`;
+- API user — `laba-vps`;
+- секрети — `GO2RTC_API_PASSWORD` і `CAMERA_RTSP_URL` у `/etc/credstore.encrypted/`.
+
+systemd створює для unit приватний `CREDENTIALS_DIRECTORY`; go2rtc при його наявності сам підставляє `${GO2RTC_API_PASSWORD}` і `${CAMERA_RTSP_URL}` із однойменних credential-файлів. Дублювати секрети в `Environment=`, YAML або wrapper script не потрібно.
+
+Після встановлення gateway до production `ALLOWED_DEVICE_SUBNETS` треба додати лише `100.69.168.10/32`, не весь CGNAT-діапазон `100.64.0.0/10`. У LABA пристрій налаштовується як камера go2rtc з host `100.69.168.10`, port `1984`, stream `camera-01`. Пароль go2rtc зберігається в AES-256-GCM secret LABA; пароль камери в LABA не копіюється.
+
+Перевірки до ввімкнення пристрою в адмінпанелі:
+
+```bash
+systemd-analyze verify /etc/systemd/system/go2rtc.service
+systemctl status go2rtc.service --no-pager
+ss -lntp | grep '100.69.168.10:1984'
+journalctl -u go2rtc.service -n 50 --no-pager
+```
+
+На VPS перевірити, що API без Basic Auth повертає `401`, а WebUI та config endpoint не відкриті. Не додавати UFW-правило для `1984`, `554`, `8554` або `8555` на VPS чи Archer.
+
 ## Перевірки
 
 ```bash

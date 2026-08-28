@@ -6,6 +6,7 @@
 2. LABA криптографічно перевіряє Access JWT, після чого шукає e-mail у власній базі.
 3. Роль і дозвіл на конкретний пристрій перевіряються під час кожного HTTP- та WebSocket-підключення.
 4. Upstream-пристрій доступний лише VPS через Tailscale subnet route `192.168.0.0/24`.
+5. Browser-viewer камери звертається до go2rtc на точному Tailscale IP Raspberry Pi `100.69.168.10`; RTSP-адреса й пароль камери не передаються до браузера або LABA.
 
 Портал не довіряє лише заголовку `Cf-Access-Authenticated-User-Email`: використовується підписаний `Cf-Access-Jwt-Assertion`, перевіряються RS256, issuer та audience.
 
@@ -20,6 +21,9 @@
 - HTML/API не кешуються; indexing заборонено на рівні meta/header/Caddy.
 - Сервіс слухає лише loopback, працює без Linux capabilities і з systemd sandbox.
 - UFW не відкриває додаткових портів для LABA або пристроїв.
+- Для go2rtc LABA дозволяє лише власну сторінку viewer, `/gateway/ws` і HLS-сегменти. Ім’я потоку береться з БД на сервері, а будь-який клієнтський `src` ігнорується.
+- go2rtc запускається без модулів `exec`, `ffmpeg`, `webrtc`, debug та WebUI; HTTP API реєструє лише endpoint’и, потрібні для probe/MSE/HLS/MJPEG.
+- go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє VPS `100.68.61.33`, власний вузол Pi та домашню підмережу для вихідного RTSP.
 
 ## Cloudflare
 
@@ -37,7 +41,8 @@
 - Mainsail/OctoPrint і web UI камер стають доступними користувачам із роллю керування. Їхні власні вразливості все ще важливі, тому firmware потрібно оновлювати.
 - Адміністратор LABA за визначенням може змінювати призначення та upstream credentials.
 - Компрометація VPS або tailnet дає шлях до домашньої підмережі; Tailscale ACL слід обмежити лише потрібними вузлами/маршрутом.
-- RTSP не можна безпечно показати у звичайному браузері без медіашлюзу. Під час додавання камери бажано використовувати go2rtc з WebRTC і без прямої публікації RTSP.
+- MSE/HLS/MJPEG знижують необхідність відкривати WebRTC TCP/UDP `8555`, але безпека залежить від своєчасного оновлення go2rtc та ізоляції його API.
+- go2rtc отримує розшифрований RTSP URL у runtime systemd credential. Компрометація root або самого процесу на Pi дає доступ до цього секрету.
 
 ## Секрети
 
@@ -47,5 +52,6 @@
 - `/opt/laba/data/portal.db*` і backups;
 - `/etc/caddy/certs/laba-*`;
 - SSH, Cloudflare, Tailscale і device credentials.
+- `/etc/credstore.encrypted/go2rtc-*` та розшифровані runtime credentials go2rtc.
 
 Ротація `DEVICE_SECRET_KEY` потребує розшифрувати й повторно зашифрувати збережені device secrets. Проста заміна ключа зробить їх нечитабельними.

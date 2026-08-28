@@ -1,0 +1,26 @@
+app:
+  modules: [api, ws, http, rtsp, mp4, hls, mjpeg]
+
+api:
+  listen: "100.69.168.10:1984"
+  username: "laba-vps"
+  password: ${GO2RTC_API_PASSWORD}
+  local_auth: true
+  allow_paths:
+    - /api/streams
+    - /api/ws
+    - /api/hls/playlist.m3u8
+    - /api/hls/segment.ts
+    - /api/hls/init.mp4
+    - /api/hls/segment.m4s
+
+streams:
+  camera-01: ${CAMERA_RTSP_URL}
+
+rtsp:
+  listen: ""
+
+log:
+  format: json
+  level: warn
+  output: stdout

@@ -15,7 +15,8 @@ import {
   encryptSecret,
   isAllowedDeviceHost,
   requireSameOrigin,
-  safeSlug
+  safeSlug,
+  safeStreamName
 } from './security.mjs';
 
 validateConfig();
@@ -41,7 +42,8 @@ await app.register(helmet, {
       fontSrc: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'none'"],
-      imgSrc: ["'self'", 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      mediaSrc: ["'self'", 'data:', 'blob:'],
       objectSrc: ["'none'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'"]
@@ -82,6 +84,29 @@ function subdomainSlug(headers) {
 function isPortalHost(headers) {
   const host = hostOnly(headers['x-forwarded-host'] ?? headers.host);
   return host === config.baseDomain || host === 'localhost' || host === '127.0.0.1';
+}
+
+function isBrowserCamera(device) {
+  return device?.kind === 'camera' && device.driver === 'http' && Boolean(device.stream_name);
+}
+
+const browserCameraAssets = new Set([
+  '/assets/styles.css',
+  '/assets/favicon.svg',
+  '/assets/camera.js',
+  '/assets/vendor/go2rtc/video-rtc.js',
+  '/assets/vendor/go2rtc/video-stream.js'
+]);
+
+const browserCameraHlsPaths = new Map([
+  ['/gateway/hls/playlist.m3u8', '/api/hls/playlist.m3u8'],
+  ['/gateway/hls/segment.ts', '/api/hls/segment.ts'],
+  ['/gateway/hls/init.mp4', '/api/hls/init.mp4'],
+  ['/gateway/hls/segment.m4s', '/api/hls/segment.m4s']
+]);
+
+function requestUrl(value) {
+  return new URL(String(value ?? '/'), 'http://portal.invalid');
 }
 
 function userAccessMap(user) {
@@ -125,7 +150,13 @@ app.addHook('onRequest', async (request, reply) => {
   }
   // Device hosts must take priority over portal routes such as /assets/*.
   // Printer and camera UIs commonly use those same top-level paths.
-  if (subdomainSlug(request.headers)) return proxyHttp(request, reply);
+  const slug = subdomainSlug(request.headers);
+  if (slug) {
+    const device = statements.deviceBySlug.get(slug);
+    const pathname = requestUrl(request.url).pathname;
+    if (isBrowserCamera(device) && browserCameraAssets.has(pathname)) return;
+    return proxyHttp(request, reply);
+  }
 });
 
 function requireAdmin(request, reply, done) {
@@ -174,6 +205,7 @@ const deviceSchema = z.object({
   protocol: z.enum(['http', 'https', 'rtsp']),
   uiPort: z.coerce.number().int().min(1).max(65535),
   apiPort: z.union([z.coerce.number().int().min(1).max(65535), z.literal(null)]).optional(),
+  streamName: z.string().trim().max(128).optional().default(''),
   secret: z.string().max(4096).optional(),
   keepSecret: z.boolean().optional().default(true),
   notes: z.string().trim().max(500).optional().default(''),
@@ -188,6 +220,15 @@ const deviceSchema = z.object({
   }
   if (device.driver === 'moonraker' && !device.apiPort) {
     context.addIssue({ code: 'custom', path: ['apiPort'], message: 'Для Moonraker потрібен порт API' });
+  }
+  if (device.streamName && !safeStreamName(device.streamName)) {
+    context.addIssue({ code: 'custom', path: ['streamName'], message: 'Неприпустиме ім\'я потоку' });
+  }
+  if (device.streamName && (device.kind !== 'camera' || device.driver !== 'http')) {
+    context.addIssue({ code: 'custom', path: ['streamName'], message: 'Потік go2rtc доступний лише для HTTP-камери' });
+  }
+  if (device.streamName && !['http', 'https'].includes(device.protocol)) {
+    context.addIssue({ code: 'custom', path: ['protocol'], message: 'Для go2rtc потрібен HTTP або HTTPS' });
   }
 });
 
@@ -288,11 +329,11 @@ app.post('/api/admin/devices', {
   try {
     const result = db.prepare(`
       INSERT INTO devices
-        (slug, name, kind, driver, host, protocol, ui_port, api_port, secret_enc, notes, enabled, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (slug, name, kind, driver, host, protocol, ui_port, api_port, stream_name, secret_enc, notes, enabled, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       body.slug, body.name, body.kind, body.driver, body.host, body.protocol,
-      body.uiPort, body.apiPort ?? null, secretPayload(body.secret), body.notes,
+      body.uiPort, body.apiPort ?? null, body.streamName || null, secretPayload(body.secret), body.notes,
       body.enabled ? 1 : 0, body.sortOrder
     );
     audit(request.portalUser.email, 'device.create', 'device', result.lastInsertRowid, { slug: body.slug });
@@ -316,11 +357,12 @@ app.patch('/api/admin/devices/:id', {
     db.prepare(`
       UPDATE devices SET
         slug = ?, name = ?, kind = ?, driver = ?, host = ?, protocol = ?, ui_port = ?,
-        api_port = ?, secret_enc = ?, notes = ?, enabled = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        api_port = ?, stream_name = ?, secret_enc = ?, notes = ?, enabled = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       body.slug, body.name, body.kind, body.driver, body.host, body.protocol, body.uiPort,
-      body.apiPort ?? null, encrypted, body.notes, body.enabled ? 1 : 0, body.sortOrder, existing.id
+      body.apiPort ?? null, body.streamName || null, encrypted, body.notes,
+      body.enabled ? 1 : 0, body.sortOrder, existing.id
     );
   } catch (error) {
     if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Такий піддомен уже існує' });
@@ -452,6 +494,13 @@ proxy.on('proxyReqWs', (proxyRequest, request) => {
   proxyRequest.setHeader('Origin', new URL(proxyTarget(request.portalDevice)).origin);
 });
 
+proxy.on('proxyRes', (proxyResponse, request) => {
+  if (!isBrowserCamera(request.portalDevice)) return;
+  delete proxyResponse.headers['set-cookie'];
+  proxyResponse.headers['cache-control'] = 'no-store';
+  proxyResponse.headers['x-robots-tag'] = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
+});
+
 proxy.on('error', (error, request, response) => {
   app.log.warn({ err: error, host: request.headers.host }, 'Device proxy error');
   if (response?.writeHead && !response.headersSent) response.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -462,6 +511,30 @@ proxy.on('error', (error, request, response) => {
 function proxyTarget(device) {
   if (device.protocol === 'rtsp') return null;
   return `${device.protocol}://${device.host}:${device.ui_port}`;
+}
+
+function proxyBrowserCameraHttp(request, reply, device) {
+  const url = requestUrl(request.raw.url);
+  if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/') {
+    return reply.sendFile('camera.html');
+  }
+  if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/gateway/meta') {
+    return reply.send({ name: device.name, portalUrl: `https://${config.baseDomain}/` });
+  }
+  const upstreamHlsPath = browserCameraHlsPaths.get(url.pathname);
+  if ((request.method === 'GET' || request.method === 'HEAD') && upstreamHlsPath) {
+    const sessionIds = url.searchParams.getAll('id');
+    const onlySessionId = [...url.searchParams.keys()].every((key) => key === 'id');
+    if (sessionIds.length !== 1 || !onlySessionId || !/^[a-zA-Z0-9_-]{6,128}$/.test(sessionIds[0])) {
+      return reply.code(400).send({ error: 'Некоректна HLS-сесія' });
+    }
+    request.raw.url = `${upstreamHlsPath}?id=${encodeURIComponent(sessionIds[0])}`;
+    request.raw.portalDevice = device;
+    reply.hijack();
+    proxy.web(request.raw, reply.raw, { target: proxyTarget(device) });
+    return;
+  }
+  return reply.code(404).send({ error: 'Шлях відеошлюзу не дозволено' });
 }
 
 function isSameOriginWebSocket(headers) {
@@ -480,6 +553,7 @@ async function proxyHttp(request, reply) {
   const device = statements.deviceBySlug.get(slug);
   if (!device || !device.enabled) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Немає доступу до пристрою' });
+  if (isBrowserCamera(device)) return proxyBrowserCameraHttp(request, reply, device);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     && request.headers['sec-fetch-site'] === 'cross-site') {
     return reply.code(403).send({ error: 'Міжсайтовий запит до пристрою відхилено' });
@@ -511,6 +585,11 @@ app.server.on('upgrade', async (request, socket, head) => {
     if (!device || !device.enabled || !canOpenDevice(user, device)) throw new Error('Forbidden');
     const target = proxyTarget(device);
     if (!target) throw new Error('No browser stream configured');
+    if (isBrowserCamera(device)) {
+      const url = requestUrl(request.url);
+      if (url.pathname !== '/gateway/ws') throw new Error('Gateway websocket path rejected');
+      request.url = `/api/ws?src=${encodeURIComponent(device.stream_name)}`;
+    }
     request.portalDevice = device;
     proxy.ws(request, socket, head, { target });
   } catch (error) {

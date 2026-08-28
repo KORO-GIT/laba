@@ -32,6 +32,7 @@ db.exec(`
     protocol TEXT NOT NULL DEFAULT 'http' CHECK (protocol IN ('http', 'https', 'rtsp')),
     ui_port INTEGER NOT NULL,
     api_port INTEGER,
+    stream_name TEXT,
     secret_enc TEXT,
     notes TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -60,6 +61,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_devices_enabled ON devices(enabled, sort_order);
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 `);
+
+const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => column.name));
+if (!deviceColumns.has('stream_name')) {
+  db.exec('ALTER TABLE devices ADD COLUMN stream_name TEXT');
+}
 
 const bootstrap = db.prepare('SELECT id FROM users WHERE email = ?').get(config.bootstrapAdminEmail);
 if (!bootstrap) {
@@ -168,6 +174,7 @@ export function serializeDevice(row, includePrivate = false) {
       protocol: row.protocol,
       uiPort: row.ui_port,
       apiPort: row.api_port,
+      streamName: row.stream_name ?? '',
       hasSecret: Boolean(row.secret_enc)
     });
   }

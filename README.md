@@ -14,6 +14,7 @@
 - додатковий локальний allowlist: однієї успішної авторизації Cloudflare недостатньо;
 - перевірка Cloudflare Access JWT за підписом, issuer та audience;
 - proxy HTTP/WebSocket для Mainsail, OctoPrint і вебінтерфейсів камер;
+- захищений browser-viewer камер через go2rtc: MSE, HLS або MJPEG без публікації RTSP/WebRTC-портів;
 - шифрування облікових даних пристроїв AES-256-GCM;
 - SSRF-захист: дозволено лише literal IP із заданих підмереж;
 - SQLite WAL, rate limiting, CSP, anti-indexing і systemd hardening.
@@ -31,7 +32,8 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                               Raspberry Pi subnet router
                                       │ 192.168.0.0/24
                                       ├── 3D-принтери
-                                      └── камери
+                                      ├── камери
+                                      └── go2rtc на Tailscale IP Pi
 ```
 
 VPS не публікує порти пристроїв. В інтернет відкриті лише Caddy та захищені домени LABA.
@@ -86,7 +88,16 @@ npm.cmd audit --omit=dev
 - інтеграцію: Moonraker, OctoPrint, звичайний HTTP(S) або RTSP;
 - за потреби JSON-секрет: `{"username":"...","password":"..."}` або `{"apiKey":"..."}`.
 
-RTSP зараз перевіряється через TCP. Для відтворення потоку в браузері потрібно додати окремий шлюз WebRTC/HLS; прямий RTSP браузери не відкривають.
+Для прямої діагностики RTSP вибрати інтеграцію `RTSP-потік`: LABA перевірить TCP-порт, але браузер такий потік не відкриє.
+
+Для захищеного перегляду вибрати `go2rtc — браузерне відео` та вказати:
+
+- адресу шлюзу `100.69.168.10` — Tailscale IP Raspberry Pi;
+- HTTP-порт `1984`;
+- назву потоку `camera-01`, що точно збігається з `deploy/go2rtc/go2rtc.yaml`;
+- Basic Auth go2rtc у секреті JSON: ім’я `laba-vps` і згенерований локально пароль.
+
+LABA віддає власну сторінку плеєра, серверно підставляє дозволену назву потоку й проксіює лише WebSocket MSE/MJPEG та потрібні HLS-сегменти. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Облікові дані самої камери зберігаються тільки на Raspberry Pi як зашифрований systemd credential.
 
 ## Production
 

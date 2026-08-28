@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+  <title>LABA — камера</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.4.0">
+</head>
+<body class="camera-page">
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar shell">
+    <a id="portal-link" class="brand" href="#" aria-label="LABA — головна">
+      <span class="brand-mark">L</span>
+      <span><strong>LABA</strong><small>ЗАХИЩЕНИЙ ПЕРЕГЛЯД</small></span>
+    </a>
+    <div class="identity">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="camera-state">Підключення…</span>
+    </div>
+  </header>
+
+  <main class="shell camera-shell">
+    <section class="camera-heading">
+      <p class="eyebrow">LIVE / ПРИВАТНА МЕРЕЖА</p>
+      <h1 id="camera-name">Камера</h1>
+      <p>Потік передається через LABA та go2rtc. RTSP-порт камери не публікується в інтернет.</p>
+    </section>
+    <section class="camera-stage" aria-label="Відеопотік">
+      <video-stream id="camera-player"></video-stream>
+    </section>
+    <p id="camera-error" class="form-hint hidden" role="alert"></p>
+  </main>
+
+  <footer class="shell footer">
+    <span>LABA / GO2RTC / MSE-HLS</span>
+    <span>Доступ контролюється Cloudflare Access і локальним allowlist</span>
+  </footer>
+  <script type="module" src="/assets/camera.js?v=0.4.0"></script>
+</body>
+</html>

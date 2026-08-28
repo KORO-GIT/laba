@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.3.3`.
+- Поточна версія застосунку: `0.4.0`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
@@ -60,7 +60,9 @@ VPS приймає маршрут `192.168.0.0/24`. Порти принтері�
 - Moonraker API: `http://192.168.0.70:7125`;
 - захищена адреса: `https://k1se-01-laba.zpseapil.club`.
 
-Moonraker під час останньої перевірки повертав `klippy_state: ready`. Камера ще не підключена. Архітектура й адмінпанель уже підтримують кілька принтерів і камер. Для прямого RTSP у браузері потрібен окремий WebRTC/HLS-шлюз, рекомендовано go2rtc.
+Moonraker під час останньої перевірки повертав `klippy_state: ready`. Камера ще не підключена. Версія `0.4.0` додає захищену інтеграцію go2rtc: власний viewer LABA, MSE/HLS/MJPEG через HTTPS/WebSocket, серверну фіксацію stream name і allowlist gateway-шляхів. Підготовлені hardened-файли `deploy/go2rtc/`, але service не можна запускати до визначення реального IP, RTSP path та облікових даних камери.
+
+Запланована адреса go2rtc — Tailscale IP Pi `100.69.168.10:1984`, а не LAN. Це не потребує публікації RTSP, WebRTC або go2rtc у Archer/UFW. Production `.env` після розгортання gateway має дозволити exact subnet `100.69.168.10/32` на додаток до поточної LAN.
 
 WebSocket Mainsail проходить через LABA: портал перевіряє, що браузерний `Origin` збігається з адресою пристрою, видаляє службові заголовки Cloudflare та підмінює upstream `Origin` на локальну адресу принтера. Без цієї підміни Moonraker відповідає `Cross origin websockets not allowed`.
 
@@ -88,8 +90,9 @@ LABA використовує окремі точний і wildcard-блоки C
 ## Найближчі наступні кроки
 
 - Завершити вхід головного адміністратора через One-time PIN на новий e-mail, якщо поточна Access-сесія закінчилася.
-- Після фізичного підключення камери додати її через адмінпанель і визначити протокол/облікові дані.
-- Для браузерного відео розгорнути go2rtc або інший WebRTC/HLS-шлюз без прямої публікації RTSP.
+- Після фізичного підключення камери знайти її за MAC `A0:E0:25:0A:17:DE`, визначити реальний IP, RTSP path і перевірити RTSP over TCP.
+- Створити encrypted systemd credentials, встановити pinned go2rtc `v1.9.14` на Pi та перевірити exact API allowlist.
+- Додати камеру через адмінпанель як go2rtc `100.69.168.10:1984`, stream `camera-01`, після чого перевірити MSE/HLS з viewer peer.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 
-Остання перевірка: LABA, Caddy, `koro-*`, Signal sync і `tailscaled` були active; Caddyfile валідний; `npm test` — 5/5; `npm audit --omit=dev` — 0 відомих вразливостей.
+Остання перевірка: LABA, Caddy, `koro-*`, Signal sync і `tailscaled` були active; Caddyfile валідний; `npm test` — 6/6; `npm audit --omit=dev` — 0 відомих вразливостей.

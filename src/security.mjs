@@ -85,6 +85,10 @@ export function safeSlug(value) {
   return /^[a-z0-9](?:[a-z0-9-]{0,56}[a-z0-9])?$/.test(String(value ?? ''));
 }
 
+export function safeStreamName(value) {
+  return /^[a-zA-Z0-9](?:[a-zA-Z0-9_.-]{0,126}[a-zA-Z0-9])?$/.test(String(value ?? ''));
+}
+
 export function requireSameOrigin(request) {
   const origin = request.headers.origin;
   if (!origin) return;
