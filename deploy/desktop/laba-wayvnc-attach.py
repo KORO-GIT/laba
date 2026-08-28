@@ -42,18 +42,40 @@ def attach_any_display():
     return False
 
 
+def socket_identity(path):
+    try:
+        metadata = os.stat(path)
+        if stat.S_ISSOCK(metadata.st_mode):
+            return metadata.st_dev, metadata.st_ino
+    except (FileNotFoundError, PermissionError):
+        pass
+    return None
+
+
 def main():
+    attached_control = None
+
     while True:
-        if not run_control("output-list"):
-            # wayvnc creates its control socket before all encoders and the
-            # detached compositor state are ready. Attaching immediately can
-            # trigger an upstream wayvnc race, so wait and verify once more.
-            time.sleep(3)
-            if run_control("output-list"):
-                continue
-            attach_any_display()
-            time.sleep(3)
+        control = socket_identity(CONTROL_SOCKET)
+        if control is None:
+            attached_control = None
+            time.sleep(2)
             continue
+
+        if control != attached_control:
+            # wayvnc 0.9.1 on Raspberry Pi can segfault when output-list is
+            # queried before a detached instance is attached. It also creates
+            # the control socket before startup is fully settled, so never
+            # probe output-list here and give the new process time to settle.
+            time.sleep(10)
+            if socket_identity(CONTROL_SOCKET) != control:
+                continue
+            if attach_any_display():
+                attached_control = control
+            else:
+                time.sleep(3)
+                continue
+
         time.sleep(10)
 
 
