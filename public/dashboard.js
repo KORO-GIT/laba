@@ -104,8 +104,6 @@ function render() {
   grid.replaceChildren(...visible.map(deviceCard));
   grid.classList.toggle('hidden', visible.length === 0);
   emptyState.classList.toggle('hidden', visible.length !== 0);
-  const online = devices.filter((device) => device.status.online).length;
-  document.querySelector('#online-count').textContent = `${online} / ${devices.length}`;
 }
 
 async function loadDevices(manual = false) {
@@ -133,15 +131,7 @@ document.querySelectorAll('.tab').forEach((button) => {
 
 refreshButton.addEventListener('click', () => loadDevices(true));
 
-function updateClock() {
-  document.querySelector('#clock').textContent = new Intl.DateTimeFormat('uk-UA', {
-    timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', second: '2-digit'
-  }).format(new Date());
-}
-
 async function start() {
-  updateClock();
-  setInterval(updateClock, 1000);
   try {
     const me = await api('/api/me');
     document.querySelector('#identity-name').textContent = me.displayName || me.email;

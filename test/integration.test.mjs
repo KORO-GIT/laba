@@ -79,7 +79,8 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(me.displayName, 'Власник');
 
   const homepage = await fetch(root).then((response) => response.text());
-  assert.match(homepage, /Уся лабораторія/);
+  assert.match(homepage, /Фільтри пристроїв/);
+  assert.doesNotMatch(homepage, /Уся лабораторія/);
 
   const devices = await fetch(`${root}/api/devices`).then((response) => response.json());
   assert.equal(devices.length, 1);

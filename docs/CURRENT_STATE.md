@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.3.0`.
+- Поточна версія застосунку: `0.3.1`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
