@@ -90,7 +90,7 @@ YouTube Music не встановлено: офіційний IFrame API від�
 
 На Pi `laba-starlink-agent.service` слухає лише Tailscale IP `100.69.168.10:1986`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і звертається тільки до `192.168.100.1:9200`. Agent використовує pinned/checksummed `grpcurl 1.9.3`, не запускає shell і не приймає довільні method/payload. Credential зашифрований у `/etc/credstore.encrypted/laba-starlink-agent-token`; plaintext-копії після deployment видалені.
 
-Остання live-перевірка до deployment: hardware `mini1_panda_prod2`, firmware `2026.08.13.mr84512`, API version `42`, bypass підтверджено, Ethernet `1000 Мбіт/с`, перешкоди близько `3,72%`; історія містить 900 односекундних samples. Запит точних координат повертає `PermissionDenied: Disabled due to policy`, тому LABA показує лише доступність/стан GPS. Bypass означає, що статистики фірмового роутера й Wi-Fi немає.
+Остання live-перевірка після deployment: hardware `mini1_panda_prod2`, firmware `2026.08.13.mr84512`, API version `42`, bypass підтверджено, Ethernet `1000 Мбіт/с`, перешкоди близько `3,68%`; історія містить 900 односекундних samples і стискається до 180 точок для графіків. Запит точних координат повертає `PermissionDenied: Disabled due to policy`, тому LABA показує лише доступність/стан GPS. Bypass означає, що статистики фірмового роутера й Wi-Fi немає.
 
 ## Віддалений робочий стіл
 
@@ -129,4 +129,4 @@ LABA використовує окремі точний і wildcard-блоки C
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 
-Остання локальна перевірка: `npm run check` успішний; unit-тести нормалізації Starlink і детектора хлопків пройшли; `npm test` — 6/6. Production-статус Starlink agent і живої вкладки треба зафіксувати після deployment `0.11.0`.
+Остання production-перевірка: LABA `0.11.0`, `laba-starlink-agent`, `laba-audio-agent`, Caddy і `tailscaled` active; портал слухає тільки `127.0.0.1:3020`, Starlink agent — тільки `100.69.168.10:1986`. Agent повернув HTTP `200` для status/map лише з VPS із credential і `401` без credential; карта має `123×123`/`15129` значень. `systemd-analyze security` оцінив unit як `2.8 OK`; тимчасові plaintext tokens і probe-файли видалені. На VPS повторно пройшли `npm run check`, `npm test` — 6/6 та `npm audit --omit=dev` — 0 відомих вразливостей.
