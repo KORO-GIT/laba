@@ -22,6 +22,23 @@
 
 Если portal и device hosts пришлось создать двумя Access applications, `CF_ACCESS_AUD` принимает обе audience через запятую.
 
+Приватный ключ Origin Certificate создаётся только на VPS. В Cloudflare выбрать **Use my private key and CSR**, передать CSR и сохранить выданный публичный сертификат как `/etc/caddy/certs/laba-origin.pem`:
+
+```bash
+install -d -o root -g caddy -m 0750 /etc/caddy/certs
+umask 027
+openssl genrsa -out /etc/caddy/certs/laba-origin-key.pem 2048
+openssl req -new \
+  -key /etc/caddy/certs/laba-origin-key.pem \
+  -out /tmp/laba-origin.csr \
+  -subj '/CN=*.zpseapil.club' \
+  -addext 'subjectAltName=DNS:*.zpseapil.club,DNS:zpseapil.club'
+chown root:caddy /etc/caddy/certs/laba-origin-key.pem
+chmod 0640 /etc/caddy/certs/laba-origin-key.pem
+```
+
+После установки сертификата проверить совпадение публичных ключей сертификата и private key, затем удалить временный CSR. Private key нельзя вставлять в Cloudflare, консоль, логи или Git.
+
 ## Первая установка
 
 ```bash
