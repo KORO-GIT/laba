@@ -1,0 +1,35 @@
+[Unit]
+Description=Attach LABA browser WayVNC to the active Wayland compositor
+After=laba-wayvnc-web.service wayvnc-control.service
+Requires=laba-wayvnc-web.service
+Wants=wayvnc-control.service
+BindsTo=laba-wayvnc-web.service
+
+[Service]
+Type=simple
+User=vnc
+Group=vnc
+ExecStart=/usr/bin/python3 /usr/local/lib/laba-wayvnc-attach.py
+Restart=always
+RestartSec=3s
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+UMask=0077
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target

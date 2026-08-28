@@ -133,6 +133,8 @@ WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати �
 scp /opt/laba/deploy/desktop/wayvnc-config \
   /opt/laba/deploy/desktop/wayvnc-web-config \
   /opt/laba/deploy/desktop/laba-wayvnc-web.service \
+  /opt/laba/deploy/desktop/laba-wayvnc-attach.py \
+  /opt/laba/deploy/desktop/laba-wayvnc-attach.service \
   korob@192.168.0.63:/tmp/
 ```
 
@@ -143,13 +145,18 @@ sudo install -d -o root -g root -m 0755 /etc/wayvnc
 sudo install -o root -g root -m 0644 /tmp/wayvnc-config /etc/wayvnc/config
 sudo install -o root -g root -m 0644 /tmp/wayvnc-web-config /etc/wayvnc/laba-web-config
 sudo install -o root -g root -m 0644 /tmp/laba-wayvnc-web.service /etc/systemd/system/laba-wayvnc-web.service
+sudo install -o root -g root -m 0755 /tmp/laba-wayvnc-attach.py /usr/local/lib/laba-wayvnc-attach.py
+sudo install -o root -g root -m 0644 /tmp/laba-wayvnc-attach.service /etc/systemd/system/laba-wayvnc-attach.service
 sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-web.service
+sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-attach.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now wayvnc.service laba-wayvnc-web.service
-sudo rm -- /tmp/wayvnc-config /tmp/wayvnc-web-config /tmp/laba-wayvnc-web.service
-systemctl is-active wayvnc.service laba-wayvnc-web.service
+sudo systemctl enable --now wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
+sudo rm -- /tmp/wayvnc-config /tmp/wayvnc-web-config /tmp/laba-wayvnc-web.service \
+  /tmp/laba-wayvnc-attach.py /tmp/laba-wayvnc-attach.service
+systemctl is-active wayvnc.service laba-wayvnc-web.service laba-wayvnc-attach.service
 ss -lnt | grep '192.168.0.63:5900'
 ss -lnt | grep '192.168.0.63:5901'
+sudo -u vnc wayvncctl --socket=/run/laba-wayvnc-web/wayvncctl.sock output-list
 ```
 
 На VPS встановити websockify та unit. Порт `6080` залишається loopback, тому Caddy/UFW не змінюються:
@@ -175,7 +182,7 @@ ss -lnt | grep -E '(:5900|:5901|:6080)'
 ufw status verbose
 ```
 
-Очікується `RFB 003.008` від обох endpoint’ів Pi та лише `127.0.0.1:6080` на VPS. Локальний клієнт використовує TLS/PAM `192.168.0.63:5900`; browser-only `5901` приймає лише VPS і ніколи не використовується напряму з LAN. З інтернету адміністратор відкриває `/admin` → «Робочий стіл». VNC-користувач — `korob`; пароль не зберігається в LABA.
+Очікується `RFB 003.008` від обох endpoint’ів Pi, непорожній `output-list` для browser WayVNC та лише `127.0.0.1:6080` на VPS. Локальний клієнт використовує TLS/PAM `192.168.0.63:5900`; browser-only `5901` приймає лише VPS і ніколи не використовується напряму з LAN. Другий WayVNC запускається без `--gpu`, щоб не конфліктувати з апаратним H.264 encoder vendor WayVNC. З інтернету адміністратор відкриває `/admin` → «Робочий стіл». VNC-користувач — `korob`; пароль не зберігається в LABA.
 
 ## Bluetooth/Audio agent на Raspberry Pi
 
