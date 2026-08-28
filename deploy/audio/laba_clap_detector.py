@@ -133,6 +133,7 @@ class AdaptiveClapDetector:
             return "clap"
 
         interval = now - self.clap_times[-1]
+        self.last_metrics["gestureInterval"] = interval
         if interval < MIN_GESTURE_INTERVAL:
             return None
         if interval > MAX_GESTURE_INTERVAL:
@@ -162,6 +163,7 @@ class ClapListener:
         self.trigger_count = 0
         self.double_clap_count = 0
         self.triple_clap_count = 0
+        self.recent_candidates: deque[dict[str, object]] = deque(maxlen=3)
         self.thread: threading.Thread | None = None
 
     @staticmethod
@@ -180,6 +182,7 @@ class ClapListener:
                 "triggerCount": self.trigger_count,
                 "doubleClapCount": self.double_clap_count,
                 "tripleClapCount": self.triple_clap_count,
+                "recentCandidates": list(self.recent_candidates),
                 "error": self.error,
             }
 
@@ -240,8 +243,16 @@ class ClapListener:
                 break
             event = detector.process(pcm, time.monotonic())
             if event in {"clap", "clap-pair"}:
+                candidate_at = self._timestamp()
+                metrics = {key: round(value, 4) for key, value in detector.last_metrics.items()}
                 with self.lock:
-                    self.last_clap_at = self._timestamp()
+                    self.last_clap_at = candidate_at
+                    self.recent_candidates.append({
+                        "kind": event,
+                        "at": candidate_at,
+                        "metrics": metrics,
+                    })
+                LOGGER.info("Clap candidate %s: %s", event, metrics)
             elif event == "double-clap":
                 with self.lock:
                     self.last_clap_at = self._timestamp()
