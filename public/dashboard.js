@@ -41,9 +41,16 @@ function metric(label, value) {
 }
 
 function deviceCard(device) {
-  const card = document.createElement('article');
+  const card = document.createElement(device.canOpen ? 'a' : 'article');
   card.className = 'device-card';
   card.dataset.kind = device.kind;
+  if (device.canOpen) {
+    card.classList.add('device-card-link');
+    card.href = device.proxyUrl;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+    card.setAttribute('aria-label', `Відкрити ${device.name} у новій вкладці`);
+  }
 
   const top = document.createElement('div');
   top.className = 'device-top';
@@ -83,9 +90,8 @@ function deviceCard(device) {
   note.className = 'device-note';
   note.textContent = device.notes || (device.kind === 'camera' ? 'Відеоспостереження' : 'Керування друком');
   if (device.canOpen) {
-    const open = document.createElement('a');
+    const open = document.createElement('span');
     open.className = 'open-device';
-    open.href = device.proxyUrl;
     open.textContent = 'Відкрити  →';
     bottom.append(note, open);
   } else {

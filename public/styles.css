@@ -152,6 +152,9 @@ h1, h2, h3, h4, p { margin-top: 0; }
   pointer-events: none;
 }
 .device-card:hover { transform: translateY(-3px); border-color: var(--line-strong); }
+.device-card-link { color: inherit; text-decoration: none; cursor: pointer; }
+.device-card-link:hover .open-device { color: var(--accent-light); }
+.device-card-link:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 4px; }
 .device-card.skeleton { box-shadow: none; animation: pulse 1.6s ease-in-out infinite; }
 .device-top { display: flex; justify-content: space-between; gap: 16px; }
 .device-icon {
@@ -178,7 +181,6 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .device-bottom { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: auto; }
 .device-note { max-width: 60%; overflow: hidden; color: var(--faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .open-device { color: var(--ink); font-size: 13px; font-weight: 800; }
-.open-device:hover { color: var(--accent-light); }
 .open-device.disabled { color: var(--faint); cursor: not-allowed; }
 
 .empty-state { padding: 72px 20px 100px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); }
