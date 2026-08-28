@@ -12,9 +12,10 @@ const printer = db.prepare("SELECT * FROM devices WHERE slug = 'k1se-01' COLLATE
 if (!printer || printer.kind !== 'printer') throw new Error('Creality K1 SE device is missing');
 
 const encrypted = encryptSecret(JSON.stringify({ username: 'laba-vps', password: gatewayPassword }));
+const cameraSlug = 'k1se-camera';
 
 const cameraId = db.transaction(() => {
-  const existing = db.prepare("SELECT * FROM devices WHERE slug = 'labacam' COLLATE NOCASE").get();
+  const existing = db.prepare('SELECT * FROM devices WHERE slug = ? COLLATE NOCASE').get(cameraSlug);
   if (existing) {
     db.prepare(`
       UPDATE devices SET
@@ -33,14 +34,14 @@ const cameraId = db.transaction(() => {
       (slug, name, kind, driver, host, protocol, ui_port, api_port, stream_name,
        stream_mode, parent_device_id, secret_enc, notes, enabled, sort_order)
     VALUES
-      ('labacam', 'Камера Creality K1 SE', 'camera', 'http', '100.69.168.10',
+      (?, 'Камера Creality K1 SE', 'camera', 'http', '100.69.168.10',
        'http', 1984, NULL, 'printer-usb-camera', 'mjpeg', ?, ?,
        'Logitech C270 · USB · 1280×720 · 30 FPS', 1, 11)
-  `).run(printer.id, encrypted).lastInsertRowid);
+  `).run(cameraSlug, printer.id, encrypted).lastInsertRowid);
 })();
 
 audit('system:usb-camera-deployment', 'device.configure', 'device', cameraId, {
-  slug: 'labacam',
+  slug: cameraSlug,
   parentSlug: 'k1se-01',
   streamName: 'printer-usb-camera'
 });
