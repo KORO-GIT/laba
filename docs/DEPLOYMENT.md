@@ -3,27 +3,27 @@
 ## Контур
 
 - каталог: `/opt/laba`;
-- пользователь/group: `laba:laba`;
+- користувач/group: `laba:laba`;
 - service: `laba-portal.service`;
 - upstream: `127.0.0.1:3020`;
 - база: `/opt/laba/data/portal.db`;
-- reverse proxy: существующий Caddy;
+- reverse proxy: наявний Caddy;
 - LAN route: Tailscale subnet `192.168.0.0/24` через Raspberry Pi.
 
-Не перезаписывать существующий Caddyfile целиком и не менять работающие `koro-*` или Signal services.
+Не перезаписувати наявний Caddyfile повністю й не змінювати працюючі `koro-*` або Signal services.
 
-## Подготовка Cloudflare
+## Підготовка Cloudflare
 
-1. DNS: proxied A/AAAA для `laba` и proxied wildcard `*` на origin VPS. Точные существующие записи (`star`, `task`, `scan` и другие) продолжают иметь приоритет.
+1. DNS: proxied A/AAAA для `laba` і proxied wildcard `*` на origin VPS. Точні наявні записи (`star`, `task`, `scan` та інші) зберігають пріоритет.
 2. SSL/TLS: Full (strict).
-3. Origin Server: сертификат на `*.zpseapil.club` и `zpseapil.club`, срок 15 лет.
-4. Access: Self-hosted application для `laba.zpseapil.club` и `*-laba.zpseapil.club` с login methods Cloudflare и One-time PIN.
-5. Создать Allow policy `LABA authenticated users` с двумя Include-правилами (OR): точный e-mail bootstrap-администратора и `Login Methods: One-time PIN`. Application должна принимать оба доступных identity provider.
-6. Скопировать Access application audience (AUD) и team domain в server `.env`.
+3. Origin Server: сертифікат для `*.zpseapil.club` і `zpseapil.club`, строк 15 років.
+4. Access: Self-hosted application для `laba.zpseapil.club` і `*-laba.zpseapil.club` з login methods Cloudflare та One-time PIN.
+5. Створити Allow policy `LABA authenticated users` із двома Include-правилами (OR): точний e-mail bootstrap-адміністратора і `Login Methods: One-time PIN`. Application має приймати обидва доступні identity provider.
+6. Скопіювати Access application audience (AUD) і team domain у server `.env`.
 
-Если portal и device hosts пришлось создать двумя Access applications, `CF_ACCESS_AUD` принимает обе audience через запятую.
+Якщо portal і device hosts довелося створити двома Access applications, `CF_ACCESS_AUD` приймає обидві audience через кому.
 
-Приватный ключ Origin Certificate создаётся только на VPS. В Cloudflare выбрать **Use my private key and CSR**, передать CSR и сохранить выданный публичный сертификат как `/etc/caddy/certs/laba-origin.pem`:
+Приватний ключ Origin Certificate створюється лише на VPS. У Cloudflare вибрати **Use my private key and CSR**, передати CSR і зберегти виданий публічний сертифікат як `/etc/caddy/certs/laba-origin.pem`:
 
 ```bash
 install -d -o root -g caddy -m 0750 /etc/caddy/certs
@@ -38,9 +38,9 @@ chown root:caddy /etc/caddy/certs/laba-origin-key.pem
 chmod 0640 /etc/caddy/certs/laba-origin-key.pem
 ```
 
-После установки сертификата проверить совпадение публичных ключей сертификата и private key, затем удалить временный CSR. Private key нельзя вставлять в Cloudflare, консоль, логи или Git.
+Після встановлення сертифіката перевірити збіг публічних ключів сертифіката і private key, потім видалити тимчасовий CSR. Private key не можна вставляти в Cloudflare, консоль, логи або Git.
 
-## Первая установка
+## Перше встановлення
 
 ```bash
 set -Eeuo pipefail
@@ -49,7 +49,7 @@ install -d -o root -g laba -m 0750 /opt/laba
 install -d -o laba -g laba -m 0700 /opt/laba/data
 ```
 
-Загрузить исходники без `.git`, `.env`, `node_modules`, data и certs, затем:
+Завантажити вихідні файли без `.git`, `.env`, `node_modules`, data і certs, потім:
 
 ```bash
 cd /opt/laba
@@ -66,22 +66,22 @@ systemctl enable --now laba-portal.service
 curl --fail --silent http://127.0.0.1:3020/healthz
 ```
 
-Секреты генерируются непосредственно на VPS:
+Секрети генеруються безпосередньо на VPS:
 
 ```bash
 openssl rand -base64 48
 openssl rand -base64 32
 ```
 
-Первое значение — `SESSION_SECRET`, второе — `DEVICE_SECRET_KEY`. `BOOTSTRAP_ADMIN_EMAIL` должен точно совпадать с e-mail Cloudflare Access.
+Перше значення — `SESSION_SECRET`, друге — `DEVICE_SECRET_KEY`. `BOOTSTRAP_ADMIN_EMAIL` має точно збігатися з e-mail Cloudflare Access.
 
-После запуска новые пользователи добавляются только через `/admin`: e-mail, роль и назначения устройств хранятся в локальной базе. Access policy для каждого пользователя менять не нужно. One-time PIN подтверждает владение e-mail, а локальный allowlist LABA остаётся авторитетным решением о доступе.
+Після запуску нові користувачі додаються лише через `/admin`: e-mail, роль і призначення пристроїв зберігаються в локальній базі. Access policy для кожного користувача змінювати не потрібно. One-time PIN підтверджує володіння e-mail, а локальний allowlist LABA залишається авторитетним рішенням щодо доступу.
 
 ## Caddy
 
-Установить origin certificate в `/etc/caddy/certs/laba-origin.pem`, ключ в `/etc/caddy/certs/laba-origin-key.pem`, владелец `root:caddy`, modes `640`. Добавить содержимое `deploy/Caddyfile.snippet` к существующей конфигурации.
+Встановити origin certificate у `/etc/caddy/certs/laba-origin.pem`, ключ у `/etc/caddy/certs/laba-origin-key.pem`, власник `root:caddy`, modes `640`. Додати вміст `deploy/Caddyfile.snippet` до наявної конфігурації.
 
-Всегда:
+Завжди:
 
 ```bash
 cp --preserve=mode,ownership,timestamps /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.before-laba-$(date -u +%Y%m%d-%H%M%S)"
@@ -91,9 +91,9 @@ systemctl reload caddy
 systemctl is-active --quiet caddy
 ```
 
-## Обновление
+## Оновлення
 
-Перед заменой кода:
+Перед заміною коду:
 
 ```bash
 set -Eeuo pipefail
@@ -102,7 +102,7 @@ sudo -u laba sqlite3 /opt/laba/data/portal.db ".backup '/opt/laba/backups/portal
 systemctl stop laba-portal.service
 ```
 
-После загрузки новой версии не заменять `.env`, `data/` и `backups/`:
+Після завантаження нової версії не замінювати `.env`, `data/` і `backups/`:
 
 ```bash
 cd /opt/laba
@@ -115,7 +115,7 @@ curl --fail --silent http://127.0.0.1:3020/healthz
 journalctl -u laba-portal.service -n 80 --no-pager
 ```
 
-## Проверки
+## Перевірки
 
 ```bash
 systemctl status laba-portal.service --no-pager
@@ -126,13 +126,13 @@ caddy validate --config /etc/caddy/Caddyfile
 ufw status verbose
 ```
 
-Для origin-проверки нужен действительный Access JWT; прямой запрос без него должен получить `401`, даже если обойти Cloudflare.
+Для origin-перевірки потрібен дійсний Access JWT; прямий запит без нього має отримати `401`, навіть якщо обійти Cloudflare.
 
 ## Rollback
 
-1. Остановить `laba-portal.service`.
-2. Вернуть предыдущую копию исходников, не трогая `.env`.
-3. При необходимости заменить `portal.db` сохранённым backup вместе с соответствующими WAL/SHM только при остановленном сервисе.
-4. `npm ci --omit=dev`, `npm run check`, затем запустить сервис и проверить health.
+1. Зупинити `laba-portal.service`.
+2. Повернути попередню копію вихідних файлів, не змінюючи `.env`.
+3. За потреби замінити `portal.db` збереженим backup разом із відповідними WAL/SHM лише при зупиненому сервісі.
+4. `npm ci --omit=dev`, `npm run check`, потім запустити сервіс і перевірити health.
 
-Удаление LABA не должно затрагивать `/opt/koro-*`, `/opt/signal-api`, их units или Caddy blocks.
+Видалення LABA не має зачіпати `/opt/koro-*`, `/opt/signal-api`, їхні units або Caddy blocks.

@@ -16,7 +16,7 @@ async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' } });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Ошибка ${response.status}`);
+    throw new Error(body.error || `Помилка ${response.status}`);
   }
   return response.json();
 }
@@ -52,7 +52,7 @@ function deviceCard(device) {
   icon.innerHTML = iconMarkup(device.kind);
   const status = document.createElement('span');
   status.className = `status-pill ${device.status.online ? 'online' : 'offline'}`;
-  status.textContent = device.status.online ? 'Онлайн' : 'Не в сети';
+  status.textContent = device.status.online ? 'Онлайн' : 'Не в мережі';
   top.append(icon, status);
 
   const title = document.createElement('h2');
@@ -66,14 +66,14 @@ function deviceCard(device) {
   telemetry.className = 'telemetry';
   const data = device.status.telemetry || {};
   const values = [
-    metric('Прогресс', data.progress == null ? null : `${data.progress}%`),
+    metric('Прогрес', data.progress == null ? null : `${data.progress}%`),
     metric('Сопло', data.nozzle == null ? null : `${data.nozzle}°`),
-    metric('Стол', data.bed == null ? null : `${data.bed}°`),
-    metric('Отклик', device.status.latencyMs == null ? null : `${device.status.latencyMs} мс`)
+    metric('Стіл', data.bed == null ? null : `${data.bed}°`),
+    metric('Відгук', device.status.latencyMs == null ? null : `${device.status.latencyMs} мс`)
   ].filter(Boolean);
   if (values.length) telemetry.append(...values);
   else {
-    const state = metric('Состояние', device.status.state || '—');
+    const state = metric('Стан', device.status.state || '—');
     if (state) telemetry.append(state);
   }
 
@@ -81,17 +81,17 @@ function deviceCard(device) {
   bottom.className = 'device-bottom';
   const note = document.createElement('span');
   note.className = 'device-note';
-  note.textContent = device.notes || (device.kind === 'camera' ? 'Видеонаблюдение' : 'Управление печатью');
+  note.textContent = device.notes || (device.kind === 'camera' ? 'Відеоспостереження' : 'Керування друком');
   if (device.canOpen) {
     const open = document.createElement('a');
     open.className = 'open-device';
     open.href = device.proxyUrl;
-    open.textContent = 'Открыть  →';
+    open.textContent = 'Відкрити  →';
     bottom.append(note, open);
   } else {
     const locked = document.createElement('span');
     locked.className = 'open-device disabled';
-    locked.textContent = 'Только статус';
+    locked.textContent = 'Лише статус';
     bottom.append(note, locked);
   }
 
@@ -113,7 +113,7 @@ async function loadDevices(manual = false) {
   try {
     devices = await api('/api/devices');
     render();
-    if (manual) showToast('Статусы обновлены');
+    if (manual) showToast('Статуси оновлено');
   } catch (error) {
     grid.replaceChildren();
     showToast(error.message, true);
@@ -134,7 +134,7 @@ document.querySelectorAll('.tab').forEach((button) => {
 refreshButton.addEventListener('click', () => loadDevices(true));
 
 function updateClock() {
-  document.querySelector('#clock').textContent = new Intl.DateTimeFormat('ru-RU', {
+  document.querySelector('#clock').textContent = new Intl.DateTimeFormat('uk-UA', {
     timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', second: '2-digit'
   }).format(new Date());
 }

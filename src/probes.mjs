@@ -71,7 +71,7 @@ async function moonrakerProbe(device) {
   return {
     online: state !== 'disconnected' && state !== 'error',
     state,
-    message: state === 'ready' ? 'Готов к работе' : `Klipper: ${state}`,
+    message: state === 'ready' ? 'Готовий до роботи' : `Klipper: ${state}`,
     telemetry
   };
 }
@@ -84,7 +84,7 @@ async function octoprintProbe(device) {
   return {
     online: true,
     state: 'ready',
-    message: version?.server ? `OctoPrint ${version.server}` : 'OctoPrint доступен',
+    message: version?.server ? `OctoPrint ${version.server}` : 'OctoPrint доступний',
     telemetry: {}
   };
 }
@@ -108,14 +108,14 @@ async function uncachedProbe(device) {
   let result;
 
   if (!device.enabled) {
-    result = { online: false, state: 'disabled', message: 'Отключено', telemetry: {} };
+    result = { online: false, state: 'disabled', message: 'Вимкнено', telemetry: {} };
   } else if (device.driver === 'moonraker') {
     result = await moonrakerProbe(device);
   } else if (device.driver === 'octoprint') {
     result = await octoprintProbe(device);
   } else if (device.driver === 'rtsp') {
     await tcpProbe(device.host, device.ui_port || 554);
-    result = { online: true, state: 'online', message: 'RTSP доступен', telemetry: {} };
+    result = { online: true, state: 'online', message: 'RTSP доступний', telemetry: {} };
   } else {
     result = await httpProbe(device);
   }
@@ -138,7 +138,7 @@ export async function probeDevice(device, force = false) {
     value = {
       online: false,
       state: 'offline',
-      message: error?.name === 'TimeoutError' ? 'Тайм-аут подключения' : 'Нет соединения',
+      message: error?.name === 'TimeoutError' ? 'Час очікування з’єднання вичерпано' : 'Немає з’єднання',
       telemetry: {},
       latencyMs: null,
       checkedAt: new Date().toISOString()

@@ -15,7 +15,7 @@ export async function authenticatedEmail(headers) {
   }
 
   const assertion = headers['cf-access-jwt-assertion'];
-  if (!assertion) throw new Error('Cloudflare Access assertion is missing');
+  if (!assertion) throw new Error('Відсутнє підтвердження Cloudflare Access');
 
   cloudflareKeys ??= createRemoteJWKSet(
     new URL(`https://${config.cfAccessTeamDomain}/cdn-cgi/access/certs`)
@@ -28,7 +28,7 @@ export async function authenticatedEmail(headers) {
   });
 
   const email = normalizeEmail(payload.email);
-  if (!email) throw new Error('Cloudflare Access identity has no email');
+  if (!email) throw new Error('Профіль Cloudflare Access не містить e-mail');
   return email;
 }
 

@@ -1,51 +1,51 @@
 # Security model
 
-## Границы доверия
+## Межі довіри
 
-1. Cloudflare Access проверяет личность и применяет OTP/OAuth/MFA, WAF и edge rate limiting.
-2. LABA криптографически проверяет Access JWT, после чего ищет e-mail в собственной базе.
-3. Роль и разрешение на конкретное устройство проверяются при каждом HTTP и WebSocket подключении.
-4. Upstream-устройство доступно только VPS через Tailscale subnet route `192.168.0.0/24`.
+1. Cloudflare Access перевіряє особу та застосовує OTP/OAuth/MFA, WAF і edge rate limiting.
+2. LABA криптографічно перевіряє Access JWT, після чого шукає e-mail у власній базі.
+3. Роль і дозвіл на конкретний пристрій перевіряються під час кожного HTTP- та WebSocket-підключення.
+4. Upstream-пристрій доступний лише VPS через Tailscale subnet route `192.168.0.0/24`.
 
-Портал не доверяет одному только заголовку `Cf-Access-Authenticated-User-Email`: используется подписанный `Cf-Access-Jwt-Assertion`, проверяются RS256, issuer и audience.
+Портал не довіряє лише заголовку `Cf-Access-Authenticated-User-Email`: використовується підписаний `Cf-Access-Jwt-Assertion`, перевіряються RS256, issuer та audience.
 
-## Контроли
+## Засоби контролю
 
-- Production не стартует в development auth mode.
-- Устройства задаются только literal IPv4 из `ALLOWED_DEVICE_SUBNETS`. Это исключает DNS rebinding и proxy к произвольным адресам.
-- Cloudflare assertion, `CF_Authorization` cookie и входящий `Authorization` удаляются до upstream.
-- Опциональный upstream secret хранится только в AES-256-GCM виде с отдельным 32-byte ключом.
-- Административные изменения требуют same-origin и специальный заголовок, ограничены rate limit и записываются в аудит.
-- Cross-site state-changing запросы к device proxy отклоняются по Fetch Metadata.
-- HTML/API не кэшируются; indexing запрещён на уровне meta/header/Caddy.
-- Сервис слушает только loopback, работает без Linux capabilities и с systemd sandbox.
-- UFW не открывает дополнительные порты для LABA или устройств.
+- Production не запускається в development auth mode.
+- Пристрої задаються лише literal IPv4 з `ALLOWED_DEVICE_SUBNETS`. Це унеможливлює DNS rebinding і proxy до довільних адрес.
+- Cloudflare assertion, cookie `CF_Authorization` і вхідний `Authorization` видаляються до upstream.
+- Необов’язковий upstream secret зберігається лише у вигляді AES-256-GCM з окремим 32-byte ключем.
+- Адміністративні зміни потребують same-origin і спеціального заголовка, обмежені rate limit та записуються до аудиту.
+- Cross-site state-changing запити до device proxy відхиляються за Fetch Metadata.
+- HTML/API не кешуються; indexing заборонено на рівні meta/header/Caddy.
+- Сервіс слухає лише loopback, працює без Linux capabilities і з systemd sandbox.
+- UFW не відкриває додаткових портів для LABA або пристроїв.
 
 ## Cloudflare
 
-- Создать Self-hosted Access application для `laba.zpseapil.club` и частичной wildcard-зоны `*-laba.zpseapil.club` (одна audience) либо две apps и указать обе audience через запятую.
-- Подключить два login method: существующий Cloudflare IdP и One-time PIN.
-- Политика `LABA authenticated users` использует два Include-правила (OR): точный e-mail bootstrap-администратора и `Login Methods: One-time PIN`. Это позволяет добавлять пользователей только через админку LABA, без ручного изменения Access policy.
-- Правило One-time PIN само по себе принимает любой подтверждённый e-mail. Это намеренно: доступ к данным выдаёт второй независимый барьер — локальный allowlist LABA. Не удалять локальную проверку и не использовать `AUTH_MODE=development` в production.
-- Рекомендуемый session duration — 8–24 часа. Для IdP, поддерживающего MFA, его следует включить.
-- Добавить отдельную WAF/rate-limit политику для `/cdn-cgi/access/login` и административных API, если это поддерживает тариф.
-- DNS `laba` и wildcard `*` должны быть proxied. Точные существующие DNS-записи имеют приоритет; Caddy отклоняет неизвестные wildcard-хосты.
-- SSL/TLS mode — Full (strict). Origin certificate покрывает `*.zpseapil.club`; приватный ключ хранится только на VPS с mode `640`, доступен `root:caddy`.
+- Створити Self-hosted Access application для `laba.zpseapil.club` і часткової wildcard-зони `*-laba.zpseapil.club` (одна audience) або дві apps та вказати обидві audience через кому.
+- Підключити два login method: наявний Cloudflare IdP і One-time PIN.
+- Політика `LABA authenticated users` використовує два Include-правила (OR): точний e-mail bootstrap-адміністратора і `Login Methods: One-time PIN`. Це дає змогу додавати користувачів лише через адмінпанель LABA, без ручної зміни Access policy.
+- Правило One-time PIN саме по собі приймає будь-який підтверджений e-mail. Це навмисно: доступ до даних надає другий незалежний бар’єр — локальний allowlist LABA. Не видаляти локальну перевірку та не використовувати `AUTH_MODE=development` у production.
+- Рекомендований session duration — 8–24 години. Для IdP, що підтримує MFA, його слід увімкнути.
+- Додати окрему WAF/rate-limit політику для `/cdn-cgi/access/login` та адміністративних API, якщо це підтримує тариф.
+- DNS `laba` і wildcard `*` мають бути proxied. Точні наявні DNS-записи мають пріоритет; Caddy відхиляє невідомі wildcard-хости.
+- SSL/TLS mode — Full (strict). Origin certificate покриває `*.zpseapil.club`; приватний ключ зберігається лише на VPS з mode `640`, доступний `root:caddy`.
 
-## Остаточные риски
+## Залишкові ризики
 
-- Mainsail/OctoPrint и web UI камер становятся доступны пользователям с ролью управления. Их собственные уязвимости всё ещё важны, поэтому firmware нужно обновлять.
-- Администратор LABA по определению может менять назначения и upstream credentials.
-- Компрометация VPS или tailnet даёт путь в домашнюю подсеть; Tailscale ACL следует ограничить только нужными узлами/маршрутом.
-- RTSP нельзя безопасно показать в обычном браузере без медиашлюза. При добавлении камеры предпочтителен go2rtc с WebRTC и без прямой публикации RTSP.
+- Mainsail/OctoPrint і web UI камер стають доступними користувачам із роллю керування. Їхні власні вразливості все ще важливі, тому firmware потрібно оновлювати.
+- Адміністратор LABA за визначенням може змінювати призначення та upstream credentials.
+- Компрометація VPS або tailnet дає шлях до домашньої підмережі; Tailscale ACL слід обмежити лише потрібними вузлами/маршрутом.
+- RTSP не можна безпечно показати у звичайному браузері без медіашлюзу. Під час додавання камери бажано використовувати go2rtc з WebRTC і без прямої публікації RTSP.
 
-## Секреты
+## Секрети
 
-Не коммитить и не копировать в отчёты:
+Не комітити й не копіювати у звіти:
 
 - `/opt/laba/.env`;
-- `/opt/laba/data/portal.db*` и backups;
+- `/opt/laba/data/portal.db*` і backups;
 - `/etc/caddy/certs/laba-*`;
-- SSH, Cloudflare, Tailscale и device credentials.
+- SSH, Cloudflare, Tailscale і device credentials.
 
-Ротация `DEVICE_SECRET_KEY` требует расшифровать и заново зашифровать сохранённые device secrets. Простая замена ключа сделает их нечитаемыми.
+Ротація `DEVICE_SECRET_KEY` потребує розшифрувати й повторно зашифрувати збережені device secrets. Проста заміна ключа зробить їх нечитабельними.

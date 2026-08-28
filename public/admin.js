@@ -18,7 +18,7 @@ async function api(path, options = {}) {
     }
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Ошибка ${response.status}`);
+  if (!response.ok) throw new Error(body.error || `Помилка ${response.status}`);
   return body;
 }
 
@@ -30,7 +30,7 @@ function el(tag, className, text) {
 }
 
 function roleLabel(role) {
-  return { admin: 'Администратор', operator: 'Оператор', viewer: 'Наблюдатель' }[role] || role;
+  return { admin: 'Адміністратор', operator: 'Оператор', viewer: 'Спостерігач' }[role] || role;
 }
 
 function driverLabel(driver) {
@@ -43,7 +43,7 @@ function recordButton({ symbol, title, subtitle, enabled, selected, onClick }) {
   const icon = el('span', 'record-symbol', symbol);
   const main = el('span', 'record-main');
   main.append(el('strong', '', title), el('small', '', subtitle));
-  const status = el('span', `record-state${enabled ? '' : ' off'}`, enabled ? 'ACTIVE' : 'OFF');
+  const status = el('span', `record-state${enabled ? '' : ' off'}`, enabled ? 'УВІМК.' : 'ВИМК.');
   button.append(icon, main, status);
   button.addEventListener('click', onClick);
   return button;
@@ -65,13 +65,13 @@ function renderDevices(selectedId = Number(document.querySelector('#device-id').
     selected: device.id === selectedId,
     onClick: () => editDevice(device)
   })));
-  if (!state.devices.length) list.append(el('p', 'device-meta', 'Устройств пока нет.'));
+  if (!state.devices.length) list.append(el('p', 'device-meta', 'Пристроїв поки немає.'));
 }
 
 function editDevice(device = null) {
   const form = document.querySelector('#device-form');
   form.classList.remove('hidden');
-  document.querySelector('#device-form-title').textContent = device ? device.name : 'Новое устройство';
+  document.querySelector('#device-form-title').textContent = device ? device.name : 'Новий пристрій';
   formValue('device-id', device?.id);
   formValue('device-name', device?.name);
   formValue('device-kind', device?.kind || 'printer');
@@ -120,7 +120,7 @@ async function saveDevice(event) {
     await loadDevices();
     const current = id ? state.devices.find((item) => item.id === id) : state.devices.at(-1);
     if (current) editDevice(current);
-    showToast('Устройство сохранено');
+    showToast('Пристрій збережено');
   } catch (error) { showToast(error.message, true); }
 }
 
@@ -131,7 +131,7 @@ async function testDevice() {
   button.disabled = true;
   try {
     const status = await api(`/api/admin/devices/${id}/test`, { method: 'POST', body: '{}' });
-    showToast(status.online ? `Связь есть: ${status.message}` : `Нет связи: ${status.message}`, !status.online);
+    showToast(status.online ? `Зв’язок є: ${status.message}` : `Немає зв’язку: ${status.message}`, !status.online);
   } catch (error) { showToast(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -167,9 +167,9 @@ function renderAccess(user = null) {
     const select = el('select');
     select.dataset.deviceId = String(device.id);
     [
-      ['none', 'Нет доступа'],
-      ['viewer', 'Наблюдение'],
-      ['operator', 'Управление']
+      ['none', 'Немає доступу'],
+      ['viewer', 'Перегляд'],
+      ['operator', 'Керування']
     ].forEach(([value, label]) => {
       const option = el('option', '', label);
       option.value = value;
@@ -180,7 +180,7 @@ function renderAccess(user = null) {
     return row;
   });
   container.replaceChildren(...rows);
-  if (!rows.length) container.append(el('p', 'device-meta', 'Сначала добавьте устройство.'));
+  if (!rows.length) container.append(el('p', 'device-meta', 'Спочатку додайте пристрій.'));
   toggleAdminAccess();
 }
 
@@ -192,7 +192,7 @@ function toggleAdminAccess() {
 function editUser(user = null) {
   const form = document.querySelector('#user-form');
   form.classList.remove('hidden');
-  document.querySelector('#user-form-title').textContent = user ? (user.displayName || user.email) : 'Новый пользователь';
+  document.querySelector('#user-form-title').textContent = user ? (user.displayName || user.email) : 'Новий користувач';
   formValue('user-id', user?.id);
   formValue('user-email', user?.email);
   formValue('user-name', user?.displayName);
@@ -226,7 +226,7 @@ async function saveUser(event) {
     await loadUsers();
     const current = id ? state.users.find((item) => item.id === id) : state.users.at(-1);
     if (current) editUser(current);
-    showToast('Пользователь сохранён');
+    showToast('Користувача збережено');
   } catch (error) { showToast(error.message, true); }
 }
 
@@ -236,16 +236,16 @@ async function loadUsers() {
 }
 
 function formatDate(value) {
-  return new Intl.DateTimeFormat('ru-RU', {
+  return new Intl.DateTimeFormat('uk-UA', {
     timeZone: 'Europe/Kyiv', dateStyle: 'short', timeStyle: 'medium'
   }).format(new Date(`${value.replace(' ', 'T')}Z`));
 }
 
 function actionLabel(action) {
   return {
-    'device.create': 'Устройство добавлено', 'device.update': 'Устройство изменено',
-    'device.test': 'Проверка связи', 'user.create': 'Пользователь добавлен',
-    'user.update': 'Пользователь изменён'
+    'device.create': 'Пристрій додано', 'device.update': 'Пристрій змінено',
+    'device.test': 'Перевірка зв’язку', 'user.create': 'Користувача додано',
+    'user.update': 'Користувача змінено'
   }[action] || action;
 }
 
@@ -261,7 +261,7 @@ async function loadAudit() {
   body.replaceChildren(...rows);
   if (!rows.length) {
     const row = document.createElement('tr');
-    const cell = el('td', '', 'Журнал пока пуст.');
+    const cell = el('td', '', 'Журнал поки порожній.');
     cell.colSpan = 5;
     row.append(cell);
     body.append(row);
@@ -285,13 +285,13 @@ document.querySelector('#user-form').addEventListener('submit', saveUser);
 document.querySelector('#test-device').addEventListener('click', testDevice);
 document.querySelector('#device-driver').addEventListener('change', toggleRtspHint);
 document.querySelector('#user-role').addEventListener('change', toggleAdminAccess);
-document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал обновлён')).catch((error) => showToast(error.message, true)));
+document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал оновлено')).catch((error) => showToast(error.message, true)));
 document.querySelectorAll('[data-close-editor]').forEach((button) => button.addEventListener('click', () => button.closest('form').classList.add('hidden')));
 
 async function start() {
   try {
     state.me = await api('/api/me');
-    if (state.me.role !== 'admin') throw new Error('Требуются права администратора');
+    if (state.me.role !== 'admin') throw new Error('Потрібні права адміністратора');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
     await Promise.all([loadDevices(), loadUsers()]);
   } catch (error) { showToast(error.message, true); }

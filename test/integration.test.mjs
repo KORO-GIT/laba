@@ -76,10 +76,15 @@ test('development server serves portal API and protected admin writes', async (c
 
   const me = await fetch(`${root}/api/me`).then((response) => response.json());
   assert.equal(me.role, 'admin');
+  assert.equal(me.displayName, 'Власник');
+
+  const homepage = await fetch(root).then((response) => response.text());
+  assert.match(homepage, /Уся лабораторія/);
 
   const devices = await fetch(`${root}/api/devices`).then((response) => response.json());
   assert.equal(devices.length, 1);
   assert.equal(devices[0].slug, 'k1se-01');
+  assert.equal(devices[0].notes, 'Перший принтер лабораторії');
   assert.equal(devices[0].proxyUrl, 'https://k1se-01-laba.zpseapil.club/');
 
   const rejected = await fetch(`${root}/api/admin/devices`, {

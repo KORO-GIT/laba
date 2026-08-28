@@ -1,15 +1,15 @@
 # AGENTS.md
 
-Правила для агента, который продолжает разработку LABA.
+Правила для агента, який продовжує розробку LABA.
 
-## Перед началом
+## Перед початком
 
-1. Прочитать `README.md`, `docs/SECURITY.md` и `docs/DEPLOYMENT.md`.
-2. Проверить `git status --short`; чужие изменения не удалять.
-3. Не читать и не печатать production-секреты без необходимости. Никогда не коммитить `.env`, SQLite, сертификаты, ключи, логи и резервные копии.
-4. Текущий VPS содержит другие production-сервисы. Не менять их каталоги, units, базы и процессы.
+1. Прочитати `README.md`, `docs/SECURITY.md` і `docs/DEPLOYMENT.md`.
+2. Перевірити `git status --short`; чужі зміни не видаляти.
+3. Не читати й не друкувати production-секрети без потреби. Ніколи не комітити `.env`, SQLite, сертифікати, ключі, логи та резервні копії.
+4. Поточний VPS містить інші production-сервіси. Не змінювати їхні каталоги, units, бази та процеси.
 
-## Проверки
+## Перевірки
 
 ```bash
 npm ci
@@ -18,24 +18,24 @@ npm test
 npm audit --omit=dev
 ```
 
-## Инварианты безопасности
+## Інваріанти безпеки
 
-- Production запускается только с `AUTH_MODE=cloudflare`.
-- JWT Cloudflare Access всегда проверяется по подписи, issuer и audience.
-- Пользователь должен одновременно пройти Cloudflare Access и присутствовать в локальном allowlist.
-- Адрес устройства должен быть literal IPv4 из `ALLOWED_DEVICE_SUBNETS`; DNS-имена не разрешать, чтобы не открыть SSRF.
-- Секреты устройств шифруются AES-256-GCM. Не писать второй механизм шифрования.
-- В upstream не передаются Cloudflare assertion, Access cookie и пользовательский `Authorization`.
-- Нельзя отключить последнего активного администратора.
-- Все state-changing admin API проверяют Origin и маркер `X-Portal-Request`.
-- Принтером может управлять только `operator` или `admin`; `viewer` видит статус.
+- Production запускається лише з `AUTH_MODE=cloudflare`.
+- JWT Cloudflare Access завжди перевіряється за підписом, issuer та audience.
+- Користувач має одночасно пройти Cloudflare Access і бути присутнім у локальному allowlist.
+- Адреса пристрою має бути literal IPv4 з `ALLOWED_DEVICE_SUBNETS`; DNS-імена не дозволяти, щоб не відкрити SSRF.
+- Секрети пристроїв шифруються AES-256-GCM. Не створювати другий механізм шифрування.
+- В upstream не передаються Cloudflare assertion, Access cookie і користувацький `Authorization`.
+- Не можна вимкнути останнього активного адміністратора.
+- Усі state-changing admin API перевіряють Origin і маркер `X-Portal-Request`.
+- Принтером може керувати лише `operator` або `admin`; `viewer` бачить статус.
 
 ## Production
 
 - Сервис: `laba-portal.service`.
-- Пользователь: `laba`.
+- Користувач: `laba`.
 - Каталог: `/opt/laba`.
 - Upstream: `127.0.0.1:3020`.
-- Не заменять `/etc/caddy/Caddyfile` целиком. Только добавить/изменить отдельный LABA-блок, затем `caddy validate`, backup и `systemctl reload caddy`.
-- Перед обновлением создать SQLite backup через `.backup`, затем проверить health endpoint и последние логи.
-- Не включать production `AUTH_MODE=development` даже временно.
+- Не замінювати `/etc/caddy/Caddyfile` повністю. Лише додати/змінити окремий LABA-блок, потім `caddy validate`, backup і `systemctl reload caddy`.
+- Перед оновленням створити SQLite backup через `.backup`, потім перевірити health endpoint і останні логи.
+- Не вмикати production `AUTH_MODE=development` навіть тимчасово.

@@ -66,8 +66,14 @@ if (!bootstrap) {
   db.prepare(`
     INSERT INTO users (email, display_name, role, enabled)
     VALUES (?, ?, 'admin', 1)
-  `).run(config.bootstrapAdminEmail, 'Владелец');
+  `).run(config.bootstrapAdminEmail, 'Власник');
 }
+
+// Translate only the original seeded values; never overwrite user-customized data.
+db.prepare(`
+  UPDATE users SET display_name = 'Власник', updated_at = CURRENT_TIMESTAMP
+  WHERE email = ? COLLATE NOCASE AND display_name = 'Владелец'
+`).run(config.bootstrapAdminEmail);
 
 const deviceCount = db.prepare('SELECT COUNT(*) AS count FROM devices').get().count;
 if (deviceCount === 0) {
@@ -75,9 +81,14 @@ if (deviceCount === 0) {
     INSERT INTO devices
       (slug, name, kind, driver, host, protocol, ui_port, api_port, notes, enabled, sort_order)
     VALUES
-      ('k1se-01', 'Creality K1 SE', 'printer', 'moonraker', '192.168.0.70', 'http', 80, 7125, 'Первый принтер лаборатории', 1, 10)
+      ('k1se-01', 'Creality K1 SE', 'printer', 'moonraker', '192.168.0.70', 'http', 80, 7125, 'Перший принтер лабораторії', 1, 10)
   `).run();
 }
+
+db.prepare(`
+  UPDATE devices SET notes = 'Перший принтер лабораторії', updated_at = CURRENT_TIMESTAMP
+  WHERE slug = 'k1se-01' COLLATE NOCASE AND notes = 'Первый принтер лаборатории'
+`).run();
 
 export const statements = {
   userByEmail: db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE'),

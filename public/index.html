@@ -1,47 +1,47 @@
 <!doctype html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
-  <title>LABA — центр устройств</title>
+  <title>LABA — центр пристроїв</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.2.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.3.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar shell">
-    <a class="brand" href="/" aria-label="LABA — главная">
+    <a class="brand" href="/" aria-label="LABA — головна">
       <span class="brand-mark">L</span>
-      <span><strong>LABA</strong><small>DEVICE CONTROL</small></span>
+      <span><strong>LABA</strong><small>КЕРУВАННЯ ПРИСТРОЯМИ</small></span>
     </a>
     <div class="identity">
       <span class="live-dot" aria-hidden="true"></span>
-      <span id="identity-name">Проверяем доступ…</span>
-      <a id="admin-link" class="button button-ghost hidden" href="/admin">Админка</a>
+      <span id="identity-name">Перевіряємо доступ…</span>
+      <a id="admin-link" class="button button-ghost hidden" href="/admin">Адмінпанель</a>
     </div>
   </header>
 
   <main class="shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">PRIVATE WORKSPACE / <span id="clock">--:--</span></p>
-        <h1>Вся лаборатория<br><em>в одном месте.</em></h1>
-        <p class="hero-copy">Принтеры и камеры доступны через защищённый контур. Выберите устройство, чтобы перейти к управлению.</p>
+        <p class="eyebrow">ПРИВАТНИЙ ПРОСТІР / <span id="clock">--:--</span></p>
+        <h1>Уся лабораторія<br><em>в одному місці.</em></h1>
+        <p class="hero-copy">Принтери та камери доступні через захищений контур. Виберіть пристрій, щоб перейти до керування.</p>
       </div>
-      <div class="hero-stat" aria-label="Сводка устройств">
+      <div class="hero-stat" aria-label="Зведення пристроїв">
         <span id="online-count">—</span>
-        <small>устройств онлайн</small>
+        <small>пристроїв онлайн</small>
       </div>
     </section>
 
-    <section class="toolbar" aria-label="Фильтры устройств">
+    <section class="toolbar" aria-label="Фільтри пристроїв">
       <div class="tabs" role="tablist">
-        <button class="tab active" data-filter="all" type="button">Все</button>
-        <button class="tab" data-filter="printer" type="button">Принтеры</button>
-        <button class="tab" data-filter="camera" type="button">Камеры</button>
+        <button class="tab active" data-filter="all" type="button">Усі</button>
+        <button class="tab" data-filter="printer" type="button">Принтери</button>
+        <button class="tab" data-filter="camera" type="button">Камери</button>
       </div>
-      <button id="refresh" class="button button-ghost" type="button">Обновить</button>
+      <button id="refresh" class="button button-ghost" type="button">Оновити</button>
     </section>
 
     <section id="device-grid" class="device-grid" aria-live="polite">
@@ -51,16 +51,16 @@
 
     <section id="empty-state" class="empty-state hidden">
       <span class="empty-glyph">＋</span>
-      <h2>Здесь пока пусто</h2>
-      <p>Администратор может добавить принтер или камеру в разделе управления.</p>
+      <h2>Тут поки порожньо</h2>
+      <p>Адміністратор може додати принтер або камеру в розділі керування.</p>
     </section>
   </main>
 
   <footer class="shell footer">
-    <span>LABA / PRIVATE NETWORK</span>
-    <span>Защищено Cloudflare Access + Tailscale</span>
+    <span>LABA / ПРИВАТНА МЕРЕЖА</span>
+    <span>Захищено Cloudflare Access + Tailscale</span>
   </footer>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/dashboard.js?v=0.2.0"></script>
+  <script type="module" src="/assets/dashboard.js?v=0.3.0"></script>
 </body>
 </html>

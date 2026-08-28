@@ -109,7 +109,7 @@ async function resolveUser(headers) {
   const email = await authenticatedEmail(headers);
   const user = statements.userByEmail.get(email);
   if (!user || !user.enabled) {
-    const error = new Error('Пользователь не имеет доступа к порталу');
+    const error = new Error('Користувач не має доступу до порталу');
     error.statusCode = 403;
     throw error;
   }
@@ -121,7 +121,7 @@ app.addHook('onRequest', async (request, reply) => {
   try {
     request.portalUser = await resolveUser(request.headers);
   } catch (error) {
-    return reply.code(error.statusCode ?? 401).send({ error: error.message ?? 'Unauthorized' });
+    return reply.code(error.statusCode ?? 401).send({ error: error.message ?? 'Не авторизовано' });
   }
   // Device hosts must take priority over portal routes such as /assets/*.
   // Printer and camera UIs commonly use those same top-level paths.
@@ -130,7 +130,7 @@ app.addHook('onRequest', async (request, reply) => {
 
 function requireAdmin(request, reply, done) {
   if (request.portalUser?.role !== 'admin') {
-    reply.code(403).send({ error: 'Требуются права администратора' });
+    reply.code(403).send({ error: 'Потрібні права адміністратора' });
     return;
   }
   done();
@@ -139,17 +139,17 @@ function requireAdmin(request, reply, done) {
 function guardWrite(request, reply, done) {
   try {
     requireSameOrigin(request);
-    if (request.headers['x-portal-request'] !== '1') throw new Error('Missing request marker');
+    if (request.headers['x-portal-request'] !== '1') throw new Error('Відсутня ознака запиту');
     done();
   } catch {
-    reply.code(403).send({ error: 'Запрос отклонён защитой CSRF' });
+    reply.code(403).send({ error: 'Запит відхилено захистом CSRF' });
   }
 }
 
 function parseOrReply(schema, value, reply) {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    reply.code(400).send({ error: 'Некорректные данные', fields: parsed.error.flatten().fieldErrors });
+    reply.code(400).send({ error: 'Некоректні дані', fields: parsed.error.flatten().fieldErrors });
     return null;
   }
   return parsed.data;
@@ -158,7 +158,7 @@ function parseOrReply(schema, value, reply) {
 function validateDeviceNetwork(device, reply) {
   if (!isAllowedDeviceHost(device.host)) {
     reply.code(400).send({
-      error: `Адрес должен находиться в разрешённой домашней сети: ${config.allowedSubnets.join(', ')}`
+      error: `Адреса має належати дозволеній домашній мережі: ${config.allowedSubnets.join(', ')}`
     });
     return false;
   }
@@ -166,7 +166,7 @@ function validateDeviceNetwork(device, reply) {
 }
 
 const deviceSchema = z.object({
-  slug: z.string().trim().toLowerCase().refine(safeSlug, 'Недопустимый идентификатор адреса'),
+  slug: z.string().trim().toLowerCase().refine(safeSlug, 'Неприпустимий ідентифікатор адреси'),
   name: z.string().trim().min(2).max(80),
   kind: z.enum(['printer', 'camera']),
   driver: z.enum(['moonraker', 'octoprint', 'http', 'rtsp']),
@@ -181,13 +181,13 @@ const deviceSchema = z.object({
   sortOrder: z.coerce.number().int().min(-10000).max(10000).optional().default(0)
 }).superRefine((device, context) => {
   if (device.driver === 'rtsp' && device.protocol !== 'rtsp') {
-    context.addIssue({ code: 'custom', path: ['protocol'], message: 'Для RTSP выберите протокол RTSP' });
+    context.addIssue({ code: 'custom', path: ['protocol'], message: 'Для RTSP виберіть протокол RTSP' });
   }
   if (device.driver !== 'rtsp' && device.protocol === 'rtsp') {
-    context.addIssue({ code: 'custom', path: ['protocol'], message: 'RTSP доступен только для RTSP-интеграции' });
+    context.addIssue({ code: 'custom', path: ['protocol'], message: 'RTSP доступний лише для інтеграції RTSP' });
   }
   if (device.driver === 'moonraker' && !device.apiPort) {
-    context.addIssue({ code: 'custom', path: ['apiPort'], message: 'Для Moonraker нужен API-порт' });
+    context.addIssue({ code: 'custom', path: ['apiPort'], message: 'Для Moonraker потрібен порт API' });
   }
 });
 
@@ -203,7 +203,7 @@ const userSchema = z.object({
 }).superRefine((user, context) => {
   const ids = user.access.map((grant) => grant.deviceId);
   if (new Set(ids).size !== ids.length) {
-    context.addIssue({ code: 'custom', path: ['access'], message: 'Устройство указано несколько раз' });
+    context.addIssue({ code: 'custom', path: ['access'], message: 'Пристрій зазначено кілька разів' });
   }
 });
 
@@ -242,7 +242,7 @@ app.get('/', async (request, reply) => {
 });
 
 app.get('/admin', async (request, reply) => {
-  if (request.portalUser.role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
+  if (request.portalUser.role !== 'admin') return reply.code(403).send({ error: 'Доступ заборонено' });
   return reply.sendFile('admin.html');
 });
 
@@ -298,7 +298,7 @@ app.post('/api/admin/devices', {
     audit(request.portalUser.email, 'device.create', 'device', result.lastInsertRowid, { slug: body.slug });
     return reply.code(201).send(serializeDevice(statements.deviceById.get(result.lastInsertRowid), true));
   } catch (error) {
-    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Такой поддомен уже существует' });
+    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Такий піддомен уже існує' });
     throw error;
   }
 });
@@ -308,7 +308,7 @@ app.patch('/api/admin/devices/:id', {
   config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
 }, async (request, reply) => {
   const existing = statements.deviceById.get(Number(request.params.id));
-  if (!existing) return reply.code(404).send({ error: 'Устройство не найдено' });
+  if (!existing) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   const body = parseOrReply(deviceSchema, request.body, reply);
   if (!body || !validateDeviceNetwork(body, reply)) return;
   const encrypted = body.keepSecret && !body.secret ? existing.secret_enc : secretPayload(body.secret);
@@ -323,7 +323,7 @@ app.patch('/api/admin/devices/:id', {
       body.apiPort ?? null, encrypted, body.notes, body.enabled ? 1 : 0, body.sortOrder, existing.id
     );
   } catch (error) {
-    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Такой поддомен уже существует' });
+    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Такий піддомен уже існує' });
     throw error;
   }
   clearProbeCache(existing.id);
@@ -336,7 +336,7 @@ app.post('/api/admin/devices/:id/test', {
   config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
 }, async (request, reply) => {
   const device = statements.deviceById.get(Number(request.params.id));
-  if (!device) return reply.code(404).send({ error: 'Устройство не найдено' });
+  if (!device) return reply.code(404).send({ error: 'Пристрій не знайдено' });
   const status = await probeDevice(device, true);
   audit(request.portalUser.email, 'device.test', 'device', device.id, { online: status.online });
   return status;
@@ -352,7 +352,7 @@ app.post('/api/admin/users', {
 }, async (request, reply) => {
   const body = parseOrReply(userSchema, request.body, reply);
   if (!body) return;
-  if (!accessDevicesExist(body.access)) return reply.code(400).send({ error: 'Одно из устройств не существует' });
+  if (!accessDevicesExist(body.access)) return reply.code(400).send({ error: 'Один із пристроїв не існує' });
   try {
     let result;
     db.transaction(() => {
@@ -369,7 +369,7 @@ app.post('/api/admin/users', {
       statements.listUsers.all().find((row) => row.id === Number(result.lastInsertRowid))
     ));
   } catch (error) {
-    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Пользователь уже существует' });
+    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Користувач уже існує' });
     throw error;
   }
 });
@@ -380,16 +380,16 @@ app.patch('/api/admin/users/:id', {
 }, async (request, reply) => {
   const userId = Number(request.params.id);
   const existing = statements.userById.get(userId);
-  if (!existing) return reply.code(404).send({ error: 'Пользователь не найден' });
+  if (!existing) return reply.code(404).send({ error: 'Користувача не знайдено' });
   const body = parseOrReply(userSchema, request.body, reply);
   if (!body) return;
-  if (!accessDevicesExist(body.access)) return reply.code(400).send({ error: 'Одно из устройств не существует' });
+  if (!accessDevicesExist(body.access)) return reply.code(400).send({ error: 'Один із пристроїв не існує' });
   const removesAdmin = existing.role === 'admin' && existing.enabled && (body.role !== 'admin' || !body.enabled);
   if (removesAdmin && enabledAdminCount() <= 1) {
-    return reply.code(409).send({ error: 'Нельзя отключить последнего администратора' });
+    return reply.code(409).send({ error: 'Не можна вимкнути останнього адміністратора' });
   }
   if (existing.id === request.portalUser.id && !body.enabled) {
-    return reply.code(409).send({ error: 'Нельзя отключить собственную учётную запись' });
+    return reply.code(409).send({ error: 'Не можна вимкнути власний обліковий запис' });
   }
   try {
     db.transaction(() => {
@@ -400,7 +400,7 @@ app.patch('/api/admin/users/:id', {
       replaceUserAccess(userId, body.access);
     })();
   } catch (error) {
-    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Пользователь с таким e-mail уже существует' });
+    if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Користувач із таким e-mail уже існує' });
     throw error;
   }
   audit(request.portalUser.email, 'user.update', 'user', userId, { email: body.email, role: body.role });
@@ -446,7 +446,7 @@ proxy.on('proxyReq', (proxyRequest, request) => {
 proxy.on('error', (error, request, response) => {
   app.log.warn({ err: error, host: request.headers.host }, 'Device proxy error');
   if (response?.writeHead && !response.headersSent) response.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-  if (response?.end) response.end('Устройство временно недоступно');
+  if (response?.end) response.end('Пристрій тимчасово недоступний');
   else response?.destroy?.();
 });
 
@@ -457,16 +457,16 @@ function proxyTarget(device) {
 
 async function proxyHttp(request, reply) {
   const slug = subdomainSlug(request.headers);
-  if (!slug) return reply.code(404).send({ error: 'Unknown portal host' });
+  if (!slug) return reply.code(404).send({ error: 'Невідомий хост порталу' });
   const device = statements.deviceBySlug.get(slug);
-  if (!device || !device.enabled) return reply.code(404).send({ error: 'Устройство не найдено' });
-  if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Нет доступа к устройству' });
+  if (!device || !device.enabled) return reply.code(404).send({ error: 'Пристрій не знайдено' });
+  if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Немає доступу до пристрою' });
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     && request.headers['sec-fetch-site'] === 'cross-site') {
-    return reply.code(403).send({ error: 'Межсайтовый запрос к устройству отклонён' });
+    return reply.code(403).send({ error: 'Міжсайтовий запит до пристрою відхилено' });
   }
   const target = proxyTarget(device);
-  if (!target) return reply.code(503).send({ error: 'Видеошлюз камеры ещё не настроен' });
+  if (!target) return reply.code(503).send({ error: 'Відеошлюз камери ще не налаштовано' });
   request.raw.portalDevice = device;
   reply.hijack();
   proxy.web(request.raw, reply.raw, { target });
@@ -478,7 +478,7 @@ app.route({
   handler: async (request, reply) => {
     if (!isPortalHost(request.headers)) return proxyHttp(request, reply);
     if (request.method === 'GET' || request.method === 'HEAD') return reply.sendFile('index.html');
-    return reply.code(404).send({ error: 'Not found' });
+    return reply.code(404).send({ error: 'Не знайдено' });
   }
 });
 
@@ -505,7 +505,7 @@ app.setErrorHandler((error, request, reply) => {
   const status = Number(error.statusCode) >= 400 && Number(error.statusCode) < 500
     ? Number(error.statusCode)
     : 500;
-  reply.code(status).send({ error: status === 500 ? 'Внутренняя ошибка сервиса' : error.message });
+  reply.code(status).send({ error: status === 500 ? 'Внутрішня помилка сервісу' : error.message });
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
