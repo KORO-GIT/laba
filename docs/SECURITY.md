@@ -21,7 +21,7 @@
 - HTML/API не кешуються; indexing заборонено на рівні meta/header/Caddy.
 - Сервіс слухає лише loopback, працює без Linux capabilities і з systemd sandbox.
 - UFW не відкриває додаткових портів для LABA або пристроїв.
-- Для go2rtc LABA дозволяє лише власну сторінку viewer, `/gateway/ws`, exact HLS-сесійні шляхи та MJPEG snapshot/резервний stream для прив’язаного Mainsail. Ім’я потоку береться з БД на сервері, а будь-який клієнтський `src` ігнорується.
+- Для go2rtc LABA дозволяє лише власну сторінку viewer, exact WebSocket `/gateway/ws` або `/laba-camera/ws`, exact HLS-сесійні шляхи та MJPEG snapshot/резервний stream для прив’язаного Mainsail. Ім’я потоку береться з БД на сервері, а будь-який клієнтський `src` ігнорується.
 - go2rtc запускається без модулів `exec`, `ffmpeg`, `webrtc`, debug та WebUI. RTSP-модуль потрібен лише як клієнт камери відеоспостереження; його сервер вимкнено через `rtsp.listen: ""`.
 - uStreamer читає Logitech C270 у MJPEG 1280×720@30 і слухає тільки `127.0.0.1:8080`. Окремий sandboxed FFmpeg використовує апаратний `h264_v4l2m2m`, кодує 1280×720 приблизно у 2 Мбіт/с і слухає тільки `127.0.0.1:8556`. go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє лише VPS `100.68.61.33`, власний вузол Pi та точну RTSP-камеру `192.168.0.138/32`.
 - Камера, прив’язана до принтера, успадковує його grant. Mainsail отримує її лише через точні same-origin HLS і snapshot-шляхи `/laba-camera/api/*` та `/laba-camera/snapshot`; інші шляхи go2rtc через host принтера не проксіюються.

@@ -200,6 +200,15 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .camera-stage { overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #050605; box-shadow: var(--shadow); }
 .camera-stage video-stream { position: relative; width: 100%; min-height: min(68vh, 760px); display: block; aspect-ratio: 16 / 9; background: #000; }
 .camera-stage video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.camera-embedded { min-width: 0; min-height: 0; overflow: hidden; background: #000; }
+.camera-embedded .noise,
+.camera-embedded .topbar,
+.camera-embedded .camera-heading,
+.camera-embedded .footer,
+.camera-embedded .form-hint { display: none !important; }
+.camera-embedded .camera-shell { width: 100%; padding: 0; }
+.camera-embedded .camera-stage { border: 0; border-radius: 0; box-shadow: none; }
+.camera-embedded .camera-stage video-stream { min-height: 0; height: 100vh; aspect-ratio: 16 / 9; }
 .stream-info { position: absolute; z-index: 2; top: 14px; right: 14px; left: 14px; display: flex; justify-content: space-between; gap: 12px; color: #fff; pointer-events: none; font-size: 11px; font-weight: 800; text-shadow: 0 1px 6px #000; }
 .stream-mode { margin-left: auto; padding: 5px 8px; border-radius: 7px; background: rgba(0,0,0,.58); }
 .stream-status { padding: 5px 8px; color: #ffb0b0; }

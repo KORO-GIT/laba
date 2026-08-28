@@ -117,7 +117,7 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.5.0` додає `devices.stream_mode` і `devices.parent_device_id` до створеної у `0.4.0` колонки `devices.stream_name`. Перед першим запуском цієї версії SQLite backup обов’язковий. Міграція не змінює наявні пристрої та не перебудовує таблицю.
 
-Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на low-latency H.264, додає exact fMP4 HLS proxy для Mainsail і підключає окремий H.264 RTSP-потік камери відеоспостереження.
+Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на low-latency H.264, додає захищений same-origin MSE player з exact HLS fallback для Mainsail і підключає окремий H.264 RTSP-потік камери відеоспостереження.
 
 ## go2rtc на Raspberry Pi
 
@@ -185,7 +185,7 @@ Moonraker/Mainsail отримує same-origin HLS через LABA. Оновлю�
 ```bash
 CAM_UID="$(curl --fail --silent http://192.168.0.70:7125/server/webcams/list | jq -r '.result.webcams[] | select(.name == "LABA USB Camera") | .uid' | head -n 1)"
 test -n "$CAM_UID"
-jq -nc --arg uid "$CAM_UID" '{uid:$uid,name:"LABA USB Camera",location:"printer",service:"hlsstream",enabled:true,target_fps:25,target_fps_idle:5,stream_url:"/laba-camera/api/stream.m3u8",snapshot_url:"/laba-camera/snapshot",flip_horizontal:false,flip_vertical:false,rotation:0,aspect_ratio:"16:9"}' \
+jq -nc --arg uid "$CAM_UID" '{uid:$uid,name:"LABA USB Camera",location:"printer",service:"iframe",enabled:true,target_fps:25,target_fps_idle:5,stream_url:"/laba-camera/player",snapshot_url:"/laba-camera/snapshot",flip_horizontal:false,flip_vertical:false,rotation:0,aspect_ratio:"16:9"}' \
   | curl --fail --request POST http://192.168.0.70:7125/server/webcams/item \
       --header 'Content-Type: application/json' --data-binary @-
 unset CAM_UID
