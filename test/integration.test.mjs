@@ -229,7 +229,7 @@ test('development server serves portal API and protected admin writes', async (c
     headers: { 'X-Forwarded-Host': gatewayHost }
   });
   assert.equal(cameraAsset.status, 200);
-  assert.match(await cameraAsset.text(), /gateway\/ws/);
+  assert.match(await cameraAsset.text(), /gatewayPath.*\/ws/);
 
   const gatewayMeta = await fetch(`${root}/gateway/meta`, {
     headers: { 'X-Forwarded-Host': gatewayHost }
