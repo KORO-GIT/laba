@@ -24,7 +24,10 @@
 ## Cloudflare
 
 - Создать Self-hosted Access application для `laba.zpseapil.club` и частичной wildcard-зоны `*-laba.zpseapil.club` (одна audience) либо две apps и указать обе audience через запятую.
-- Политика Allow должна содержать только нужные e-mail/IdP-группы. Рекомендуется MFA и session duration 8–24 часа.
+- Подключить два login method: существующий Cloudflare IdP и One-time PIN.
+- Политика `LABA authenticated users` использует два Include-правила (OR): точный e-mail bootstrap-администратора и `Login Methods: One-time PIN`. Это позволяет добавлять пользователей только через админку LABA, без ручного изменения Access policy.
+- Правило One-time PIN само по себе принимает любой подтверждённый e-mail. Это намеренно: доступ к данным выдаёт второй независимый барьер — локальный allowlist LABA. Не удалять локальную проверку и не использовать `AUTH_MODE=development` в production.
+- Рекомендуемый session duration — 8–24 часа. Для IdP, поддерживающего MFA, его следует включить.
 - Добавить отдельную WAF/rate-limit политику для `/cdn-cgi/access/login` и административных API, если это поддерживает тариф.
 - DNS `laba` и wildcard `*` должны быть proxied. Точные существующие DNS-записи имеют приоритет; Caddy отклоняет неизвестные wildcard-хосты.
 - SSL/TLS mode — Full (strict). Origin certificate покрывает `*.zpseapil.club`; приватный ключ хранится только на VPS с mode `640`, доступен `root:caddy`.

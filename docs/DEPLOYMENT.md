@@ -17,8 +17,9 @@
 1. DNS: proxied A/AAAA для `laba` и proxied wildcard `*` на origin VPS. Точные существующие записи (`star`, `task`, `scan` и другие) продолжают иметь приоритет.
 2. SSL/TLS: Full (strict).
 3. Origin Server: сертификат на `*.zpseapil.club` и `zpseapil.club`, срок 15 лет.
-4. Access: Self-hosted application для `laba.zpseapil.club` и `*-laba.zpseapil.club`. Политика Allow — только нужные identities, желательно с MFA.
-5. Скопировать Access application audience (AUD) и team domain в server `.env`.
+4. Access: Self-hosted application для `laba.zpseapil.club` и `*-laba.zpseapil.club` с login methods Cloudflare и One-time PIN.
+5. Создать Allow policy `LABA authenticated users` с двумя Include-правилами (OR): точный e-mail bootstrap-администратора и `Login Methods: One-time PIN`. Application должна принимать оба доступных identity provider.
+6. Скопировать Access application audience (AUD) и team domain в server `.env`.
 
 Если portal и device hosts пришлось создать двумя Access applications, `CF_ACCESS_AUD` принимает обе audience через запятую.
 
@@ -73,6 +74,8 @@ openssl rand -base64 32
 ```
 
 Первое значение — `SESSION_SECRET`, второе — `DEVICE_SECRET_KEY`. `BOOTSTRAP_ADMIN_EMAIL` должен точно совпадать с e-mail Cloudflare Access.
+
+После запуска новые пользователи добавляются только через `/admin`: e-mail, роль и назначения устройств хранятся в локальной базе. Access policy для каждого пользователя менять не нужно. One-time PIN подтверждает владение e-mail, а локальный allowlist LABA остаётся авторитетным решением о доступе.
 
 ## Caddy
 
