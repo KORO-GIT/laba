@@ -1,5 +1,5 @@
 [Unit]
-Description=LABA Logitech C270 hardware H.264 encoder
+Description=LABA Logitech C270 low-latency H.264 encoder
 After=network-online.target laba-ustreamer.service
 Wants=network-online.target
 Requires=laba-ustreamer.service
@@ -8,17 +8,14 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 DynamicUser=true
-SupplementaryGroups=video
-ExecStart=/usr/bin/ffmpeg -nostdin -hide_banner -loglevel warning -fflags nobuffer -flags low_delay -analyzeduration 0 -probesize 64K -i http://127.0.0.1:8080/stream -an -vf format=yuv420p -c:v h264_v4l2m2m -b:v 2M -maxrate 2M -bufsize 1M -g 30 -bf 0 -f mpegts -mpegts_flags resend_headers -muxdelay 0 -muxpreload 0 -flush_packets 1 -listen 1 -content_type video/mp2t http://127.0.0.1:8556/stream
+ExecStart=/usr/bin/ffmpeg -nostdin -hide_banner -loglevel warning -fflags nobuffer -flags low_delay -analyzeduration 0 -probesize 64K -i http://127.0.0.1:8080/stream -an -vf format=yuv420p -c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline -level:v 3.1 -x264-params repeat-headers=1 -b:v 2M -maxrate 2M -bufsize 1M -g 13 -keyint_min 13 -sc_threshold 0 -bf 0 -r 25 -fps_mode cfr -f mpegts -mpegts_flags resend_headers -muxdelay 0 -muxpreload 0 -flush_packets 1 -listen 1 -content_type video/mp2t http://127.0.0.1:8556/stream
 Restart=always
 RestartSec=1
 TimeoutStopSec=10
 NoNewPrivileges=true
 MemoryDenyWriteExecute=true
 PrivateTmp=true
-PrivateDevices=false
-DevicePolicy=closed
-DeviceAllow=/dev/video11 rw
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
 ProtectKernelTunables=true

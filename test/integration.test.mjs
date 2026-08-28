@@ -263,7 +263,7 @@ test('development server serves portal API and protected admin writes', async (c
   });
   assert.equal(linkedHlsMaster.status, 200);
   assert.deepEqual(upstreamRequests.at(-1), {
-    url: '/api/stream.m3u8?src=camera-main',
+    url: '/api/stream.m3u8?src=camera-main&mp4',
     authorization: `Basic ${Buffer.from('gateway-user:gateway-pass').toString('base64')}`
   });
 

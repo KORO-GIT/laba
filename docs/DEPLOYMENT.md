@@ -117,7 +117,7 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.5.0` додає `devices.stream_mode` і `devices.parent_device_id` до створеної у `0.4.0` колонки `devices.stream_name`. Перед першим запуском цієї версії SQLite backup обов’язковий. Міграція не змінює наявні пристрої та не перебудовує таблицю.
 
-Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на апаратний H.264, додає exact HLS proxy для Mainsail і підключає окремий H.264 RTSP-потік камери відеоспостереження.
+Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на low-latency H.264, додає exact fMP4 HLS proxy для Mainsail і підключає окремий H.264 RTSP-потік камери відеоспостереження.
 
 ## go2rtc на Raspberry Pi
 
@@ -127,12 +127,12 @@ journalctl -u laba-portal.service -n 80 --no-pager
 359fabade8a7a51e81a55fe6df6b0ef81764a5e1d63179577534eaaa71904b50
 ```
 
-Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. `laba-ustreamer.service` захоплює hardware MJPEG 1280×720@30, вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`. `laba-h264-encoder.service` використовує Raspberry Pi `h264_v4l2m2m`, кодує 1280×720 приблизно у 2 Мбіт/с і слухає тільки `127.0.0.1:8556`. MJPEG залишається другим codec source тільки для snapshot і резервної сумісності.
+Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. `laba-ustreamer.service` захоплює hardware MJPEG 1280×720@30, вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`. `laba-h264-encoder.service` кодує browser-compatible H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с через `libx264 ultrafast/zerolatency`, використовує GOP 13, повторює SPS/PPS на кожному ключовому кадрі та слухає тільки `127.0.0.1:8556`. Це свідомий вибір: Raspberry Pi `h264_v4l2m2m` скидає GOP до 60 кадрів і не дає стабільно сформувати короткі декодовані HLS-сегменти. MJPEG залишається другим codec source тільки для snapshot і резервної сумісності.
 
 Підготовлені файли:
 
 - `deploy/go2rtc/laba-ustreamer.service` — захоплення C270 через hardware MJPEG без мережевої публікації;
-- `deploy/go2rtc/laba-h264-encoder.service` — апаратне H.264-кодування через `/dev/video11` у sandboxed FFmpeg;
+- `deploy/go2rtc/laba-h264-encoder.service` — low-latency H.264-кодування в sandboxed FFmpeg без доступу до відеопристроїв;
 - `deploy/go2rtc/go2rtc.yaml` — API тільки на Tailscale IP Pi `100.69.168.10:1984`, exact allowlist endpoint’ів, без WebUI, RTSP-server, WebRTC, exec і вбудованого ffmpeg;
 - `deploy/go2rtc/go2rtc.service` — DynamicUser, encrypted credentials, IP-фільтр і systemd sandbox;
 - назви потоків — `printer-usb-camera` і `labacam-01`;

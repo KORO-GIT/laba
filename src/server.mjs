@@ -612,7 +612,7 @@ async function proxyHttp(request, reply) {
     if (!isBrowserCamera(camera) || !canOpenDevice(request.portalUser, camera)) {
       return reply.code(404).send({ error: 'Камеру принтера не налаштовано' });
     }
-    request.raw.url = `/api/stream.m3u8?src=${encodeURIComponent(camera.stream_name)}`;
+    request.raw.url = `/api/stream.m3u8?src=${encodeURIComponent(camera.stream_name)}&mp4`;
     request.raw.portalDevice = camera;
     reply.hijack();
     proxy.web(request.raw, reply.raw, { target: proxyTarget(camera) });

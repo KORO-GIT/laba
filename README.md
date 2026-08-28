@@ -34,7 +34,7 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       │ 192.168.0.0/24
                                       ├── 3D-принтери
                                       ├── камери
-                                      └── Logitech C270 → uStreamer → hardware H.264
+                                      └── Logitech C270 → uStreamer → low-latency H.264
                                                            → go2rtc на Tailscale IP Pi
 ```
 
