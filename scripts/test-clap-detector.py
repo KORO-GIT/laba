@@ -43,7 +43,14 @@ def test_music_does_not_trigger() -> None:
 
 def impulse_samples(random_source: random.Random, burst: bool) -> list[float]:
     return [
-        random_source.gauss(0.0, 0.55 if burst and index < 60 else 0.008)
+        random_source.gauss(0.0, 0.55 if burst and index < 100 else 0.008)
+        for index in range(MODULE.FRAME_SAMPLES)
+    ]
+
+
+def electric_arc_samples(random_source: random.Random, burst: bool) -> list[float]:
+    return [
+        (0.65 if index % 2 == 0 else -0.65) if burst and index < 40 else random_source.gauss(0.0, 0.008)
         for index in range(MODULE.FRAME_SAMPLES)
     ]
 
@@ -74,7 +81,35 @@ def test_triple_clap_supersedes_double_clap() -> None:
     assert events == ["clap", "clap-pair", "triple-clap"], events
 
 
+def test_electric_arc_pair_is_rejected() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(19)
+    events: list[str] = []
+    for frame_number in range(250):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 2.42 <= now < 2.44
+        event = detector.process(pcm_frame(electric_arc_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert events == [], events
+
+
+def test_too_fast_pair_is_not_a_gesture() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(23)
+    events: list[str] = []
+    for frame_number in range(250):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 2.22 <= now < 2.24
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert "double-clap" not in events and "triple-clap" not in events, events
+
+
 test_music_does_not_trigger()
 test_double_clap_triggers_once()
 test_triple_clap_supersedes_double_clap()
+test_electric_arc_pair_is_rejected()
+test_too_fast_pair_is_not_a_gesture()
 print("Clap detector tests passed")

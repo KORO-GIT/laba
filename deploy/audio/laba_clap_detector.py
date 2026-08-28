@@ -23,6 +23,8 @@ FRAME_MILLISECONDS = 20
 FRAME_SAMPLES = SAMPLE_RATE * FRAME_MILLISECONDS // 1_000
 FRAME_BYTES = FRAME_SAMPLES * 2
 DEFAULT_SOURCE = "alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.mono-fallback"
+MIN_GESTURE_INTERVAL = 0.35
+MAX_GESTURE_INTERVAL = 0.80
 
 
 class AdaptiveClapDetector:
@@ -56,6 +58,7 @@ class AdaptiveClapDetector:
         high_square_sum = 0.0
         peak = 0.0
         zero_crossings = 0
+        active_samples = 0
         previous = self.previous_sample
         previous_positive = previous >= 0.0
         for sample in samples:
@@ -75,6 +78,10 @@ class AdaptiveClapDetector:
         high_rms = math.sqrt(high_square_sum / len(samples))
         crest = peak / max(rms, 1e-6)
         crossing_ratio = zero_crossings / len(samples)
+        active_threshold = max(0.025, peak * 0.12)
+        active_samples = sum(1 for sample in samples if abs(sample) >= active_threshold)
+        active_ratio = active_samples / len(samples)
+        high_ratio = high_rms / max(rms, 1e-6)
 
         baseline_rms = statistics.median(self.noise_rms) if self.noise_rms else rms
         baseline_high = statistics.median(self.noise_high) if self.noise_high else high_rms
@@ -86,6 +93,8 @@ class AdaptiveClapDetector:
             "baselineHigh": baseline_high,
             "crest": crest,
             "crossingRatio": crossing_ratio,
+            "activeRatio": active_ratio,
+            "highRatio": high_ratio,
         }
         warmed_up = len(self.noise_rms) >= 50
         impulse = (
@@ -97,6 +106,10 @@ class AdaptiveClapDetector:
             and high_rms >= max(0.040, baseline_high * 4.0)
             and crest >= 1.8
             and crossing_ratio >= 0.10
+            # Electrical arcs are usually a very short, unusually HF-heavy
+            # crack. A hand clap occupies more of the 20 ms acoustic frame.
+            and active_ratio >= 0.12
+            and high_ratio <= 1.75
         )
 
         # Only quiet and ordinary frames shape the adaptive background. This
@@ -105,11 +118,11 @@ class AdaptiveClapDetector:
             self.noise_rms.append(rms)
             self.noise_high.append(high_rms)
 
-        if len(self.clap_times) == 2 and now - self.clap_times[-1] > 0.90:
+        if len(self.clap_times) == 2 and now - self.clap_times[-1] > MAX_GESTURE_INTERVAL:
             self.clap_times.clear()
             self.cooldown_until = now + 2.0
             return "double-clap"
-        if len(self.clap_times) == 1 and now - self.clap_times[0] > 0.90:
+        if len(self.clap_times) == 1 and now - self.clap_times[0] > MAX_GESTURE_INTERVAL:
             self.clap_times.clear()
         if not impulse:
             return None
@@ -120,9 +133,9 @@ class AdaptiveClapDetector:
             return "clap"
 
         interval = now - self.clap_times[-1]
-        if interval < 0.16:
+        if interval < MIN_GESTURE_INTERVAL:
             return None
-        if interval > 0.90:
+        if interval > MAX_GESTURE_INTERVAL:
             self.clap_times[:] = [now]
             return "clap"
         self.clap_times.append(now)

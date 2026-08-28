@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.10.0';
+import { initDesktop } from './desktop.js?v=0.10.1';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null };
 const toast = document.querySelector('#toast');
@@ -307,7 +307,7 @@ function renderAudio() {
   const lastGestureName = clap.lastGesture === 'greeting' ? 'привітання' : 'Play / Pause';
   document.querySelector('#clap-details').textContent = lastGesture
     ? `Остання команда: ${lastGestureName}, ${lastGesture}. Подвійних: ${clap.doubleClapCount || 0}, потрійних: ${clap.tripleClapCount || 0}.`
-    : 'Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Інтервал між хлопками: 0,16–0,90 секунди.';
+    : 'Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Тримайте ритм 0,35–0,80 секунди; короткі електричні розряди відсіюються.';
 }
 
 async function loadAudio({ quiet = false } = {}) {
