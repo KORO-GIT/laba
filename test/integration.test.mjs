@@ -75,6 +75,7 @@ test('development server serves portal API and protected admin writes', async (c
   let upstreamUpgradeAuthorization = null;
   const upstreamRequests = [];
   const audioRequests = [];
+  const starlinkRequests = [];
   const audioStatus = {
     version: 1,
     adapter: { available: true, powered: true, discovering: false, pairable: true, name: 'PiLABA4B' },
@@ -88,18 +89,33 @@ test('development server serves portal API and protected admin writes', async (c
     },
     player: { available: false, status: 'Stopped', player: null, title: null, artist: null }
   };
+  const starlinkStatus = {
+    version: 1,
+    connected: true,
+    state: 'CONNECTED',
+    device: { hardwareVersion: 'mini1_panda_prod2', bypassMode: true, uptimeSeconds: 3600 },
+    network: { pingMs: 24.5, downloadMbps: 31.2, uploadMbps: 7.4, ethernetMbps: 1000 },
+    obstruction: { fractionPercent: 3.7, currentlyObstructed: false },
+    gps: { satellites: 12, valid: true, inhibited: false, locationAvailable: false },
+    config: { snowMeltMode: 'AUTO', powerSaveEnabled: false, powerSaveStartMinutesUtc: 0, powerSaveDurationMinutes: 1 },
+    health: { alerts: [], hardwareSelfTestCodes: [] },
+    capabilities: { reboot: true, gpsInhibit: true, powerSave: true, snowMelt: true, clearObstructionMap: true, stow: false },
+    history: { ping: { averageMs: 27.1 }, loss: { averagePercent: 0.2 }, series: { pingMs: [24, 28] }, events: [] }
+  };
   const upstream = http.createServer(async (request, response) => {
     if (request.url.startsWith('/v1/')) {
       let rawBody = '';
       for await (const chunk of request) rawBody += chunk;
-      audioRequests.push({
+      const record = {
         method: request.method,
         url: request.url,
         authorization: request.headers.authorization,
         body: rawBody ? JSON.parse(rawBody) : null
-      });
+      };
+      const isStarlink = request.headers.authorization === 'Bearer test-starlink-agent-token-with-at-least-32-characters';
+      (isStarlink ? starlinkRequests : audioRequests).push(record);
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify(audioStatus));
+      response.end(JSON.stringify(isStarlink ? starlinkStatus : audioStatus));
       return;
     }
     upstreamRequests.push({ url: request.url, authorization: request.headers.authorization });
@@ -142,6 +158,8 @@ test('development server serves portal API and protected admin writes', async (c
       ALLOWED_DEVICE_SUBNETS: '127.0.0.0/8',
       AUDIO_AGENT_URL: `http://127.0.0.1:${upstreamPort}`,
       AUDIO_AGENT_TOKEN: 'test-audio-agent-token-with-at-least-32-characters',
+      STARLINK_AGENT_URL: `http://127.0.0.1:${upstreamPort}`,
+      STARLINK_AGENT_TOKEN: 'test-starlink-agent-token-with-at-least-32-characters',
       DESKTOP_GATEWAY_URL: `http://127.0.0.1:${upstreamPort}`
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -237,6 +255,37 @@ test('development server serves portal API and protected admin writes', async (c
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root }, body: '{}'
   });
   assert.equal(invalidBluetoothAddress.status, 400);
+
+  const starlink = await fetch(`${root}/api/admin/starlink`).then((response) => response.json());
+  assert.equal(starlink.connected, true);
+  assert.equal(starlink.device.bypassMode, true);
+  assert.deepEqual(starlinkRequests.at(-1), {
+    method: 'GET', url: '/v1/status',
+    authorization: 'Bearer test-starlink-agent-token-with-at-least-32-characters', body: null
+  });
+
+  const rejectedStarlinkReboot = await fetch(`${root}/api/admin/starlink/reboot`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true })
+  });
+  assert.equal(rejectedStarlinkReboot.status, 403);
+
+  const invalidStarlinkReboot = await fetch(`${root}/api/admin/starlink/reboot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ confirm: false })
+  });
+  assert.equal(invalidStarlinkReboot.status, 400);
+
+  const rebootedStarlink = await fetch(`${root}/api/admin/starlink/reboot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ confirm: true })
+  });
+  assert.equal(rebootedStarlink.status, 200);
+  assert.deepEqual(starlinkRequests.at(-1), {
+    method: 'POST', url: '/v1/reboot',
+    authorization: 'Bearer test-starlink-agent-token-with-at-least-32-characters', body: { confirm: true }
+  });
 
   const homepage = await fetch(root).then((response) => response.text());
   assert.match(homepage, /Фільтри пристроїв/);

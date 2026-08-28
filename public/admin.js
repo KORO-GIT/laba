@@ -1,8 +1,10 @@
-import { initDesktop } from './desktop.js?v=0.10.1';
+import { initDesktop } from './desktop.js?v=0.11.0';
 
-const state = { me: null, devices: [], users: [], audit: [], audio: null };
+const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');
 let audioPollTimer = null;
+let starlinkPollTimer = null;
+let starlinkLoading = false;
 
 function showToast(message, isError = false) {
   toast.textContent = message;
@@ -332,6 +334,250 @@ async function audioMutation(path, body, successMessage) {
   if (successMessage) showToast(successMessage);
 }
 
+function metric(value, unit, digits = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: digits }).format(number)} ${unit}`;
+}
+
+function formatUptime(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+  return [days ? `${days} дн` : null, `${hours} год`, `${minutes} хв`].filter(Boolean).join(' ');
+}
+
+function kyivUtcOffsetMinutes() {
+  const now = new Date();
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).formatToParts(now).filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const representedUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return Math.round((representedUtc - now.getTime()) / 60_000);
+}
+
+function minutesToTime(minutes) {
+  const normalized = ((Number(minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(normalized / 60)).padStart(2, '0')}:${String(normalized % 60).padStart(2, '0')}`;
+}
+
+function timeToMinutes(value) {
+  const [hours, minutes] = String(value).split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function seriesPath(values, sharedMaximum = null) {
+  const series = Array.isArray(values) ? values.map((value) => value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null) : [];
+  const valid = series.filter((value) => value !== null);
+  if (valid.length < 2) return '';
+  const maximum = Math.max(1, sharedMaximum ?? Math.max(...valid) * 1.08);
+  let drawing = false;
+  return series.map((value, index) => {
+    if (value === null) {
+      drawing = false;
+      return '';
+    }
+    const x = series.length === 1 ? 0 : index * 600 / (series.length - 1);
+    const y = 142 - Math.min(1, Math.max(0, value / maximum)) * 134;
+    const command = drawing ? 'L' : 'M';
+    drawing = true;
+    return `${command}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).filter(Boolean).join(' ');
+}
+
+function renderStarlinkCharts(history) {
+  const series = history?.series || {};
+  const ping = series.pingMs || [];
+  const loss = series.lossPercent || [];
+  document.querySelector('[data-series="ping"]').setAttribute('d', seriesPath(ping));
+  document.querySelector('[data-series="loss"]').setAttribute('d', seriesPath(loss, Math.max(1, ...loss.filter(Number.isFinite))));
+  const download = series.downloadMbps || [];
+  const upload = series.uploadMbps || [];
+  const trafficMaximum = Math.max(1, ...download.filter(Number.isFinite), ...upload.filter(Number.isFinite)) * 1.08;
+  document.querySelector('[data-series="download"]').setAttribute('d', seriesPath(download, trafficMaximum));
+  document.querySelector('[data-series="upload"]').setAttribute('d', seriesPath(upload, trafficMaximum));
+}
+
+function renderStarlinkMap() {
+  const canvas = document.querySelector('#starlink-map');
+  const empty = document.querySelector('#starlink-map-empty');
+  const map = state.starlinkMap;
+  if (!map?.rows || !map?.columns || !Array.isArray(map.snr)) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  const source = document.createElement('canvas');
+  source.width = map.columns;
+  source.height = map.rows;
+  const sourceContext = source.getContext('2d');
+  const image = sourceContext.createImageData(map.columns, map.rows);
+  map.snr.forEach((raw, index) => {
+    const value = Number(raw);
+    const pixel = index * 4;
+    let color;
+    if (!Number.isFinite(value) || value <= -0.75) color = [5, 6, 5, 255];
+    else if (value < 0) color = [19, 23, 19, 255];
+    else if (value < 0.42) color = [242, Math.round(85 + value * 100), 48, 255];
+    else color = [Math.round(50 + value * 30), Math.round(90 + value * 75), Math.round(80 + value * 45), 255];
+    image.data.set(color, pixel);
+  });
+  sourceContext.putImageData(image, 0, 0);
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.save();
+  context.beginPath();
+  context.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
+  context.clip();
+  context.imageSmoothingEnabled = false;
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  context.restore();
+  empty.classList.add('hidden');
+}
+
+function renderStarlinkEvents(events) {
+  const list = document.querySelector('#starlink-event-list');
+  const eventLabels = {
+    EVENT_REASON_NO_SCHEDULE: 'Зміна стану каналу',
+    EVENT_REASON_OBSTRUCTED: 'Перешкода сигналу',
+    EVENT_REASON_NO_DOWNLINK: 'Втрачено downlink',
+    EVENT_REASON_NO_PINGS: 'Немає відповіді на ping',
+    EVENT_REASON_THERMAL_SHUTDOWN: 'Температурне вимкнення'
+  };
+  const rows = [...(events || [])].reverse().map((event) => {
+    const row = el('div', 'starlink-event');
+    const dot = el('span', 'starlink-event-dot');
+    const description = el('div');
+    const reason = eventLabels[event.reason] || String(event.reason || 'Подія Starlink').replace(/^EVENT_REASON_/, '').replaceAll('_', ' ');
+    description.append(el('strong', '', reason), el('small', '', `Тривалість: ${metric(event.durationSeconds, 'с', 1)}`));
+    const time = el('time', '', event.startedAt ? new Date(event.startedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—');
+    row.append(dot, description, time);
+    return row;
+  });
+  list.replaceChildren(...rows);
+  if (!rows.length) list.append(el('p', 'audio-empty', 'За останні 15 хвилин помітних подій не було.'));
+}
+
+function renderStarlink() {
+  const data = state.starlink;
+  if (!data) return;
+  const history = data.history || {};
+  const network = data.network || {};
+  const health = data.health || {};
+  const gps = data.gps || {};
+  const config = data.config || {};
+  const capabilities = data.capabilities || {};
+  const live = document.querySelector('#starlink-live');
+  live.textContent = data.connected ? 'ОНЛАЙН' : String(data.state || 'ОФЛАЙН');
+  live.classList.toggle('online', Boolean(data.connected));
+  live.classList.toggle('offline', !data.connected);
+  document.querySelector('#starlink-ping').textContent = metric(network.pingMs ?? history.ping?.currentMs, 'мс');
+  document.querySelector('#starlink-ping-average').textContent = metric(history.ping?.averageMs, 'мс');
+  document.querySelector('#starlink-p95').textContent = `p95 ${metric(history.ping?.p95Ms, 'мс')}`;
+  document.querySelector('#starlink-loss').textContent = metric(history.loss?.averagePercent, '%', 2);
+  document.querySelector('#starlink-loss-detail').textContent = `${metric(history.loss?.affectedSeconds, 'с', 1)} із втратами`;
+  document.querySelector('#starlink-download').textContent = metric(network.downloadMbps, 'Мбіт/с');
+  document.querySelector('#starlink-download-average').textContent = `середнє ${metric(history.download?.averageMbps, 'Мбіт/с')}`;
+  document.querySelector('#starlink-upload').textContent = metric(network.uploadMbps, 'Мбіт/с');
+  document.querySelector('#starlink-upload-average').textContent = `середнє ${metric(history.upload?.averageMbps, 'Мбіт/с')}`;
+  document.querySelector('#starlink-power').textContent = metric(history.power?.currentWatts, 'Вт');
+  document.querySelector('#starlink-power-average').textContent = `середнє ${metric(history.power?.averageWatts, 'Вт')}`;
+  const usage = (Number(history.download?.usageMegabytes) || 0) + (Number(history.upload?.usageMegabytes) || 0);
+  document.querySelector('#starlink-usage').textContent = `${metric(usage, 'МБ')} за 15 хв`;
+  renderStarlinkCharts(history);
+
+  const device = data.device || {};
+  const orientation = data.orientation || {};
+  document.querySelector('#starlink-model').textContent = device.hardwareVersion || 'Starlink';
+  document.querySelector('#starlink-firmware').textContent = device.softwareVersion || '—';
+  document.querySelector('#starlink-uptime').textContent = formatUptime(device.uptimeSeconds);
+  document.querySelector('#starlink-ethernet').textContent = metric(network.ethernetMbps, 'Мбіт/с', 0);
+  document.querySelector('#starlink-gps-state').textContent = gps.inhibited
+    ? 'Ignore GPS увімкнено'
+    : gps.valid ? `${gps.satellites || 0} супутників` : 'Сигнал GPS невалідний';
+  document.querySelector('#starlink-orientation').textContent = orientation.azimuthDegrees == null
+    ? 'Фіксована Starlink Mini'
+    : `${metric(orientation.azimuthDegrees, '°')} / ${metric(orientation.elevationDegrees, '°')}`;
+  const healthOk = data.connected && !(health.alerts || []).length && health.hardwareSelfTest !== 'FAILED';
+  const healthNode = document.querySelector('#starlink-health');
+  healthNode.textContent = healthOk ? 'НОРМА' : data.connected ? 'УВАГА' : 'НЕМАЄ ЗВ’ЯЗКУ';
+  healthNode.classList.toggle('off', !healthOk);
+  const alerts = [
+    ...(health.alerts || []).map((item) => String(item).replaceAll('_', ' ')),
+    ...(health.hardwareSelfTest === 'FAILED' ? (health.hardwareSelfTestCodes || ['SELF TEST FAILED']) : [])
+  ];
+  const alertNodes = alerts.map((message) => el('span', 'starlink-alert', message));
+  if (!alertNodes.length) alertNodes.push(el('span', 'starlink-alert ok', 'Активних попереджень немає'));
+  document.querySelector('#starlink-alerts').replaceChildren(...alertNodes);
+
+  const obstruction = data.obstruction || {};
+  document.querySelector('#starlink-obstruction').textContent = metric(obstruction.fractionPercent, '%', 2);
+  document.querySelector('#starlink-obstruction-detail').textContent = obstruction.currentlyObstructed
+    ? 'Зараз сигнал перекриває перешкода. Помаранчеві ділянки потребують уваги.'
+    : `Частка перекритого неба: ${metric(obstruction.fractionPercent, '%', 2)}. Помаранчеві ділянки — потенційні перешкоди.`;
+
+  const gpsInput = document.querySelector('#starlink-gps-inhibit');
+  gpsInput.disabled = !capabilities.gpsInhibit;
+  gpsInput.checked = Boolean(gps.inhibited);
+  document.querySelector('#starlink-gps-label').textContent = gps.inhibited ? 'Увімкнено' : 'Вимкнено';
+  const snow = document.querySelector('#starlink-snow-mode');
+  if (document.activeElement !== snow) snow.value = config.snowMeltMode || 'AUTO';
+  snow.disabled = !capabilities.snowMelt;
+  document.querySelector('#starlink-apply-snow').disabled = !capabilities.snowMelt;
+  const sleepEnabled = document.querySelector('#starlink-sleep-enabled');
+  sleepEnabled.checked = Boolean(config.powerSaveEnabled);
+  sleepEnabled.disabled = !capabilities.powerSave;
+  const start = document.querySelector('#starlink-sleep-start');
+  if (document.activeElement !== start) start.value = minutesToTime((config.powerSaveStartMinutesUtc || 0) + kyivUtcOffsetMinutes());
+  const duration = document.querySelector('#starlink-sleep-duration');
+  if (document.activeElement !== duration) duration.value = String(config.powerSaveDurationMinutes || 60);
+  start.disabled = duration.disabled = !capabilities.powerSave;
+  document.querySelector('#starlink-apply-sleep').disabled = !capabilities.powerSave;
+  document.querySelector('#starlink-stow-controls').classList.toggle('hidden', !capabilities.stow);
+  renderStarlinkEvents(history.events);
+}
+
+async function loadStarlink({ quiet = false, includeMap = false } = {}) {
+  if (starlinkLoading) return;
+  starlinkLoading = true;
+  try {
+    const [status, map] = await Promise.all([
+      api('/api/admin/starlink'),
+      includeMap && !state.starlinkMap ? api('/api/admin/starlink/obstruction-map') : Promise.resolve(null)
+    ]);
+    state.starlink = status;
+    if (map) state.starlinkMap = map;
+    renderStarlink();
+    renderStarlinkMap();
+  } catch (error) {
+    const live = document.querySelector('#starlink-live');
+    live.textContent = 'НЕМАЄ ЗВ’ЯЗКУ';
+    live.classList.remove('online');
+    live.classList.add('offline');
+    if (!quiet) showToast(error.message, true);
+  } finally {
+    starlinkLoading = false;
+  }
+}
+
+function startStarlinkPolling() {
+  clearInterval(starlinkPollTimer);
+  starlinkPollTimer = setInterval(() => {
+    if (document.querySelector('#panel-starlink').classList.contains('active')) loadStarlink({ quiet: true });
+  }, 5_000);
+}
+
+async function starlinkMutation(path, body, successMessage) {
+  const result = await api(path, { method: 'POST', body: JSON.stringify(body) });
+  if (result?.version === 1) {
+    state.starlink = result;
+    renderStarlink();
+  }
+  if (successMessage) showToast(successMessage);
+  return result;
+}
+
 function renderUsers(selectedId = Number(document.querySelector('#user-id').value || 0)) {
   const list = document.querySelector('#user-list');
   list.replaceChildren(...state.users.map((user) => recordButton({
@@ -437,6 +683,10 @@ function actionLabel(action) {
     'audio.bluetooth.connect': 'Bluetooth під’єднано', 'audio.bluetooth.disconnect': 'Bluetooth від’єднано',
     'audio.bluetooth.remove': 'Bluetooth-пристрій видалено', 'audio.volume': 'Гучність змінено',
     'audio.mute': 'Mute змінено', 'audio.default-sink': 'Аудіовихід змінено',
+    'starlink.reboot': 'Starlink перезавантажено', 'starlink.gps': 'Starlink Ignore GPS змінено',
+    'starlink.power-save': 'Розклад сну Starlink змінено', 'starlink.snow-melt': 'Підігрів Starlink змінено',
+    'starlink.clear-obstruction-map': 'Карту перешкод очищено', 'starlink.stow': 'Starlink складено',
+    'starlink.unstow': 'Starlink розкладено',
     'desktop.connect': 'Віддалений робочий стіл відкрито'
   }[action] || action;
 }
@@ -467,6 +717,7 @@ document.querySelectorAll('.admin-tab').forEach((button) => {
     button.classList.add('active');
     document.querySelector(`#panel-${button.dataset.panel}`).classList.add('active');
     if (button.dataset.panel === 'audio') await loadAudio();
+    if (button.dataset.panel === 'starlink') await loadStarlink({ includeMap: true });
     if (button.dataset.panel === 'audit') await loadAudit().catch((error) => showToast(error.message, true));
   });
 });
@@ -518,6 +769,70 @@ document.querySelectorAll('[data-player-action]').forEach((button) => button.add
   try { await audioMutation('/api/admin/audio/player', { action: button.dataset.playerAction }); }
   catch (error) { showToast(error.message, true); }
 }));
+document.querySelector('#refresh-starlink').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
+  try { await loadStarlink({ includeMap: true }); showToast('Дані Starlink оновлено'); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#starlink-gps-inhibit').addEventListener('change', async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    await starlinkMutation('/api/admin/starlink/gps', { inhibited: event.currentTarget.checked }, 'Налаштування GPS оновлено');
+  } catch (error) {
+    showToast(error.message, true);
+    await loadStarlink({ quiet: true });
+  } finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#starlink-apply-snow').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    await starlinkMutation('/api/admin/starlink/snow-melt', { mode: document.querySelector('#starlink-snow-mode').value }, 'Режим підігріву оновлено');
+  } catch (error) { showToast(error.message, true); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#starlink-apply-sleep').addEventListener('click', async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    const localMinutes = timeToMinutes(document.querySelector('#starlink-sleep-start').value);
+    const startMinutesUtc = ((localMinutes - kyivUtcOffsetMinutes()) % 1440 + 1440) % 1440;
+    await starlinkMutation('/api/admin/starlink/power-save', {
+      enabled: document.querySelector('#starlink-sleep-enabled').checked,
+      startMinutesUtc,
+      durationMinutes: Number(document.querySelector('#starlink-sleep-duration').value)
+    }, 'Розклад сну Starlink оновлено');
+  } catch (error) { showToast(error.message, true); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#starlink-clear-map').addEventListener('click', async (event) => {
+  if (!window.confirm('Очистити накопичену карту перешкод? Starlink почне будувати її заново.')) return;
+  event.currentTarget.disabled = true;
+  try {
+    await starlinkMutation('/api/admin/starlink/clear-obstruction-map', { confirm: true }, 'Карту перешкод очищено');
+    state.starlinkMap = null;
+    document.querySelector('#starlink-map-empty').textContent = 'Карта будується заново…';
+    renderStarlinkMap();
+  } catch (error) { showToast(error.message, true); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#starlink-reboot').addEventListener('click', async (event) => {
+  if (!window.confirm('Перезавантажити тарілку Starlink? Інтернет у лабораторії тимчасово зникне.')) return;
+  event.currentTarget.disabled = true;
+  try { await starlinkMutation('/api/admin/starlink/reboot', { confirm: true }, 'Команду перезавантаження надіслано'); }
+  catch (error) { showToast(error.message, true); }
+  finally { event.currentTarget.disabled = false; }
+});
+['stow', 'unstow'].forEach((action) => {
+  document.querySelector(`#starlink-${action}`).addEventListener('click', async (event) => {
+    const label = action === 'stow' ? 'скласти' : 'розкласти';
+    if (!window.confirm(`Справді ${label} тарілку Starlink?`)) return;
+    event.currentTarget.disabled = true;
+    try {
+      await starlinkMutation(`/api/admin/starlink/${action}`, { confirm: true }, `Команду «${label}» надіслано`);
+      await loadStarlink({ quiet: true });
+    } catch (error) { showToast(error.message, true); }
+    finally { event.currentTarget.disabled = false; }
+  });
+});
 document.querySelectorAll('[data-close-editor]').forEach((button) => button.addEventListener('click', () => button.closest('form').classList.add('hidden')));
 
 async function start() {
@@ -528,6 +843,7 @@ async function start() {
     initDesktop({ showToast });
     await Promise.all([loadDevices(), loadUsers()]);
     startAudioPolling();
+    startStarlinkPolling();
   } catch (error) { showToast(error.message, true); }
 }
 

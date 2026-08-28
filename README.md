@@ -12,6 +12,7 @@
 - журнал адміністративних змін;
 - адміністративне керування Bluetooth Raspberry Pi: живлення, пошук, pairing, trust, підключення та видалення пристроїв;
 - керування PipeWire-виходом, гучністю, mute та сумісним MPRIS-програвачем;
+- окрема вкладка Starlink: live-стан, 15-хвилинні графіки ping/втрат/швидкості/живлення, карта перешкод, події та allowlisted керування;
 - локальний VNC до Raspberry Pi та адміністраторський noVNC-сеанс через LABA за окремою кнопкою;
 - вхід через Cloudflare Access (OTP/OAuth/MFA та захист від перебору на edge);
 - додатковий локальний allowlist: однієї успішної авторизації Cloudflare недостатньо;
@@ -40,6 +41,8 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       ├── Logitech C270 → uStreamer → low-latency H.264
                                                            → go2rtc на Tailscale IP Pi
                                       ├── BlueZ + PipeWire ← приватний LABA audio agent
+                                      ├── Starlink Mini `192.168.100.1:9200`
+                                      │                 ← приватний LABA Starlink agent
                                       └── WayVNC :5900 (LAN TLS)
                                                  :5901 (тільки VPS) ← loopback websockify ← noVNC
 ```
@@ -116,6 +119,12 @@ LABA віддає власну сторінку MSE-плеєра, серверн
 Браузер не звертається до Raspberry Pi напряму. LABA на VPS перевіряє роль, same-origin/CSRF, rate limit і журналює зміну, після чого звертається до окремого агента через Tailscale. Агент не приймає shell-команди та підтримує лише фіксований список операцій BlueZ, PipeWire і MPRIS.
 
 YouTube Music поки не запускається на Pi. Офіційний [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) відтворює звук у браузері користувача, а не на серверному Raspberry Pi; офіційного server-side playback API для виведення у Bluetooth-колонку немає. Неофіційне вилучення аудіопотоку навмисно не встановлено.
+
+## Starlink
+
+Адміністратор відкриває `/admin` → `Starlink`. Панель показує поточний і середній ping, p95, втрати, download/upload, споживання трафіку та живлення за 15 хвилин, стан Ethernet/GPS, прошивку, час роботи, події й карту перешкод. Доступні лише свідомо дозволені команди: Ignore GPS, режим сну, підігрів, очищення карти та підтверджене перезавантаження. Укладання відображається тільки для тарілки з приводами; Starlink Mini його не має.
+
+Starlink працює у bypass-режимі, тому дані вимкненого фірмового роутера/Wi-Fi недоступні. Raspberry Pi звертається безпосередньо до локального gRPC endpoint тарілки `192.168.100.1:9200`. Це не офіційне публічне API SpaceX, тому команда або поле може змінитися після оновлення прошивки. Endpoint не публікується: приватний агент слухає тільки Tailscale IP Pi `100.69.168.10:1986`, приймає лише VPS і окремий bearer credential, а довільні gRPC-методи не проксіює.
 
 ## Робочий стіл Raspberry Pi
 

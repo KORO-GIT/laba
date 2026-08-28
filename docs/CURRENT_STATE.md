@@ -1,11 +1,11 @@
 # Поточний стан LABA
 
-Актуально на 2026-08-28. Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
+Актуально на 2026-08-29. Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
 
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.8.1`.
+- Поточна версія застосунку: `0.11.0`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
@@ -49,6 +49,8 @@ Cloudflare підтверджує e-mail, але остаточний досту
 
 VPS приймає маршрут `192.168.0.0/24`. Порти принтерів і камер не відкриваються у UFW або напряму в інтернет.
 
+Starlink Mini працює в bypass-режимі; фірмовий роутер вимкнений. Raspberry Pi напряму досягає management IP тарілки `192.168.100.1`, локальний gRPC endpoint `192.168.100.1:9200` відповідає. Цей endpoint не оголошується через Caddy/UFW і доступний LABA тільки через приватний agent.
+
 ## Пристрої
 
 Поточний 3D-принтер:
@@ -81,6 +83,14 @@ WebSocket Mainsail проходить через LABA: портал переві
 На Pi активний `laba-audio-agent.service`. Він слухає тільки Tailscale IP `100.69.168.10:1985`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і не виконує shell. Credential Pi зашифрований у `/etc/credstore.encrypted/laba-audio-agent-token`; plaintext-копії після deployment видалені. `playerctl` встановлено, PipeWire/WirePlumber активні, Logitech C270 доступна як mono source. Адаптивний детектор локально слухає exact PipeWire source C270: два чіткі хлопки виконують MPRIS `play-pause`, а три — приглушують активний MPRIS-програвач до 35%, локально відтворюють «Бажаю здоров'я!» і повертають точну попередню гучність. Інтервал між хлопками — `0,35–0,80` секунди; короткі HF-heavy імпульси електричної мухобойки відсіюються за тривалістю та спектральним співвідношенням. Після жесту імпульси ігноруються 2 секунди. Bluetooth-контролер `PiLABA4B` увімкнений, а EDIFIER R1080BT підключена й обрана активним аудіовиходом.
 
 YouTube Music не встановлено: офіційний IFrame API відтворює медіа в браузері користувача, а офіційного server-side playback API для подачі звуку з Pi у Bluetooth-колонку немає. MPRIS-кнопки вже готові для локального програвача; вибір між браузерним відтворенням і неофіційним headless-рішенням потрібно зробити окремо.
+
+## Starlink
+
+В адмінпанелі `/admin` є вкладка `Starlink`. Вона показує live ping/download/upload, 15-хвилинні середні/p95/втрати/трафік/живлення, прошивку, uptime, Ethernet/GPS/health, події та карту перешкод. Керування обмежено Ignore GPS, power-save schedule, snow-melt, clear-map і підтвердженим reboot. Stow/unstow capability-gated і для поточної Starlink Mini приховано, оскільки `hasActuators: HAS_ACTUATORS_NO`.
+
+На Pi `laba-starlink-agent.service` слухає лише Tailscale IP `100.69.168.10:1986`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і звертається тільки до `192.168.100.1:9200`. Agent використовує pinned/checksummed `grpcurl 1.9.3`, не запускає shell і не приймає довільні method/payload. Credential зашифрований у `/etc/credstore.encrypted/laba-starlink-agent-token`; plaintext-копії після deployment видалені.
+
+Остання live-перевірка до deployment: hardware `mini1_panda_prod2`, firmware `2026.08.13.mr84512`, API version `42`, bypass підтверджено, Ethernet `1000 Мбіт/с`, перешкоди близько `3,72%`; історія містить 900 односекундних samples. Запит точних координат повертає `PermissionDenied: Disabled due to policy`, тому LABA показує лише доступність/стан GPS. Bypass означає, що статистики фірмового роутера й Wi-Fi немає.
 
 ## Віддалений робочий стіл
 
@@ -119,4 +129,4 @@ LABA використовує окремі точний і wildcard-блоки C
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 
-Остання перевірка: LABA, `laba-audio-agent`, PipeWire, BlueZ, Caddy, `koro-*`, Signal sync і `tailscaled` були active; audio agent повернув HTTP 200 лише з VPS через Tailscale; короткий Bluetooth discovery завершився штатно; живий `/admin` показав вкладку «Аудіо»; `npm test` — 6/6; `npm audit --omit=dev` — 0 відомих вразливостей.
+Остання локальна перевірка: `npm run check` успішний; unit-тести нормалізації Starlink і детектора хлопків пройшли; `npm test` — 6/6. Production-статус Starlink agent і живої вкладки треба зафіксувати після deployment `0.11.0`.

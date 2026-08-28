@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.10.1">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.11.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -31,6 +31,7 @@
     <nav class="admin-tabs" aria-label="Розділи адміністрування">
       <button class="admin-tab active" data-panel="devices" type="button">Пристрої</button>
       <button class="admin-tab" data-panel="audio" type="button">Аудіо</button>
+      <button class="admin-tab" data-panel="starlink" type="button">Starlink</button>
       <button class="admin-tab" data-panel="desktop" type="button">Робочий стіл</button>
       <button class="admin-tab" data-panel="users" type="button">Користувачі</button>
       <button class="admin-tab" data-panel="audit" type="button">Журнал</button>
@@ -134,6 +135,99 @@
       </div>
     </section>
 
+    <section id="panel-starlink" class="admin-panel">
+      <div class="panel-toolbar starlink-toolbar">
+        <div>
+          <p class="eyebrow">STARLINK MINI · BYPASS</p>
+          <h2>Супутниковий інтернет</h2>
+          <p>Телеметрія тарілки за останні 15 хвилин та безпечне локальне керування.</p>
+        </div>
+        <div class="starlink-toolbar-actions">
+          <span id="starlink-live" class="status-pill">ПІДКЛЮЧЕННЯ</span>
+          <button id="refresh-starlink" class="button button-ghost" type="button">Оновити</button>
+        </div>
+      </div>
+
+      <div class="starlink-metrics" aria-live="polite">
+        <article class="starlink-metric starlink-metric-primary"><span>Поточний ping</span><strong id="starlink-ping">—</strong><small>до Starlink PoP</small></article>
+        <article class="starlink-metric"><span>Середній ping</span><strong id="starlink-ping-average">—</strong><small>за 15 хвилин</small></article>
+        <article class="starlink-metric"><span>Втрати пакетів</span><strong id="starlink-loss">—</strong><small id="starlink-loss-detail">за 15 хвилин</small></article>
+        <article class="starlink-metric"><span>Завантаження</span><strong id="starlink-download">—</strong><small id="starlink-download-average">середнє —</small></article>
+        <article class="starlink-metric"><span>Вивантаження</span><strong id="starlink-upload">—</strong><small id="starlink-upload-average">середнє —</small></article>
+        <article class="starlink-metric"><span>Живлення</span><strong id="starlink-power">—</strong><small id="starlink-power-average">середнє —</small></article>
+      </div>
+
+      <div class="starlink-chart-grid">
+        <article class="editor-card starlink-chart-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">ЗАТРИМКА</p><h3>Ping та втрати</h3></div><span id="starlink-p95" class="starlink-chart-value">p95 —</span></div>
+          <svg id="starlink-ping-chart" class="starlink-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Графік ping за 15 хвилин"><path class="chart-grid" d="M0 25H600M0 75H600M0 125H600"></path><path data-series="ping" class="chart-line chart-line-primary"></path><path data-series="loss" class="chart-line chart-line-danger"></path></svg>
+          <div class="starlink-legend"><span><i class="legend-ping"></i>Ping, мс</span><span><i class="legend-loss"></i>Втрати, %</span><small>15 хв тому → зараз</small></div>
+        </article>
+        <article class="editor-card starlink-chart-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">ТРАФІК</p><h3>Швидкість каналу</h3></div><span id="starlink-usage" class="starlink-chart-value">— МБ</span></div>
+          <svg id="starlink-throughput-chart" class="starlink-chart" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Графік швидкості Starlink за 15 хвилин"><path class="chart-grid" d="M0 25H600M0 75H600M0 125H600"></path><path data-series="download" class="chart-line chart-line-primary"></path><path data-series="upload" class="chart-line chart-line-secondary"></path></svg>
+          <div class="starlink-legend"><span><i class="legend-download"></i>Download</span><span><i class="legend-upload"></i>Upload</span><small>Мбіт/с</small></div>
+        </article>
+      </div>
+
+      <div class="starlink-detail-grid">
+        <article class="editor-card starlink-info-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">ТАРІЛКА</p><h3>Стан системи</h3></div><span id="starlink-health" class="record-state off">ОЧІКУВАННЯ</span></div>
+          <dl class="starlink-info-list">
+            <div><dt>Модель</dt><dd id="starlink-model">—</dd></div>
+            <div><dt>Прошивка</dt><dd id="starlink-firmware">—</dd></div>
+            <div><dt>Час роботи</dt><dd id="starlink-uptime">—</dd></div>
+            <div><dt>Ethernet</dt><dd id="starlink-ethernet">—</dd></div>
+            <div><dt>GPS</dt><dd id="starlink-gps-state">—</dd></div>
+            <div><dt>Орієнтація</dt><dd id="starlink-orientation">—</dd></div>
+          </dl>
+          <div id="starlink-alerts" class="starlink-alerts"></div>
+        </article>
+
+        <article class="editor-card starlink-map-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">ОГЛЯД НЕБА</p><h3>Карта перешкод</h3></div><strong id="starlink-obstruction">—</strong></div>
+          <div class="starlink-map-wrap"><canvas id="starlink-map" width="492" height="492" aria-label="Карта перешкод Starlink"></canvas><div id="starlink-map-empty" class="starlink-map-empty">Завантаження карти…</div></div>
+          <p id="starlink-obstruction-detail" class="starlink-map-caption">Помаранчеві ділянки — перешкоди, темні — чисте небо.</p>
+        </article>
+      </div>
+
+      <div class="starlink-detail-grid">
+        <article class="editor-card starlink-controls-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">КЕРУВАННЯ</p><h3>Налаштування тарілки</h3></div></div>
+          <div class="starlink-control-row">
+            <div><strong>Ignore GPS</strong><small>Забороняє тарілці використовувати GPS.</small></div>
+            <label class="switch-row"><input id="starlink-gps-inhibit" type="checkbox"><span class="switch"></span><span id="starlink-gps-label">Вимкнено</span></label>
+          </div>
+          <div class="starlink-control-row starlink-control-form">
+            <div><strong>Підігрів</strong><small>Автоматичний режим рекомендований.</small></div>
+            <select id="starlink-snow-mode"><option value="AUTO">Автоматично</option><option value="ALWAYS_ON">Завжди увімкнено</option><option value="ALWAYS_OFF">Завжди вимкнено</option></select>
+            <button id="starlink-apply-snow" class="button button-ghost" type="button">Застосувати</button>
+          </div>
+          <div class="starlink-control-row starlink-sleep-control">
+            <div><strong>Режим сну</strong><small>Розклад задається за київським часом.</small></div>
+            <label class="switch-row"><input id="starlink-sleep-enabled" type="checkbox"><span class="switch"></span><span>Активний</span></label>
+            <label class="field"><span>Початок</span><input id="starlink-sleep-start" type="time" value="03:00"></label>
+            <label class="field"><span>Тривалість, хв</span><input id="starlink-sleep-duration" type="number" min="1" max="1440" value="60"></label>
+            <button id="starlink-apply-sleep" class="button button-ghost" type="button">Застосувати</button>
+          </div>
+          <div id="starlink-stow-controls" class="starlink-danger-actions hidden">
+            <button id="starlink-stow" class="button button-ghost" type="button">Скласти тарілку</button>
+            <button id="starlink-unstow" class="button button-ghost" type="button">Розкласти тарілку</button>
+          </div>
+          <div class="starlink-danger-actions">
+            <button id="starlink-clear-map" class="button button-ghost" type="button">Очистити карту перешкод</button>
+            <button id="starlink-reboot" class="button button-danger" type="button">Перезавантажити Starlink</button>
+          </div>
+          <p class="form-hint">Команди надсилаються напряму до тарілки через Raspberry Pi. Перезавантаження тимчасово перерве інтернет у лабораторії.</p>
+        </article>
+
+        <article class="editor-card starlink-events-card">
+          <div class="starlink-card-heading"><div><p class="eyebrow">ПОДІЇ</p><h3>Останні зміни зв’язку</h3></div><span>15 хв</span></div>
+          <div id="starlink-event-list" class="starlink-event-list"><p class="audio-empty">Подій ще немає.</p></div>
+        </article>
+      </div>
+    </section>
+
     <section id="panel-desktop" class="admin-panel">
       <div class="panel-toolbar desktop-toolbar">
         <div>
@@ -210,6 +304,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.10.1"></script>
+  <script type="module" src="/assets/admin.js?v=0.11.0"></script>
 </body>
 </html>

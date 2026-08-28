@@ -133,6 +133,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.10.1` звужує ритм жесту до `0,35–0,80` секунди та додає часово-спектральний anti-spark фільтр, щоб подвійний розряд електричної мухобойки не виконував `play-pause`.
 
+Версія `0.11.0` не змінює схему БД. Вона додає admin-only вкладку Starlink, 15-хвилинну телеметрію та карту перешкод, а також приватний Starlink agent на Raspberry Pi. Agent використовує pinned `grpcurl` для локального endpoint тарілки, доступний лише VPS через Tailscale і проксіює тільки фіксований безпечний список операцій.
+
 ## Робочий стіл Raspberry Pi
 
 WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурації та browser-only unit на Pi:
@@ -258,6 +260,62 @@ node --env-file=/opt/laba/.env -e "fetch(process.env.AUDIO_AGENT_URL + '/v1/stat
 ```
 
 Очікується HTTP `200`, `adapter.available: true` і `audio.available: true`. `player.available: false` є нормальним станом, доки на Pi не запущено MPRIS-сумісний програвач. Порт `1985` не відкривати в LAN/UFW і не проксіювати через Caddy.
+
+## Starlink agent на Raspberry Pi
+
+Starlink Mini працює в bypass-режимі. Raspberry Pi має прямий маршрут до локального endpoint тарілки `192.168.100.1:9200`; вимкнений Starlink Router у схемі не бере участі. Перед встановленням перевірити маршрут без внесення змін:
+
+```bash
+ping -c 3 192.168.100.1
+timeout 3 bash -c 'exec 3<>/dev/tcp/192.168.100.1/9200'
+```
+
+Agent працює як `laba-starlink-agent.service` від користувача `korob`, слухає лише `100.69.168.10:1986` і приймає запити лише від VPS `100.68.61.33`. Спочатку з VPS скопіювати файли до Pi:
+
+```bash
+scp /opt/laba/deploy/starlink/laba-starlink-agent.py \
+  /opt/laba/deploy/starlink/laba_starlink_model.py \
+  /opt/laba/deploy/starlink/laba-starlink-agent.service \
+  /opt/laba/deploy/starlink/install-grpcurl.sh \
+  korob@192.168.0.63:/tmp/
+scp /opt/laba/deploy/starlink/provision-token.py \
+  korob@192.168.0.63:/tmp/laba-starlink-provision-token.py
+```
+
+На Raspberry Pi встановити exact `grpcurl 1.9.3` для Linux ARM64. Скрипт завантажує офіційний архів лише через HTTPS та перевіряє SHA-256 `b20a00c1cb82ab81ec32696766d4076e99b4cb5ca0823a71767ba64dbea0f263`:
+
+```bash
+sudo /bin/sh /tmp/install-grpcurl.sh
+sudo install -d -o root -g root -m 0755 /opt/laba-starlink-agent
+sudo install -o root -g root -m 0755 /tmp/laba-starlink-agent.py /opt/laba-starlink-agent/laba-starlink-agent.py
+sudo install -o root -g root -m 0644 /tmp/laba_starlink_model.py /opt/laba-starlink-agent/laba_starlink_model.py
+sudo install -o root -g root -m 0644 /tmp/laba-starlink-agent.service /etc/systemd/system/laba-starlink-agent.service
+sudo python3 /tmp/laba-starlink-provision-token.py
+sudo systemd-analyze verify /etc/systemd/system/laba-starlink-agent.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now laba-starlink-agent.service
+systemctl is-active laba-starlink-agent.service
+ss -lnt | grep '100.69.168.10:1986'
+```
+
+Після успішного запуску з VPS перенести тимчасовий token у `.env`, не виводячи його значення, і видалити plaintext-копії:
+
+```bash
+scp korob@192.168.0.63:/tmp/laba-starlink-agent-token /tmp/laba-starlink-agent-token
+node /opt/laba/scripts/configure-starlink-agent.mjs /tmp/laba-starlink-agent-token
+rm -- /tmp/laba-starlink-agent-token
+ssh korob@192.168.0.63 'sudo rm -f /tmp/laba-starlink-agent-token /tmp/laba-starlink-agent.py /tmp/laba_starlink_model.py /tmp/laba-starlink-agent.service /tmp/install-grpcurl.sh /tmp/laba-starlink-provision-token.py'
+systemctl restart laba-portal.service
+systemctl is-active laba-portal.service
+```
+
+`configure-starlink-agent.mjs` додає `STARLINK_AGENT_URL=http://100.69.168.10:1986`, записує bearer у `STARLINK_AGENT_TOKEN` і залишає `/opt/laba/.env` з mode `0600`. Production-валидація не дозволяє запустити LABA `0.11.0` без цих параметрів. Read-only перевірка з VPS:
+
+```bash
+node --env-file=/opt/laba/.env -e "fetch(process.env.STARLINK_AGENT_URL + '/v1/status', { headers: { Authorization: 'Bearer ' + process.env.STARLINK_AGENT_TOKEN } }).then(async (response) => { const status = await response.json(); console.log(response.status); console.log(JSON.stringify({ connected: status.connected, state: status.state, model: status.device?.hardwareVersion, bypass: status.device?.bypassMode, pingMs: status.network?.pingMs, obstructionPercent: status.obstruction?.fractionPercent }, null, 2)); if (!response.ok) process.exit(1); }).catch((error) => { console.error(error.message); process.exit(1); })"
+```
+
+Очікується HTTP `200`, `connected: true`, `bypass: true`. Порт `1986` не відкривати в LAN/UFW і не проксіювати через Caddy. Локальний gRPC API Starlink не є офіційним стабільним API; після оновлення firmware спочатку перевіряти лише status/map. Точні координати на поточній firmware заборонені політикою, а Starlink Mini не має приводів, тому LABA приховує stow/unstow.
 
 ## go2rtc на Raspberry Pi
 

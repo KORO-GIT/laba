@@ -9,6 +9,7 @@
 5. Browser-viewer камери звертається до go2rtc на точному Tailscale IP Raspberry Pi `100.69.168.10`; локальна адреса USB-джерела та пароль go2rtc не передаються до браузера.
 6. Bluetooth/Audio-запити доступні лише адміністратору. VPS звертається до audio agent на точному Tailscale IP Pi `100.69.168.10:1985` з окремим bearer credential; агент приймає лише джерело `100.68.61.33`.
 7. WayVNC слухає зарезервовану LAN-адресу Pi: TLS/PAM endpoint `192.168.0.63:5900` для локальних VNC-клієнтів і окремий PAM endpoint `192.168.0.63:5901` лише для VPS. Віддалений браузерний доступ проходить через admin-only WebSocket LABA та `websockify` на loopback VPS `127.0.0.1:6080`.
+8. Starlink-запити доступні лише адміністратору. VPS звертається до Starlink agent на точному Tailscale IP Pi `100.69.168.10:1986` з окремим bearer credential; agent приймає лише джерело `100.68.61.33`, а сам звертається тільки до тарілки `192.168.100.1:9200`.
 
 Портал не довіряє лише заголовку `Cf-Access-Authenticated-User-Email`: використовується підписаний `Cf-Access-Jwt-Assertion`, перевіряються RS256, issuer та audience.
 
@@ -29,6 +30,7 @@
 - uStreamer читає Logitech C270 у MJPEG 1280×720@30 і слухає тільки `127.0.0.1:8080`. Окремий sandboxed FFmpeg використовує `libx264 ultrafast/zerolatency`, кодує H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с з GOP 13 і слухає тільки `127.0.0.1:8556`. go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє лише VPS `100.68.61.33`, власний вузол Pi та точну RTSP-камеру `192.168.0.138/32`.
 - Камера, прив’язана до принтера, успадковує його grant. Mainsail отримує основний H.264/MSE потік через exact same-origin `/webcam/laba/*`; точні HLS і snapshot-шляхи `/laba-camera/api/*` та `/laba-camera/snapshot` залишаються fallback. Інші шляхи go2rtc через host принтера не проксіюються.
 - Audio agent слухає лише Tailscale IP, додатково обмежений systemd `IPAddressAllow`, bearer credential і rate limit. Він формує `argv` тільки з allowlist команд та валідованих MAC/node/action, не запускає shell і не приймає довільні шляхи або команди.
+- Starlink agent слухає лише Tailscale IP, має systemd IP policy для exact VPS/dish, окремий зашифрований credential, rate limit, обмеження розміру/часу відповіді й не запускає shell. `grpcurl` зафіксований за версією та SHA-256. Agent не приймає довільний gRPC payload: доступні тільки status/history/config/diagnostics/map, reboot, GPS inhibit, power-save, snow-melt, clear-map та capability-gated stow. Factory reset, RF inhibit, fuse, debug і test-команди не експонуються.
 - Усі Bluetooth/Audio write API вимагають роль `admin`, same-origin, `X-Portal-Request`, мають окремі rate limits і записуються до адміністративного аудиту. Статус не містить bearer credential.
 - Детектор хлопків читає PCM тільки локально через exact PipeWire node Logitech C270. Аудіо не записується на диск, не передається у LABA або мережу й обробляється блоками по 20 мс. Anti-spark фільтр відсіює надкороткі HF-heavy імпульси, а жест вимагає ритму `0,35–0,80` секунди. Подвійний хлопок виконує allowlisted MPRIS `play-pause`; потрійний тимчасово зменшує MPRIS-гучність активного програвача, локально відтворює фіксований WAV і гарантовано намагається повернути точне попереднє значення гучності.
 - Bluetooth-пристрій отримує `trust` лише під час явного pairing адміністратора. Пошук обмежений 30 секундами; після завершення BlueZ припиняє discovery.
@@ -61,6 +63,7 @@
 - Локальний медіапрогравач працює з правами користувача `korob`; не слід передавати йому довільні URL або аргументи через портал. Поточний агент надає тільки MPRIS play/pause/next/previous/stop.
 - Кожен пристрій у домашній LAN може спробувати підключитися до WayVNC, тому пароль користувача Pi має бути унікальним і сильним. Захист від публічного доступу не замінює сегментацію недовірених IoT-пристроїв у LAN.
 - noVNC надає адміністратору повний інтерактивний сеанс Pi. Компрометація активної Cloudflare/LABA-сесії адміністратора дозволяє відкрити VNC, але Raspberry Pi все одно вимагає окремі PAM-облікові дані.
+- Локальний gRPC API Starlink не є офіційним стабільним публічним API, не має власної автентифікації та може змінитися разом із firmware. Його не можна маршрутизувати з інтернету або відкривати через Caddy/UFW; після оновлення тарілки треба перевіряти read-only telemetry перед виконанням команд. У bypass-режимі router/Wi-Fi telemetry відсутня. Поточна firmware політикою забороняє точні координати; LABA не намагається обходити цю заборону.
 
 ## Секрети
 
@@ -72,5 +75,6 @@
 - SSH, Cloudflare, Tailscale і device credentials.
 - `/etc/credstore.encrypted/go2rtc-api-password` та розшифрований runtime credential go2rtc.
 - `/etc/credstore.encrypted/laba-audio-agent-token`, `AUDIO_AGENT_TOKEN` у `/opt/laba/.env` і будь-яка тимчасова plaintext-копія токена.
+- `/etc/credstore.encrypted/laba-starlink-agent-token`, `STARLINK_AGENT_TOKEN` у `/opt/laba/.env` і будь-яка тимчасова plaintext-копія токена.
 
 Ротація `DEVICE_SECRET_KEY` потребує розшифрувати й повторно зашифрувати збережені device secrets. Проста заміна ключа зробить їх нечитабельними.

@@ -19,6 +19,7 @@ import {
   safeSlug,
   safeStreamName
 } from './security.mjs';
+import { starlinkAgentRequest } from './starlink-agent.mjs';
 
 validateConfig();
 
@@ -334,6 +335,16 @@ const audioSinkSchema = z.object({ nodeId: z.coerce.number().int().min(1).max(1_
 const playerActionSchema = z.object({
   action: z.enum(['play', 'pause', 'play-pause', 'next', 'previous', 'stop'])
 }).strict();
+const starlinkConfirmSchema = z.object({ confirm: z.literal(true) }).strict();
+const starlinkGpsSchema = z.object({ inhibited: z.boolean() }).strict();
+const starlinkPowerSaveSchema = z.object({
+  enabled: z.boolean(),
+  startMinutesUtc: z.coerce.number().int().min(0).max(1439),
+  durationMinutes: z.coerce.number().int().min(1).max(1440)
+}).strict();
+const starlinkSnowMeltSchema = z.object({
+  mode: z.enum(['AUTO', 'ALWAYS_ON', 'ALWAYS_OFF'])
+}).strict();
 
 function secretPayload(raw) {
   if (!raw) return null;
@@ -643,6 +654,83 @@ app.post('/api/admin/audio/player', {
   if (!body) return;
   const result = await audioAgentRequest('/v1/player/action', { method: 'POST', body });
   audit(request.portalUser.email, `audio.player.${body.action}`, 'audio', null);
+  return result;
+});
+
+app.get('/api/admin/starlink', {
+  preHandler: requireAdmin,
+  config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+}, async () => starlinkAgentRequest('/v1/status'));
+
+app.get('/api/admin/starlink/obstruction-map', {
+  preHandler: requireAdmin,
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async () => starlinkAgentRequest('/v1/obstruction-map'));
+
+app.post('/api/admin/starlink/reboot', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const body = parseOrReply(starlinkConfirmSchema, request.body, reply);
+  if (!body) return;
+  const result = await starlinkAgentRequest('/v1/reboot', { method: 'POST', body });
+  audit(request.portalUser.email, 'starlink.reboot', 'starlink', null);
+  return result;
+});
+
+app.post('/api/admin/starlink/gps', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 10, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const body = parseOrReply(starlinkGpsSchema, request.body, reply);
+  if (!body) return;
+  const result = await starlinkAgentRequest('/v1/gps', { method: 'POST', body });
+  audit(request.portalUser.email, 'starlink.gps', 'starlink', null, body);
+  return result;
+});
+
+app.post('/api/admin/starlink/power-save', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 10, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const body = parseOrReply(starlinkPowerSaveSchema, request.body, reply);
+  if (!body) return;
+  const result = await starlinkAgentRequest('/v1/power-save', { method: 'POST', body });
+  audit(request.portalUser.email, 'starlink.power-save', 'starlink', null, body);
+  return result;
+});
+
+app.post('/api/admin/starlink/snow-melt', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 10, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const body = parseOrReply(starlinkSnowMeltSchema, request.body, reply);
+  if (!body) return;
+  const result = await starlinkAgentRequest('/v1/snow-melt', { method: 'POST', body });
+  audit(request.portalUser.email, 'starlink.snow-melt', 'starlink', null, body);
+  return result;
+});
+
+app.post('/api/admin/starlink/clear-obstruction-map', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const body = parseOrReply(starlinkConfirmSchema, request.body, reply);
+  if (!body) return;
+  const result = await starlinkAgentRequest('/v1/clear-obstruction-map', { method: 'POST', body });
+  audit(request.portalUser.email, 'starlink.clear-obstruction-map', 'starlink', null);
+  return result;
+});
+
+app.post('/api/admin/starlink/:action', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 4, timeWindow: '10 minutes' } }
+}, async (request, reply) => {
+  const action = parseOrReply(z.enum(['stow', 'unstow']), request.params.action, reply);
+  const body = parseOrReply(starlinkConfirmSchema, request.body, reply);
+  if (!action || !body) return;
+  const result = await starlinkAgentRequest(`/v1/${action}`, { method: 'POST', body });
+  audit(request.portalUser.email, `starlink.${action}`, 'starlink', null);
   return result;
 });
 
