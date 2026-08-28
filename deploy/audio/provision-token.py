@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import pwd
 import secrets
 import subprocess
 from pathlib import Path
@@ -22,4 +23,6 @@ subprocess.run(
     stdin=subprocess.DEVNULL,
 )
 os.chmod(encrypted_path, 0o600)
+portal_user = pwd.getpwnam("korob")
+os.chown(plain_path, portal_user.pw_uid, portal_user.pw_gid)
 print("Audio agent credential provisioned; copy the temporary token to the VPS, then delete it.")

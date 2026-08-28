@@ -4,3 +4,4 @@ backups/
 .env
 deploy/certs/
 npm-debug.log*
+__pycache__/
