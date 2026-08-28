@@ -59,7 +59,7 @@ chown -R root:laba /opt/laba
 chown -R laba:laba /opt/laba/data
 chmod 0750 /opt/laba
 chmod 0700 /opt/laba/data
-chmod 0640 /opt/laba/.env
+chmod 0600 /opt/laba/.env
 cp deploy/laba-portal.service /etc/systemd/system/laba-portal.service
 systemctl daemon-reload
 systemctl enable --now laba-portal.service
@@ -120,6 +120,56 @@ journalctl -u laba-portal.service -n 80 --no-pager
 Версія `0.6.0` не змінює схему БД. Вона переводить USB-камеру принтера на low-latency H.264, додає захищений same-origin MSE player під service-worker-safe префіксом `/webcam` і HLS fallback для Mainsail та підключає окремий H.264 RTSP-потік камери відеоспостереження.
 
 Версія `0.7.0` не змінює схему БД. Вона додає адміністративний розділ Bluetooth/Audio та приватний audio agent на Raspberry Pi. Agent доступний лише VPS через Tailscale, вимагає окремий bearer credential і надає тільки allowlisted операції BlueZ, PipeWire та MPRIS.
+
+## Bluetooth/Audio agent на Raspberry Pi
+
+Agent працює як `laba-audio-agent.service` від користувача `korob`, слухає лише `100.69.168.10:1985` і приймає запити лише від VPS `100.68.61.33`. Plaintext-токен потрібен тільки під час первинного зв’язування; на Pi постійно зберігається зашифрований systemd credential.
+
+Спочатку з VPS скопіювати файли до Pi:
+
+```bash
+scp /opt/laba/deploy/audio/laba-audio-agent.py \
+  /opt/laba/deploy/audio/laba-audio-agent.service \
+  /opt/laba/deploy/audio/provision-token.py \
+  korob@192.168.0.63:/tmp/
+```
+
+На Raspberry Pi встановити agent і створити credential:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes playerctl
+sudo install -d -o root -g root -m 0755 /opt/laba-audio-agent
+sudo install -o root -g root -m 0755 /tmp/laba-audio-agent.py /opt/laba-audio-agent/laba-audio-agent.py
+sudo install -o root -g root -m 0644 /tmp/laba-audio-agent.service /etc/systemd/system/laba-audio-agent.service
+sudo rfkill unblock bluetooth
+sudo python3 /tmp/provision-token.py
+sudo systemd-analyze verify /etc/systemd/system/laba-audio-agent.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now laba-audio-agent.service
+systemctl is-active laba-audio-agent.service
+```
+
+Після успішного запуску з VPS перенести тимчасовий токен у `.env` без друку значення:
+
+```bash
+scp korob@192.168.0.63:/tmp/laba-audio-agent-token /tmp/laba-audio-agent-token
+node /opt/laba/scripts/configure-audio-agent.mjs /tmp/laba-audio-agent-token
+rm -- /tmp/laba-audio-agent-token
+ssh korob@192.168.0.63 'sudo rm -f /tmp/laba-audio-agent-token /tmp/laba-audio-agent.py /tmp/laba-audio-agent.service /tmp/provision-token.py'
+systemctl restart laba-portal.service
+systemctl is-active laba-portal.service
+```
+
+`configure-audio-agent.mjs` додає точний `AUDIO_AGENT_URL=http://100.69.168.10:1985`, записує bearer у `AUDIO_AGENT_TOKEN` і залишає `/opt/laba/.env` з mode `0600`. Production-валидація не дозволяє запустити LABA 0.7.0 без цих двох параметрів.
+
+Перевірки з VPS не повинні виводити credential:
+
+```bash
+node --env-file=/opt/laba/.env -e "fetch(process.env.AUDIO_AGENT_URL + '/v1/status', { headers: { Authorization: 'Bearer ' + process.env.AUDIO_AGENT_TOKEN } }).then(async (response) => { console.log(response.status); const status = await response.json(); console.log(JSON.stringify({ adapter: status.adapter, audio: status.audio, player: status.player }, null, 2)); }).catch((error) => { console.error(error.message); process.exit(1); })"
+```
+
+Очікується HTTP `200`, `adapter.available: true` і `audio.available: true`. `player.available: false` є нормальним станом, доки на Pi не запущено MPRIS-сумісний програвач. Порт `1985` не відкривати в LAN/UFW і не проксіювати через Caddy.
 
 ## go2rtc на Raspberry Pi
 

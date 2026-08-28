@@ -7,6 +7,7 @@
 3. Роль і дозвіл на конкретний пристрій перевіряються під час кожного HTTP- та WebSocket-підключення.
 4. Upstream-пристрій доступний лише VPS через Tailscale subnet route `192.168.0.0/24`.
 5. Browser-viewer камери звертається до go2rtc на точному Tailscale IP Raspberry Pi `100.69.168.10`; локальна адреса USB-джерела та пароль go2rtc не передаються до браузера.
+6. Bluetooth/Audio-запити доступні лише адміністратору. VPS звертається до audio agent на точному Tailscale IP Pi `100.69.168.10:1985` з окремим bearer credential; агент приймає лише джерело `100.68.61.33`.
 
 Портал не довіряє лише заголовку `Cf-Access-Authenticated-User-Email`: використовується підписаний `Cf-Access-Jwt-Assertion`, перевіряються RS256, issuer та audience.
 
@@ -26,6 +27,9 @@
 - go2rtc запускається без модулів `exec`, `ffmpeg`, `webrtc`, debug та WebUI. RTSP-модуль потрібен лише як клієнт камери відеоспостереження; його сервер вимкнено через `rtsp.listen: ""`.
 - uStreamer читає Logitech C270 у MJPEG 1280×720@30 і слухає тільки `127.0.0.1:8080`. Окремий sandboxed FFmpeg використовує `libx264 ultrafast/zerolatency`, кодує H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с з GOP 13 і слухає тільки `127.0.0.1:8556`. go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє лише VPS `100.68.61.33`, власний вузол Pi та точну RTSP-камеру `192.168.0.138/32`.
 - Камера, прив’язана до принтера, успадковує його grant. Mainsail отримує основний H.264/MSE потік через exact same-origin `/webcam/laba/*`; точні HLS і snapshot-шляхи `/laba-camera/api/*` та `/laba-camera/snapshot` залишаються fallback. Інші шляхи go2rtc через host принтера не проксіюються.
+- Audio agent слухає лише Tailscale IP, додатково обмежений systemd `IPAddressAllow`, bearer credential і rate limit. Він формує `argv` тільки з allowlist команд та валідованих MAC/node/action, не запускає shell і не приймає довільні шляхи або команди.
+- Усі Bluetooth/Audio write API вимагають роль `admin`, same-origin, `X-Portal-Request`, мають окремі rate limits і записуються до адміністративного аудиту. Статус не містить bearer credential.
+- Bluetooth-пристрій отримує `trust` лише під час явного pairing адміністратора. Пошук обмежений 30 секундами; після завершення BlueZ припиняє discovery.
 
 ## Cloudflare
 
@@ -45,6 +49,8 @@
 - Компрометація VPS або tailnet дає шлях до домашньої підмережі; Tailscale ACL слід обмежити лише потрібними вузлами/маршрутом.
 - Програмний H.264 займає приблизно 1,1 ядра Raspberry Pi, але зменшує потік приблизно з 30 Мбіт/с MJPEG до 2 Мбіт/с. WebRTC TCP/UDP `8555` не відкривається; LABA і Mainsail використовують MSE, HLS залишається fallback.
 - Безпека залежить від своєчасного оновлення uStreamer/go2rtc та ізоляції API. Компрометація root або процесу go2rtc на Pi дає доступ до відеопотоку.
+- Під час Bluetooth discovery пристрої поблизу можуть бачити активність адаптера, а LABA показує адміністратору знайдені імена/MAC. Pairing слід запускати лише на короткий час і фізично перевіряти вибрану колонку.
+- Локальний медіапрогравач працює з правами користувача `korob`; не слід передавати йому довільні URL або аргументи через портал. Поточний агент надає тільки MPRIS play/pause/next/previous/stop.
 
 ## Секрети
 
@@ -55,5 +61,6 @@
 - `/etc/caddy/certs/laba-*`;
 - SSH, Cloudflare, Tailscale і device credentials.
 - `/etc/credstore.encrypted/go2rtc-api-password` та розшифрований runtime credential go2rtc.
+- `/etc/credstore.encrypted/laba-audio-agent-token`, `AUDIO_AGENT_TOKEN` у `/opt/laba/.env` і будь-яка тимчасова plaintext-копія токена.
 
 Ротація `DEVICE_SECRET_KEY` потребує розшифрувати й повторно зашифрувати збережені device secrets. Проста заміна ключа зробить їх нечитабельними.

@@ -147,13 +147,19 @@ def bluetooth_devices() -> list[dict[str, object]]:
 
 
 def pipewire_status() -> dict[str, object]:
-    output = run_command(["/usr/bin/wpctl", "status", "-n"], check=False)
+    output = run_command(["/usr/bin/wpctl", "status"], check=False)
     available = "PipeWire" in output and "Audio" in output
     sinks: list[dict[str, object]] = []
+    in_audio = False
     in_sinks = False
     for raw_line in output.splitlines():
         line = raw_line.rstrip()
-        if "Sinks:" in line:
+        if line.strip() == "Audio":
+            in_audio = True
+            continue
+        if line.strip() == "Video":
+            break
+        if in_audio and "Sinks:" in line:
             in_sinks = True
             continue
         if in_sinks and ("Sources:" in line or "Filters:" in line or line.strip() == "Video"):

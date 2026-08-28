@@ -11,7 +11,7 @@
 - Systemd unit: `laba-portal.service`.
 - Сервіс слухає лише `127.0.0.1:3020`; зовнішній доступ надає Caddy.
 - База: `/opt/laba/data/portal.db`, SQLite WAL.
-- Production-конфігурація: `/opt/laba/.env`, власник `root:laba`, mode `0640`.
+- Production-конфігурація: `/opt/laba/.env`, власник `root:laba`, mode `0600`.
 - Перед кожним оновленням базу копіюють у `/opt/laba/backups/` через SQLite `.backup`.
 
 Production-паролі, SSH-дані, Cloudflare API tokens, `.env`, база, резервні копії, сертифікати та приватні ключі навмисно не зберігаються в Git. Для роботи з production користувач має окремо надати доступ.
@@ -68,6 +68,20 @@ Moonraker під час останньої перевірки повертав `
 
 WebSocket Mainsail проходить через LABA: портал перевіряє, що браузерний `Origin` збігається з адресою пристрою, видаляє службові заголовки Cloudflare та підмінює upstream `Origin` на локальну адресу принтера. Без цієї підміни Moonraker відповідає `Cross origin websockets not allowed`.
 
+## Bluetooth та аудіо
+
+В адмінпанелі `/admin` працює вкладка «Аудіо». Вона доступна лише ролі `admin` і дозволяє:
+
+- увімкнути або вимкнути Bluetooth;
+- виконати обмежений у часі discovery;
+- спарувати, довірити, підключити, від’єднати або забути пристрій;
+- вибрати PipeWire sink, змінити гучність і mute;
+- керувати play/pause/next/previous/stop сумісного MPRIS-програвача.
+
+На Pi активний `laba-audio-agent.service`. Він слухає тільки Tailscale IP `100.69.168.10:1985`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і не виконує shell. Credential Pi зашифрований у `/etc/credstore.encrypted/laba-audio-agent-token`; plaintext-копії після deployment видалені. `playerctl` встановлено, PipeWire/WirePlumber активні, Logitech C270 доступна як mono source. Bluetooth-контролер `PiLABA4B` увімкнений і не заблокований rfkill. Колонка ще не спарована, тому доступний лише вбудований аудіовихід.
+
+YouTube Music не встановлено: офіційний IFrame API відтворює медіа в браузері користувача, а офіційного server-side playback API для подачі звуку з Pi у Bluetooth-колонку немає. MPRIS-кнопки вже готові для локального програвача; вибір між браузерним відтворенням і неофіційним headless-рішенням потрібно зробити окремо.
+
 ## Caddy і сусідні сервіси
 
 На VPS уже працювали інші production-домени до появи LABA. Їх не можна змінювати під час оновлення порталу:
@@ -93,7 +107,9 @@ LABA використовує окремі точний і wildcard-блоки C
 
 - Завершити вхід головного адміністратора через One-time PIN на новий e-mail, якщо поточна Access-сесія закінчилася.
 - Після зміни положення або освітлення камери перевірити різкість, експозицію і стабільні 25 FPS H.264 під час реального друку.
+- Перевести конкретну Bluetooth-колонку в pairing mode, знайти її у `/admin` → «Аудіо» та натиснути «Спарувати».
+- Визначити спосіб музики: офіційний YouTube player у браузері або окремо погоджений неофіційний програвач на Pi. Після появи локального плеєра додати clap/voice automation поверх готових MPRIS-команд.
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 
-Остання перевірка: LABA, Caddy, `koro-*`, Signal sync і `tailscaled` були active; Caddyfile валідний; `npm test` — 6/6; `npm audit --omit=dev` — 0 відомих вразливостей.
+Остання перевірка: LABA, `laba-audio-agent`, PipeWire, BlueZ, Caddy, `koro-*`, Signal sync і `tailscaled` були active; audio agent повернув HTTP 200 лише з VPS через Tailscale; короткий Bluetooth discovery завершився штатно; живий `/admin` показав вкладку «Аудіо»; `npm test` — 6/6; `npm audit --omit=dev` — 0 відомих вразливостей.

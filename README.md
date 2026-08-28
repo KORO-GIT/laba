@@ -10,6 +10,8 @@
 - адмінпанель пристроїв, користувачів, ролей та індивідуальних дозволів;
 - ролі `viewer`, `operator`, `admin`;
 - журнал адміністративних змін;
+- адміністративне керування Bluetooth Raspberry Pi: живлення, пошук, pairing, trust, підключення та видалення пристроїв;
+- керування PipeWire-виходом, гучністю, mute та сумісним MPRIS-програвачем;
 - вхід через Cloudflare Access (OTP/OAuth/MFA та захист від перебору на edge);
 - додатковий локальний allowlist: однієї успішної авторизації Cloudflare недостатньо;
 - перевірка Cloudflare Access JWT за підписом, issuer та audience;
@@ -34,8 +36,9 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       │ 192.168.0.0/24
                                       ├── 3D-принтери
                                       ├── камери
-                                      └── Logitech C270 → uStreamer → low-latency H.264
+                                      ├── Logitech C270 → uStreamer → low-latency H.264
                                                            → go2rtc на Tailscale IP Pi
+                                      └── BlueZ + PipeWire ← приватний LABA audio agent
 ```
 
 VPS не публікує порти пристроїв. В інтернет відкриті лише Caddy та захищені домени LABA.
@@ -102,6 +105,14 @@ npm.cmd audit --omit=dev
 - Basic Auth go2rtc у секреті JSON: ім’я `laba-vps` і згенерований локально пароль.
 
 LABA віддає власну сторінку MSE-плеєра, серверно підставляє дозволену назву потоку й проксіює лише потрібні media endpoint’и. WebUI go2rtc, `/api/config`, керування потоками й довільний параметр `src` користувачам недоступні. Для прив’язаної камери Mainsail використовує same-origin URL `/webcam/laba/player`; префікс `/webcam` входить до denylist service worker Mainsail і тому player не замінюється кешованою оболонкою PWA. LABA також зберігає HLS URL `/laba-camera/api/stream.m3u8`, snapshot URL `/laba-camera/snapshot` і MJPEG `/laba-camera/stream` як резервні варіанти. Реальна адреса go2rtc та його пароль у браузер не потрапляють.
+
+## Bluetooth та аудіо
+
+Адміністратор відкриває `/admin` → «Аудіо». Звідти можна ввімкнути або вимкнути Bluetooth, запустити короткий пошук, спарувати й підключити колонку, вибрати PipeWire-вихід, змінити гучність і керувати локальним MPRIS-програвачем. Перед pairing колонку потрібно вручну перевести в режим виявлення.
+
+Браузер не звертається до Raspberry Pi напряму. LABA на VPS перевіряє роль, same-origin/CSRF, rate limit і журналює зміну, після чого звертається до окремого агента через Tailscale. Агент не приймає shell-команди та підтримує лише фіксований список операцій BlueZ, PipeWire і MPRIS.
+
+YouTube Music поки не запускається на Pi. Офіційний [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference) відтворює звук у браузері користувача, а не на серверному Raspberry Pi; офіційного server-side playback API для виведення у Bluetooth-колонку немає. Неофіційне вилучення аудіопотоку навмисно не встановлено.
 
 ## Production
 
