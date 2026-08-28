@@ -21,10 +21,11 @@
 - HTML/API не кешуються; indexing заборонено на рівні meta/header/Caddy.
 - Сервіс слухає лише loopback, працює без Linux capabilities і з systemd sandbox.
 - UFW не відкриває додаткових портів для LABA або пристроїв.
-- Для go2rtc LABA дозволяє лише власну сторінку viewer, exact WebSocket `/gateway/ws` або `/laba-camera/ws`, exact HLS-сесійні шляхи та MJPEG snapshot/резервний stream для прив’язаного Mainsail. Ім’я потоку береться з БД на сервері, а будь-який клієнтський `src` ігнорується.
+- Для go2rtc LABA дозволяє лише власну сторінку viewer, exact WebSocket `/gateway/ws`, exact HLS-сесійні шляхи та MJPEG snapshot/резервний stream для прив’язаного Mainsail. Ім’я потоку береться з БД на сервері, а будь-який клієнтський `src` ігнорується.
+- Caddy знімає `X-Frame-Options` лише для exact host `k1se-camera-laba.zpseapil.club` і root path. Сам LABA player дозволяє framing лише при `?embed=1` і лише exact origin батьківського принтера через CSP `frame-ancestors`; standalone viewer та всі інші сторінки залишаються невбудовуваними.
 - go2rtc запускається без модулів `exec`, `ffmpeg`, `webrtc`, debug та WebUI. RTSP-модуль потрібен лише як клієнт камери відеоспостереження; його сервер вимкнено через `rtsp.listen: ""`.
-- uStreamer читає Logitech C270 у MJPEG 1280×720@30 і слухає тільки `127.0.0.1:8080`. Окремий sandboxed FFmpeg використовує апаратний `h264_v4l2m2m`, кодує 1280×720 приблизно у 2 Мбіт/с і слухає тільки `127.0.0.1:8556`. go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє лише VPS `100.68.61.33`, власний вузол Pi та точну RTSP-камеру `192.168.0.138/32`.
-- Камера, прив’язана до принтера, успадковує його grant. Mainsail отримує її лише через точні same-origin HLS і snapshot-шляхи `/laba-camera/api/*` та `/laba-camera/snapshot`; інші шляхи go2rtc через host принтера не проксіюються.
+- uStreamer читає Logitech C270 у MJPEG 1280×720@30 і слухає тільки `127.0.0.1:8080`. Окремий sandboxed FFmpeg використовує `libx264 ultrafast/zerolatency`, кодує H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с з GOP 13 і слухає тільки `127.0.0.1:8556`. go2rtc слухає `100.69.168.10:1984`, використовує Basic Auth і systemd IP-фільтр, що дозволяє лише VPS `100.68.61.33`, власний вузол Pi та точну RTSP-камеру `192.168.0.138/32`.
+- Камера, прив’язана до принтера, успадковує його grant. Mainsail отримує основний H.264/MSE потік через окремий camera host із CSP-прив’язкою до parent origin; точні same-origin HLS і snapshot-шляхи `/laba-camera/api/*` та `/laba-camera/snapshot` залишаються fallback. Інші шляхи go2rtc через host принтера не проксіюються.
 
 ## Cloudflare
 
@@ -42,7 +43,7 @@
 - Mainsail/OctoPrint і web UI камер стають доступними користувачам із роллю керування. Їхні власні вразливості все ще важливі, тому firmware потрібно оновлювати.
 - Адміністратор LABA за визначенням може змінювати призначення та upstream credentials.
 - Компрометація VPS або tailnet дає шлях до домашньої підмережі; Tailscale ACL слід обмежити лише потрібними вузлами/маршрутом.
-- H.264 потребує апаратного кодера Pi, але зменшує потік приблизно з 30 Мбіт/с MJPEG до 2 Мбіт/с. WebRTC TCP/UDP `8555` не відкривається; LABA використовує MSE, а Mainsail — same-origin HLS.
+- Програмний H.264 займає приблизно 1,1 ядра Raspberry Pi, але зменшує потік приблизно з 30 Мбіт/с MJPEG до 2 Мбіт/с. WebRTC TCP/UDP `8555` не відкривається; LABA і Mainsail використовують MSE, HLS залишається fallback.
 - Безпека залежить від своєчасного оновлення uStreamer/go2rtc та ізоляції API. Компрометація root або процесу go2rtc на Pi дає доступ до відеопотоку.
 
 ## Секрети
