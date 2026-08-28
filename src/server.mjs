@@ -203,6 +203,10 @@ app.addHook('onRequest', async (request, reply) => {
     const device = statements.deviceBySlug.get(slug);
     const pathname = requestUrl(request.url).pathname;
     if (isBrowserCamera(device) && browserCameraAssets.has(pathname)) return;
+    if (device?.kind === 'printer' && browserCameraAssets.has(pathname)) {
+      const camera = statements.cameraByParent.get(device.id);
+      if (isBrowserCamera(camera) && canOpenDevice(request.portalUser, camera)) return;
+    }
     return proxyHttp(request, reply);
   }
 });

@@ -267,6 +267,12 @@ test('development server serves portal API and protected admin writes', async (c
   assert.match(embeddedPlayer.headers.get('content-security-policy'), /frame-ancestors 'self'/);
   assert.match(await embeddedPlayer.text(), /camera-player/);
 
+  const embeddedCameraAsset = await fetch(`${root}/assets/camera.js`, {
+    headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
+  });
+  assert.equal(embeddedCameraAsset.status, 200);
+  assert.match(await embeddedCameraAsset.text(), /gatewayPath.*\/ws/);
+
   const embeddedMeta = await fetch(`${root}/webcam/laba/meta`, {
     headers: { 'X-Forwarded-Host': 'k1se-01-laba.zpseapil.club' }
   });
