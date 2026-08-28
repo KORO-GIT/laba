@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,8 +33,15 @@ async function waitFor(url, child, logs) {
 
 test('development server serves portal API and protected admin writes', async (context) => {
   const port = await freePort();
+  const upstreamPort = await freePort();
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'laba-test-'));
   const logs = [];
+  const upstream = http.createServer((request, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/javascript' });
+    response.end(`window.deviceAsset = ${JSON.stringify(request.url)};`);
+  });
+  upstream.listen(upstreamPort, '127.0.0.1');
+  await once(upstream, 'listening');
   const child = spawn(process.execPath, ['src/server.mjs'], {
     cwd: path.resolve(import.meta.dirname, '..'),
     env: {
@@ -43,7 +51,8 @@ test('development server serves portal API and protected admin writes', async (c
       PORT: String(port),
       DB_PATH: path.join(temp, 'portal.db'),
       BOOTSTRAP_ADMIN_EMAIL: 'admin@test.local',
-      DEV_USER_EMAIL: 'admin@test.local'
+      DEV_USER_EMAIL: 'admin@test.local',
+      ALLOWED_DEVICE_SUBNETS: '127.0.0.0/8'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -57,6 +66,8 @@ test('development server serves portal API and protected admin writes', async (c
         new Promise((resolve) => setTimeout(resolve, 2_000))
       ]);
     }
+    upstream.close();
+    await once(upstream, 'close');
     fs.rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
@@ -85,9 +96,15 @@ test('development server serves portal API and protected admin writes', async (c
     },
     body: JSON.stringify({
       slug: 'camera-01', name: 'Camera 01', kind: 'camera', driver: 'http',
-      host: '192.168.0.80', protocol: 'http', uiPort: 80, apiPort: null,
+      host: '127.0.0.1', protocol: 'http', uiPort: upstreamPort, apiPort: null,
       notes: '', enabled: true, sortOrder: 20
     })
   });
   assert.equal(created.status, 201);
+
+  const proxiedAsset = await fetch(`${root}/assets/device.js`, {
+    headers: { 'X-Forwarded-Host': 'camera-01-laba.zpseapil.club' }
+  });
+  assert.equal(proxiedAsset.status, 200);
+  assert.equal(await proxiedAsset.text(), 'window.deviceAsset = "/assets/device.js";');
 });

@@ -117,12 +117,15 @@ async function resolveUser(headers) {
 }
 
 app.addHook('onRequest', async (request, reply) => {
-  if (request.url === '/healthz') return;
+  if (request.url === '/healthz' && isPortalHost(request.headers)) return;
   try {
     request.portalUser = await resolveUser(request.headers);
   } catch (error) {
     return reply.code(error.statusCode ?? 401).send({ error: error.message ?? 'Unauthorized' });
   }
+  // Device hosts must take priority over portal routes such as /assets/*.
+  // Printer and camera UIs commonly use those same top-level paths.
+  if (subdomainSlug(request.headers)) return proxyHttp(request, reply);
 });
 
 function requireAdmin(request, reply, done) {
