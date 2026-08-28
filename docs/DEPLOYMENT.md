@@ -123,6 +123,8 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.8.0` не змінює схему БД. Вона додає локальний WayVNC на `192.168.0.63:5900` та admin-only noVNC у LABA. Пакет `@novnc/novnc` pinned до `1.7.0`; WebSocket-шлюз websockify слухає лише `127.0.0.1:6080` на VPS.
 
+Версія `0.8.1` не змінює схему БД. Вона монтує модулі noVNC через явний файловий route, щоб загальний SPA fallback порталу ніколи не повертав HTML замість JavaScript-модуля.
+
 ## Робочий стіл Raspberry Pi
 
 WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурацію на Pi:

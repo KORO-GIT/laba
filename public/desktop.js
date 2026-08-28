@@ -1,4 +1,4 @@
-import RFB from '/novnc/core/rfb.js';
+import RFB from '/novnc/core/rfb.js?v=1.7.0';
 
 export function initDesktop({ showToast }) {
   const connectButton = document.querySelector('#desktop-connect');

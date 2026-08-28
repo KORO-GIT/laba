@@ -60,14 +60,6 @@ await app.register(fastifyStatic, {
   immutable: true,
   maxAge: '1h'
 });
-await app.register(fastifyStatic, {
-  root: config.novncDir,
-  prefix: '/novnc/',
-  decorateReply: false,
-  index: false,
-  immutable: true,
-  maxAge: '1d'
-});
 
 app.addHook('onSend', async (request, reply, payload) => {
   reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
@@ -380,6 +372,16 @@ app.get('/', async (request, reply) => {
 app.get('/admin', async (request, reply) => {
   if (request.portalUser.role !== 'admin') return reply.code(403).send({ error: 'Доступ заборонено' });
   return reply.sendFile('admin.html');
+});
+
+app.route({
+  method: ['GET', 'HEAD'],
+  url: '/novnc/*',
+  handler: async (request, reply) => reply.sendFile(
+    request.params['*'],
+    config.novncDir,
+    { immutable: true, maxAge: '1d' }
+  )
 });
 
 app.get('/api/me', async (request) => {

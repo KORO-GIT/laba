@@ -168,8 +168,9 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(me.role, 'admin');
   assert.equal(me.displayName, 'Власник');
 
-  const novncModule = await fetch(`${root}/novnc/core/rfb.js`);
+  const novncModule = await fetch(`${root}/novnc/core/rfb.js?v=1.7.0`);
   assert.equal(novncModule.status, 200);
+  assert.match(novncModule.headers.get('content-type'), /javascript/);
   assert.match(await novncModule.text(), /class RFB/);
 
   const desktopWebsocket = await websocketHandshake(
