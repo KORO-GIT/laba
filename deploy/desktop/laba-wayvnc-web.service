@@ -1,0 +1,37 @@
+[Unit]
+Description=LABA private WayVNC endpoint for browser gateway
+After=network-online.target tailscaled.service wayvnc-generate-keys.service
+Wants=network-online.target tailscaled.service
+Requires=wayvnc-generate-keys.service
+
+[Service]
+Type=simple
+User=vnc
+Group=vnc
+Environment=XDG_RUNTIME_DIR=/run/laba-wayvnc-web
+RuntimeDirectory=laba-wayvnc-web
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/wayvnc --detached --gpu --config /etc/wayvnc/laba-web-config --socket /run/laba-wayvnc-web/wayvncctl.sock
+Restart=always
+RestartSec=3s
+KillSignal=INT
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+IPAddressAllow=192.168.0.63/32
+IPAddressAllow=100.68.61.33/32
+IPAddressAllow=100.69.168.10/32
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

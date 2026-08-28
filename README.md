@@ -40,7 +40,8 @@ Cloudflare ──► Caddy на VPS ──► LABA (127.0.0.1:3020)
                                       ├── Logitech C270 → uStreamer → low-latency H.264
                                                            → go2rtc на Tailscale IP Pi
                                       ├── BlueZ + PipeWire ← приватний LABA audio agent
-                                      └── WayVNC :5900 ← loopback websockify на VPS ← noVNC
+                                      └── WayVNC :5900 (LAN TLS)
+                                                 :5901 (тільки VPS) ← loopback websockify ← noVNC
 ```
 
 VPS не публікує порти пристроїв. В інтернет відкриті лише Caddy та захищені домени LABA.
@@ -120,7 +121,7 @@ YouTube Music поки не запускається на Pi. Офіційний
 
 У домашній мережі VNC-клієнт підключається безпосередньо до `192.168.0.63:5900`. WayVNC слухає лише зарезервовану LAN-адресу Raspberry Pi, використовує PAM і вимагає ім’я користувача та пароль Pi.
 
-Для доступу ззовні адміністратор відкриває `/admin` → «Робочий стіл» і натискає «Віддалене підключення». Браузерний noVNC з’єднується з exact WebSocket-шляхом LABA; сервер повторно перевіряє роль `admin` і same-origin, прибирає cookies/authorization, після чого передає VNC-трафік до `websockify` на loopback VPS. `websockify` звертається лише до `192.168.0.63:5900` через Tailscale subnet route. Публічні порти `5900` і `6080` не відкриваються.
+Для доступу ззовні адміністратор відкриває `/admin` → «Робочий стіл» і натискає «Віддалене підключення». Браузерний noVNC з’єднується з exact WebSocket-шляхом LABA; сервер повторно перевіряє роль `admin` і same-origin, прибирає cookies/authorization, після чого передає VNC-трафік до `websockify` на loopback VPS. `websockify` звертається до окремого PAM endpoint `192.168.0.63:5901` через Tailscale subnet route. Systemd IP policy на Pi приймає цей endpoint лише від VPS/власного вузла Pi; інші LAN-клієнти використовують TLS endpoint `5900`. Публічні порти `5900`, `5901` і `6080` не відкриваються.
 
 Пароль VNC вводиться у браузері після запиту Raspberry Pi, передається протоколом RFB і не записується до бази, `.env` або журналу LABA. Одночасно дозволено не більше двох віддалених сеансів; нові підключення мають окремий rate limit.
 

@@ -127,10 +127,13 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 ## Робочий стіл Raspberry Pi
 
-WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурацію на Pi:
+WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурації та browser-only unit на Pi:
 
 ```bash
-scp /opt/laba/deploy/desktop/wayvnc-config korob@192.168.0.63:/tmp/wayvnc-config
+scp /opt/laba/deploy/desktop/wayvnc-config \
+  /opt/laba/deploy/desktop/wayvnc-web-config \
+  /opt/laba/deploy/desktop/laba-wayvnc-web.service \
+  korob@192.168.0.63:/tmp/
 ```
 
 На Pi встановити exact LAN-конфігурацію та запустити vendor service. Приватні ключі й сертифікат генерує `wayvnc-generate-keys.service` безпосередньо на Pi:
@@ -138,11 +141,15 @@ scp /opt/laba/deploy/desktop/wayvnc-config korob@192.168.0.63:/tmp/wayvnc-config
 ```bash
 sudo install -d -o root -g root -m 0755 /etc/wayvnc
 sudo install -o root -g root -m 0644 /tmp/wayvnc-config /etc/wayvnc/config
+sudo install -o root -g root -m 0644 /tmp/wayvnc-web-config /etc/wayvnc/laba-web-config
+sudo install -o root -g root -m 0644 /tmp/laba-wayvnc-web.service /etc/systemd/system/laba-wayvnc-web.service
+sudo systemd-analyze verify /etc/systemd/system/laba-wayvnc-web.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now wayvnc.service
-sudo rm -- /tmp/wayvnc-config
-systemctl is-active wayvnc.service
+sudo systemctl enable --now wayvnc.service laba-wayvnc-web.service
+sudo rm -- /tmp/wayvnc-config /tmp/wayvnc-web-config /tmp/laba-wayvnc-web.service
+systemctl is-active wayvnc.service laba-wayvnc-web.service
 ss -lnt | grep '192.168.0.63:5900'
+ss -lnt | grep '192.168.0.63:5901'
 ```
 
 На VPS встановити websockify та unit. Порт `6080` залишається loopback, тому Caddy/UFW не змінюються:
@@ -163,11 +170,12 @@ ss -lnt | grep '127.0.0.1:6080'
 
 ```bash
 timeout 5 bash -c 'exec 3<>/dev/tcp/192.168.0.63/5900; head -c 12 <&3'
-ss -lnt | grep -E '(:5900|:6080)'
+timeout 5 bash -c 'exec 3<>/dev/tcp/192.168.0.63/5901; head -c 12 <&3'
+ss -lnt | grep -E '(:5900|:5901|:6080)'
 ufw status verbose
 ```
 
-Очікується `RFB 003.008` від Pi та лише `127.0.0.1:6080` на VPS. Локальний клієнт використовує `192.168.0.63:5900`; з інтернету адміністратор відкриває `/admin` → «Робочий стіл». VNC-користувач — `korob`; пароль не зберігається в LABA.
+Очікується `RFB 003.008` від обох endpoint’ів Pi та лише `127.0.0.1:6080` на VPS. Локальний клієнт використовує TLS/PAM `192.168.0.63:5900`; browser-only `5901` приймає лише VPS і ніколи не використовується напряму з LAN. З інтернету адміністратор відкриває `/admin` → «Робочий стіл». VNC-користувач — `korob`; пароль не зберігається в LABA.
 
 ## Bluetooth/Audio agent на Raspberry Pi
 

@@ -8,7 +8,7 @@
 4. Upstream-пристрій доступний лише VPS через Tailscale subnet route `192.168.0.0/24`.
 5. Browser-viewer камери звертається до go2rtc на точному Tailscale IP Raspberry Pi `100.69.168.10`; локальна адреса USB-джерела та пароль go2rtc не передаються до браузера.
 6. Bluetooth/Audio-запити доступні лише адміністратору. VPS звертається до audio agent на точному Tailscale IP Pi `100.69.168.10:1985` з окремим bearer credential; агент приймає лише джерело `100.68.61.33`.
-7. WayVNC слухає лише зарезервовану LAN-адресу Pi `192.168.0.63:5900` і використовує PAM. Віддалений браузерний доступ проходить лише через admin-only WebSocket LABA та `websockify` на loopback VPS `127.0.0.1:6080`.
+7. WayVNC слухає зарезервовану LAN-адресу Pi: TLS/PAM endpoint `192.168.0.63:5900` для локальних VNC-клієнтів і окремий PAM endpoint `192.168.0.63:5901` лише для VPS. Віддалений браузерний доступ проходить через admin-only WebSocket LABA та `websockify` на loopback VPS `127.0.0.1:6080`.
 
 Портал не довіряє лише заголовку `Cf-Access-Authenticated-User-Email`: використовується підписаний `Cf-Access-Jwt-Assertion`, перевіряються RS256, issuer та audience.
 
@@ -33,7 +33,8 @@
 - Bluetooth-пристрій отримує `trust` лише під час явного pairing адміністратора. Пошук обмежений 30 секундами; після завершення BlueZ припиняє discovery.
 - Exact WebSocket `/api/admin/desktop/ws` доступний лише ролі `admin`, вимагає same-origin і не приймає query-параметри. Перед websockify LABA видаляє Cloudflare assertion, `Authorization`, cookies та browser `Origin`.
 - Віддалений VNC обмежений двома одночасними з’єднаннями та вісьмома спробами на хвилину для одного адміністратора; кожне прийняте з’єднання записується до аудиту.
-- `websockify` слухає лише `127.0.0.1:6080`, а systemd IP policy дозволяє йому лише loopback та exact target `192.168.0.63/32`. UFW/Caddy не публікують порти `5900` або `6080`.
+- `websockify` слухає лише `127.0.0.1:6080`, а systemd IP policy дозволяє йому лише loopback та exact target `192.168.0.63/32`. На Pi browser endpoint `5901` має окрему systemd IP policy: лише VPS Tailscale IP та локальні адреси самого Pi. UFW/Caddy не публікують порти `5900`, `5901` або `6080`.
+- noVNC підтримує PAM subtype VeNCrypt Plain, але не вкладений X509Plain. Тому `5901` дозволяє Plain лише всередині вже зашифрованого каналу HTTPS/WSS → loopback VPS → Tailscale/WireGuard; звичайний LAN endpoint `5900` зберігає X.509 encryption і не вмикає `relax_encryption`.
 - Облікові дані VNC запитує сам протокол RFB. LABA не зберігає їх у SQLite, `.env`, cookies, localStorage або аудиті; поле пароля очищається одразу після передачі noVNC.
 
 ## Cloudflare
