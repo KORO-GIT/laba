@@ -1,3 +1,5 @@
+import { initDesktop } from './desktop.js';
+
 const state = { me: null, devices: [], users: [], audit: [], audio: null };
 const toast = document.querySelector('#toast');
 let audioPollTimer = null;
@@ -419,7 +421,8 @@ function actionLabel(action) {
     'audio.bluetooth.scan': 'Пошук Bluetooth', 'audio.bluetooth.pair': 'Bluetooth pairing',
     'audio.bluetooth.connect': 'Bluetooth під’єднано', 'audio.bluetooth.disconnect': 'Bluetooth від’єднано',
     'audio.bluetooth.remove': 'Bluetooth-пристрій видалено', 'audio.volume': 'Гучність змінено',
-    'audio.mute': 'Mute змінено', 'audio.default-sink': 'Аудіовихід змінено'
+    'audio.mute': 'Mute змінено', 'audio.default-sink': 'Аудіовихід змінено',
+    'desktop.connect': 'Віддалений робочий стіл відкрито'
   }[action] || action;
 }
 
@@ -507,6 +510,7 @@ async function start() {
     state.me = await api('/api/me');
     if (state.me.role !== 'admin') throw new Error('Потрібні права адміністратора');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
+    initDesktop({ showToast });
     await Promise.all([loadDevices(), loadUsers()]);
     startAudioPolling();
   } catch (error) { showToast(error.message, true); }

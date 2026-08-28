@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.7.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.8.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -31,6 +31,7 @@
     <nav class="admin-tabs" aria-label="Розділи адміністрування">
       <button class="admin-tab active" data-panel="devices" type="button">Пристрої</button>
       <button class="admin-tab" data-panel="audio" type="button">Аудіо</button>
+      <button class="admin-tab" data-panel="desktop" type="button">Робочий стіл</button>
       <button class="admin-tab" data-panel="users" type="button">Користувачі</button>
       <button class="admin-tab" data-panel="audit" type="button">Журнал</button>
     </nav>
@@ -121,6 +122,53 @@
       </div>
     </section>
 
+    <section id="panel-desktop" class="admin-panel">
+      <div class="panel-toolbar desktop-toolbar">
+        <div>
+          <h2>Робочий стіл Raspberry Pi</h2>
+          <p>Прямий VNC у локальній мережі або захищене підключення через LABA.</p>
+        </div>
+        <div class="desktop-actions">
+          <button id="desktop-connect" class="button button-primary" type="button">Віддалене підключення</button>
+          <button id="desktop-disconnect" class="button button-ghost hidden" type="button">Від’єднатися</button>
+          <button id="desktop-fullscreen" class="button button-ghost" type="button" disabled>На весь екран</button>
+        </div>
+      </div>
+
+      <div class="desktop-local-card">
+        <div>
+          <p class="eyebrow">ЛОКАЛЬНА МЕРЕЖА</p>
+          <h3>192.168.0.63:5900</h3>
+          <p>Відкрийте цю адресу у VNC-клієнті, коли комп’ютер під’єднаний до домашньої мережі.</p>
+        </div>
+        <button id="desktop-copy-address" class="button button-ghost" type="button">Копіювати адресу</button>
+      </div>
+
+      <div class="desktop-status" role="status" aria-live="polite">
+        <span id="desktop-status-dot" class="desktop-status-dot"></span>
+        <span id="desktop-status-text">Не підключено</span>
+      </div>
+
+      <form id="desktop-credentials" class="desktop-credentials hidden" autocomplete="off">
+        <div>
+          <p class="eyebrow">ВХІД У RASPBERRY PI</p>
+          <h3>Потрібні облікові дані VNC</h3>
+          <p>Пароль передається безпосередньо Raspberry Pi та не зберігається в LABA.</p>
+        </div>
+        <label class="field"><span>Користувач</span><input id="desktop-username" value="korob" autocomplete="username" required></label>
+        <label class="field"><span>Пароль</span><input id="desktop-password" type="password" autocomplete="current-password" required></label>
+        <button class="button button-primary" type="submit">Увійти</button>
+      </form>
+
+      <div id="desktop-screen" class="desktop-screen" tabindex="0" aria-label="Віддалений робочий стіл Raspberry Pi">
+        <div id="desktop-placeholder" class="desktop-placeholder">
+          <span class="desktop-placeholder-mark">Pi</span>
+          <h3>Сеанс запускається лише за запитом</h3>
+          <p>Натисніть «Віддалене підключення». VNC-порт не відкритий у публічний інтернет.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="panel-users" class="admin-panel">
       <div class="panel-toolbar">
         <div><h2>Користувачі</h2><p>Доступ надається за e-mail, підтвердженим Cloudflare Access.</p></div>
@@ -150,6 +198,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.7.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.8.0"></script>
 </body>
 </html>

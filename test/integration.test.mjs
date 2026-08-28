@@ -20,7 +20,7 @@ function freePort() {
   });
 }
 
-function websocketHandshake(port, host, origin, requestPath = '/websocket') {
+function websocketHandshake(port, host, origin, requestPath = '/websocket', extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, '127.0.0.1');
     let response = '';
@@ -34,6 +34,7 @@ function websocketHandshake(port, host, origin, requestPath = '/websocket') {
         'Upgrade: websocket',
         'Sec-WebSocket-Version: 13',
         'Sec-WebSocket-Key: SGVsbG9Xb3JsZDEyMzQ1Ng==',
+        ...Object.entries(extraHeaders).map(([name, value]) => `${name}: ${value}`),
         '', ''
       ].join('\r\n'));
     });
@@ -140,7 +141,8 @@ test('development server serves portal API and protected admin writes', async (c
       DEV_USER_EMAIL: 'admin@test.local',
       ALLOWED_DEVICE_SUBNETS: '127.0.0.0/8',
       AUDIO_AGENT_URL: `http://127.0.0.1:${upstreamPort}`,
-      AUDIO_AGENT_TOKEN: 'test-audio-agent-token-with-at-least-32-characters'
+      AUDIO_AGENT_TOKEN: 'test-audio-agent-token-with-at-least-32-characters',
+      DESKTOP_GATEWAY_URL: `http://127.0.0.1:${upstreamPort}`
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -165,6 +167,46 @@ test('development server serves portal API and protected admin writes', async (c
   const me = await fetch(`${root}/api/me`).then((response) => response.json());
   assert.equal(me.role, 'admin');
   assert.equal(me.displayName, 'Власник');
+
+  const novncModule = await fetch(`${root}/novnc/core/rfb.js`);
+  assert.equal(novncModule.status, 200);
+  assert.match(await novncModule.text(), /class RFB/);
+
+  const desktopWebsocket = await websocketHandshake(
+    port,
+    `127.0.0.1:${port}`,
+    root,
+    '/api/admin/desktop/ws'
+  );
+  assert.match(desktopWebsocket, /^HTTP\/1\.1 101 /, logs.join(''));
+  assert.equal(upstreamUpgradeUrl, '/');
+  assert.equal(upstreamUpgradeOrigin, undefined);
+  assert.equal(upstreamUpgradeAuthorization, undefined);
+
+  const crossOriginDesktop = await websocketHandshake(
+    port,
+    `127.0.0.1:${port}`,
+    'https://attacker.example',
+    '/api/admin/desktop/ws'
+  );
+  assert.match(crossOriginDesktop, /^HTTP\/1\.1 403 /);
+
+  const viewerCreated = await fetch(`${root}/api/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      email: 'viewer@test.local', displayName: 'Viewer', role: 'viewer', enabled: true, access: []
+    })
+  });
+  assert.equal(viewerCreated.status, 201);
+  const viewerDesktop = await websocketHandshake(
+    port,
+    `127.0.0.1:${port}`,
+    root,
+    '/api/admin/desktop/ws',
+    { 'X-Dev-User-Email': 'viewer@test.local' }
+  );
+  assert.match(viewerDesktop, /^HTTP\/1\.1 403 /);
 
   const audio = await fetch(`${root}/api/admin/audio`).then((response) => response.json());
   assert.equal(audio.adapter.powered, true);

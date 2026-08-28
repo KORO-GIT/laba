@@ -19,6 +19,7 @@ export const config = {
     .filter(Boolean),
   sessionSecret: process.env.SESSION_SECRET ?? 'development-only-session-secret-change-me',
   deviceSecretKey: process.env.DEVICE_SECRET_KEY ?? '',
+  desktopGatewayUrl: process.env.DESKTOP_GATEWAY_URL ?? 'http://127.0.0.1:6080',
   audioAgentUrl: (process.env.AUDIO_AGENT_URL ?? '').replace(/\/$/, ''),
   audioAgentToken: process.env.AUDIO_AGENT_TOKEN ?? '',
   allowedSubnets: (process.env.ALLOWED_DEVICE_SUBNETS ?? '192.168.0.0/24')
@@ -26,7 +27,8 @@ export const config = {
     .map((value) => value.trim())
     .filter(Boolean),
   dbPath: process.env.DB_PATH ?? path.join(cwd, 'data', 'portal.db'),
-  publicDir: path.join(cwd, 'public')
+  publicDir: path.join(cwd, 'public'),
+  novncDir: path.join(cwd, 'node_modules', '@novnc', 'novnc')
 };
 
 export function validateConfig() {
@@ -64,5 +66,18 @@ export function validateConfig() {
     if (url.protocol !== 'http:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
       throw new Error('AUDIO_AGENT_URL must be an HTTP origin without credentials, path, query, or fragment');
     }
+  }
+
+  const desktopGatewayUrl = new URL(config.desktopGatewayUrl);
+  if (
+    desktopGatewayUrl.protocol !== 'http:'
+    || desktopGatewayUrl.hostname !== '127.0.0.1'
+    || desktopGatewayUrl.username
+    || desktopGatewayUrl.password
+    || desktopGatewayUrl.search
+    || desktopGatewayUrl.hash
+    || desktopGatewayUrl.pathname !== '/'
+  ) {
+    throw new Error('DESKTOP_GATEWAY_URL must be an HTTP origin on 127.0.0.1 without credentials, path, query, or fragment');
   }
 }

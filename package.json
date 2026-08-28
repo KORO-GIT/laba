@@ -1,13 +1,13 @@
 {
   "name": "laba-device-portal",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Secure multi-printer and camera portal for laba.zpseapil.club",
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs && node --check src/database.mjs && node --check src/security.mjs && node --check src/probes.mjs && node --check src/audio-agent.mjs && node --check scripts/configure-usb-camera.mjs && node --check scripts/configure-audio-agent.mjs && node --check public/dashboard.js && node --check public/admin.js && node --check public/camera.js && node --check public/vendor/go2rtc/video-rtc.js && node --check public/vendor/go2rtc/video-stream.js",
+    "check": "node --check src/server.mjs && node --check src/database.mjs && node --check src/security.mjs && node --check src/probes.mjs && node --check src/audio-agent.mjs && node --check scripts/configure-usb-camera.mjs && node --check scripts/configure-audio-agent.mjs && node --check public/dashboard.js && node --check public/admin.js && node --check public/desktop.js && node --check public/camera.js && node --check public/vendor/go2rtc/video-rtc.js && node --check public/vendor/go2rtc/video-stream.js",
     "test": "node --test"
   },
   "engines": {
@@ -18,6 +18,7 @@
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.3",
+    "@novnc/novnc": "1.7.0",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.1",
     "http-proxy": "^1.18.1",

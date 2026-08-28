@@ -60,10 +60,20 @@ await app.register(fastifyStatic, {
   immutable: true,
   maxAge: '1h'
 });
+await app.register(fastifyStatic, {
+  root: config.novncDir,
+  prefix: '/novnc/',
+  decorateReply: false,
+  index: false,
+  immutable: true,
+  maxAge: '1d'
+});
 
 app.addHook('onSend', async (request, reply, payload) => {
   reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
-  if (!request.url.startsWith('/assets/')) reply.header('Cache-Control', 'no-store');
+  if (!request.url.startsWith('/assets/') && !request.url.startsWith('/novnc/')) {
+    reply.header('Cache-Control', 'no-store');
+  }
   return payload;
 });
 
@@ -664,6 +674,11 @@ function sanitizeProxyHeaders(proxyRequest, request) {
 proxy.on('proxyReq', sanitizeProxyHeaders);
 proxy.on('proxyReqWs', (proxyRequest, request) => {
   sanitizeProxyHeaders(proxyRequest, request);
+  if (request.portalDesktop) {
+    proxyRequest.removeHeader('cookie');
+    proxyRequest.removeHeader('origin');
+    return;
+  }
   // Moonraker rejects a public browser Origin unless it is explicitly listed
   // in the printer's local configuration. The portal validates that public
   // Origin first, then presents the upstream target as same-origin.
@@ -720,6 +735,29 @@ function isSameOriginWebSocket(headers) {
   } catch {
     return false;
   }
+}
+
+const desktopConnectionAttempts = new Map();
+let activeDesktopConnections = 0;
+
+function allowDesktopConnection(email, socket) {
+  const now = Date.now();
+  const recent = (desktopConnectionAttempts.get(email) ?? [])
+    .filter((timestamp) => now - timestamp < 60_000);
+  if (recent.length >= 8 || activeDesktopConnections >= 2) return false;
+
+  recent.push(now);
+  desktopConnectionAttempts.set(email, recent);
+  activeDesktopConnections += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    activeDesktopConnections = Math.max(0, activeDesktopConnections - 1);
+  };
+  socket.once('close', release);
+  socket.once('error', release);
+  return true;
 }
 
 async function proxyHttp(request, reply) {
@@ -808,13 +846,25 @@ app.route({
 
 app.server.on('upgrade', async (request, socket, head) => {
   try {
+    const url = requestUrl(request.url);
+    if (isPortalHost(request.headers) && url.pathname === '/api/admin/desktop/ws') {
+      if (url.search) throw new Error('Desktop websocket query rejected');
+      if (!isSameOriginWebSocket(request.headers)) throw new Error('Cross-origin websocket rejected');
+      const user = await resolveUser(request.headers);
+      if (user.role !== 'admin') throw new Error('Forbidden');
+      if (!allowDesktopConnection(user.email, socket)) throw new Error('Desktop websocket rate limit exceeded');
+      request.url = '/';
+      request.portalDesktop = true;
+      audit(user.email, 'desktop.connect', 'raspberry-pi', null, { host: '192.168.0.63' });
+      proxy.ws(request, socket, head, { target: config.desktopGatewayUrl });
+      return;
+    }
     const slug = subdomainSlug(request.headers);
     if (!slug) throw new Error('Unknown host');
     if (!isSameOriginWebSocket(request.headers)) throw new Error('Cross-origin websocket rejected');
     const user = await resolveUser(request.headers);
     const device = statements.deviceBySlug.get(slug);
     if (!device || !device.enabled || !canOpenDevice(user, device)) throw new Error('Forbidden');
-    const url = requestUrl(request.url);
     if (device.kind === 'printer' && url.pathname === '/webcam/laba/ws') {
       const camera = statements.cameraByParent.get(device.id);
       if (!isBrowserCamera(camera) || !canOpenDevice(user, camera)) throw new Error('Printer camera unavailable');

@@ -121,6 +121,52 @@ journalctl -u laba-portal.service -n 80 --no-pager
 
 Версія `0.7.0` не змінює схему БД. Вона додає адміністративний розділ Bluetooth/Audio та приватний audio agent на Raspberry Pi. Agent доступний лише VPS через Tailscale, вимагає окремий bearer credential і надає тільки allowlisted операції BlueZ, PipeWire та MPRIS.
 
+Версія `0.8.0` не змінює схему БД. Вона додає локальний WayVNC на `192.168.0.63:5900` та admin-only noVNC у LABA. Пакет `@novnc/novnc` pinned до `1.7.0`; WebSocket-шлюз websockify слухає лише `127.0.0.1:6080` на VPS.
+
+## Робочий стіл Raspberry Pi
+
+WayVNC уже входить до Raspberry Pi OS. З VPS скопіювати конфігурацію на Pi:
+
+```bash
+scp /opt/laba/deploy/desktop/wayvnc-config korob@192.168.0.63:/tmp/wayvnc-config
+```
+
+На Pi встановити exact LAN-конфігурацію та запустити vendor service. Приватні ключі й сертифікат генерує `wayvnc-generate-keys.service` безпосередньо на Pi:
+
+```bash
+sudo install -d -o root -g root -m 0755 /etc/wayvnc
+sudo install -o root -g root -m 0644 /tmp/wayvnc-config /etc/wayvnc/config
+sudo systemctl daemon-reload
+sudo systemctl enable --now wayvnc.service
+sudo rm -- /tmp/wayvnc-config
+systemctl is-active wayvnc.service
+ss -lnt | grep '192.168.0.63:5900'
+```
+
+На VPS встановити websockify та unit. Порт `6080` залишається loopback, тому Caddy/UFW не змінюються:
+
+```bash
+apt-get install --yes websockify
+install -o root -g root -m 0644 \
+  /opt/laba/deploy/desktop/laba-desktop-gateway.service \
+  /etc/systemd/system/laba-desktop-gateway.service
+systemd-analyze verify /etc/systemd/system/laba-desktop-gateway.service
+systemctl daemon-reload
+systemctl enable --now laba-desktop-gateway.service
+systemctl is-active laba-desktop-gateway.service
+ss -lnt | grep '127.0.0.1:6080'
+```
+
+`DESKTOP_GATEWAY_URL` може бути відсутнім у production `.env`: безпечне значення за замовчуванням — `http://127.0.0.1:6080`. Якщо змінну вказано, LABA приймає лише HTTP origin на `127.0.0.1` без credentials/path/query/fragment. З VPS перевірити RFB-банер і переконатися, що порти не публікуються:
+
+```bash
+timeout 5 bash -c 'exec 3<>/dev/tcp/192.168.0.63/5900; head -c 12 <&3'
+ss -lnt | grep -E '(:5900|:6080)'
+ufw status verbose
+```
+
+Очікується `RFB 003.008` від Pi та лише `127.0.0.1:6080` на VPS. Локальний клієнт використовує `192.168.0.63:5900`; з інтернету адміністратор відкриває `/admin` → «Робочий стіл». VNC-користувач — `korob`; пароль не зберігається в LABA.
+
 ## Bluetooth/Audio agent на Raspberry Pi
 
 Agent працює як `laba-audio-agent.service` від користувача `korob`, слухає лише `100.69.168.10:1985` і приймає запити лише від VPS `100.68.61.33`. Plaintext-токен потрібен тільки під час первинного зв’язування; на Pi постійно зберігається зашифрований systemd credential.

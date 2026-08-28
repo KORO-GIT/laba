@@ -1,0 +1,36 @@
+[Unit]
+Description=LABA loopback WebSocket gateway to Raspberry Pi VNC
+Documentation=https://github.com/novnc/websockify
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=laba
+Group=laba
+ExecStart=/usr/bin/websockify --heartbeat=30 --idle-timeout=900 127.0.0.1:6080 192.168.0.63:5900
+Restart=on-failure
+RestartSec=3s
+UMask=0077
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+IPAddressAllow=192.168.0.63/32
+
+[Install]
+WantedBy=multi-user.target

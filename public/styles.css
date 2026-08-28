@@ -317,6 +317,59 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .player-card > div:first-child > p:last-child { min-height: 18px; margin: 0; color: var(--faint); font-size: 11px; }
 .player-controls { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
 .player-controls .button-primary { min-width: 130px; }
+.desktop-toolbar { align-items: flex-end; }
+.desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.desktop-local-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255,255,255,.018);
+}
+.desktop-local-card .eyebrow { margin-bottom: 6px; }
+.desktop-local-card h3 { margin: 0 0 5px; font-size: 19px; letter-spacing: .02em; }
+.desktop-local-card p:last-child { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.desktop-status { display: flex; align-items: center; gap: 9px; min-height: 38px; color: var(--muted); font-size: 12px; }
+.desktop-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 4px rgba(110,112,105,.08); }
+.desktop-status-dot.connecting { background: var(--accent-light); box-shadow: 0 0 0 4px rgba(242,100,48,.1); animation: pulse 1s infinite; }
+.desktop-status-dot.online { background: var(--lime); box-shadow: 0 0 0 4px rgba(182,238,115,.08); }
+.desktop-status-dot.error { background: var(--red); box-shadow: 0 0 0 4px rgba(255,107,107,.08); }
+.desktop-credentials {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(160px, .55fr) minmax(160px, .55fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 18px;
+  border: 1px solid rgba(242,100,48,.3);
+  border-radius: 15px;
+  background: rgba(242,100,48,.055);
+}
+.desktop-credentials .eyebrow { margin-bottom: 6px; }
+.desktop-credentials h3 { margin: 0 0 4px; font-size: 16px; }
+.desktop-credentials p:last-child { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.desktop-screen {
+  position: relative;
+  width: 100%;
+  min-height: min(68vh, 720px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  outline: 0;
+  background: #050605;
+  box-shadow: var(--shadow);
+}
+.desktop-screen:focus-visible { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(242,100,48,.12), var(--shadow); }
+.desktop-screen > canvas { margin: auto; }
+.desktop-screen:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+.desktop-placeholder { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; padding: 30px; text-align: center; }
+.desktop-placeholder-mark { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 18px; border: 1px solid rgba(242,100,48,.28); border-radius: 20px; color: var(--accent-light); background: rgba(242,100,48,.09); font-size: 24px; font-weight: 900; }
+.desktop-placeholder h3 { margin: 0 0 7px; font-size: 18px; }
+.desktop-placeholder p { max-width: 510px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.018); }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
@@ -336,6 +389,8 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .device-group { padding: 14px; }
   .admin-layout { grid-template-columns: 1fr; }
   .audio-layout { grid-template-columns: 1fr; }
+  .desktop-credentials { grid-template-columns: 1fr 1fr; }
+  .desktop-credentials > div:first-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 590px) {
@@ -356,6 +411,11 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .bluetooth-device { align-items: stretch; flex-direction: column; }
   .bluetooth-device-actions { justify-content: flex-start; }
   .player-controls { flex-wrap: wrap; }
+  .desktop-actions { justify-content: flex-start; }
+  .desktop-local-card { align-items: stretch; flex-direction: column; }
+  .desktop-credentials { grid-template-columns: 1fr; }
+  .desktop-credentials > div:first-child { grid-column: auto; }
+  .desktop-screen { min-height: 58vh; }
   .footer { flex-direction: column; }
 }
 
