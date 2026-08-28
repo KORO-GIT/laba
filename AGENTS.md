@@ -4,7 +4,7 @@
 
 ## Перед початком
 
-1. Прочитати `README.md`, `docs/SECURITY.md` і `docs/DEPLOYMENT.md`.
+1. Повністю прочитати `README.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md` і `docs/CURRENT_STATE.md`.
 2. Перевірити `git status --short`; чужі зміни не видаляти.
 3. Не читати й не друкувати production-секрети без потреби. Ніколи не комітити `.env`, SQLite, сертифікати, ключі, логи та резервні копії.
 4. Поточний VPS містить інші production-сервіси. Не змінювати їхні каталоги, units, бази та процеси.
@@ -32,7 +32,7 @@ npm audit --omit=dev
 
 ## Production
 
-- Сервис: `laba-portal.service`.
+- Сервіс: `laba-portal.service`.
 - Користувач: `laba`.
 - Каталог: `/opt/laba`.
 - Upstream: `127.0.0.1:3020`.

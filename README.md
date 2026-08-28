@@ -8,7 +8,7 @@
 - кілька принтерів і камер, сортування та ввімкнення/вимкнення без видалення історії;
 - окремі захищені адреси виду `k1se-01-laba.zpseapil.club` (перший рівень, покритий Cloudflare Universal SSL Free);
 - адмінпанель пристроїв, користувачів, ролей та індивідуальних дозволів;
-- роли `viewer`, `operator`, `admin`;
+- ролі `viewer`, `operator`, `admin`;
 - журнал адміністративних змін;
 - вхід через Cloudflare Access (OTP/OAuth/MFA та захист від перебору на edge);
 - додатковий локальний allowlist: однієї успішної авторизації Cloudflare недостатньо;
@@ -16,7 +16,7 @@
 - proxy HTTP/WebSocket для Mainsail, OctoPrint і вебінтерфейсів камер;
 - шифрування облікових даних пристроїв AES-256-GCM;
 - SSRF-захист: дозволено лише literal IP із заданих підмереж;
-- SQLite WAL, rate limiting, CSP, anti-indexing и systemd hardening.
+- SQLite WAL, rate limiting, CSP, anti-indexing і systemd hardening.
 
 ## Схема
 
@@ -90,6 +90,6 @@ RTSP зараз перевіряється через TCP. Для відтвор
 
 ## Production
 
-Точні команди, налаштування Cloudflare, backup і rollback описані в [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Модель загроз — у [docs/SECURITY.md](docs/SECURITY.md).
+Точні команди, налаштування Cloudflare, backup і rollback описані в [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Модель загроз — у [docs/SECURITY.md](docs/SECURITY.md). Поточна production-топологія та handoff для іншого Codex — у [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).
 
 У репозиторії немає production-паролів, токенів, `.env`, баз даних і сертифікатів.
