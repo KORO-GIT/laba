@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.8.2';
+import { initDesktop } from './desktop.js?v=0.9.0';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null };
 const toast = document.querySelector('#toast');
@@ -293,6 +293,20 @@ function renderAudio() {
     ? [player.artist, player.player, player.status].filter(Boolean).join(' · ')
     : 'Сумісний MPRIS-програвач не знайдено.';
   document.querySelectorAll('[data-player-action]').forEach((button) => { button.disabled = !player.available; });
+
+  const clap = state.audio?.clap || {};
+  const clapOnline = Boolean(clap.enabled && clap.listening);
+  const clapState = document.querySelector('#clap-state');
+  clapState.textContent = clapOnline ? 'СЛУХАЄ' : clap.enabled ? 'ПОМИЛКА' : 'ВИМК.';
+  clapState.classList.toggle('off', !clapOnline);
+  document.querySelector('#clap-status-dot').classList.toggle('online', clapOnline);
+  document.querySelector('#clap-status').textContent = clapOnline
+    ? `${clap.source || 'Webcam C270 Mono'} · два хлопки → Play / Pause`
+    : clap.error || 'Детектор хлопків вимкнений';
+  const lastGesture = clap.lastGestureAt ? new Date(clap.lastGestureAt).toLocaleString('uk-UA') : null;
+  document.querySelector('#clap-details').textContent = lastGesture
+    ? `Остання команда: ${lastGesture}. Спрацювань після запуску: ${clap.triggerCount || 0}.`
+    : 'Два чіткі хлопки з інтервалом 0,16–0,90 секунди перемикають Play / Pause. Після команди діє захист від повтору на 2 секунди.';
 }
 
 async function loadAudio({ quiet = false } = {}) {

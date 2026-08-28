@@ -17,6 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from laba_clap_detector import ClapListener
+
 
 LISTEN_ADDRESS = os.environ.get("LABA_AUDIO_LISTEN_ADDRESS", "100.69.168.10")
 LISTEN_PORT = int(os.environ.get("LABA_AUDIO_LISTEN_PORT", "1985"))
@@ -35,6 +37,7 @@ SCAN_LOCK = threading.Lock()
 SCAN_PROCESS: subprocess.Popen[bytes] | None = None
 RATE_LOCK = threading.Lock()
 RATE_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+CLAP_LISTENER: ClapListener | None = None
 
 
 class AgentError(RuntimeError):
@@ -207,11 +210,17 @@ def player_status() -> dict[str, object]:
 def full_status() -> dict[str, object]:
     with COMMAND_LOCK:
         return {
-            "version": 1,
+            "version": 2,
             "adapter": bluetooth_adapter(),
             "devices": bluetooth_devices(),
             "audio": pipewire_status(),
             "player": player_status(),
+            "clap": CLAP_LISTENER.status() if CLAP_LISTENER else {
+                "enabled": False,
+                "listening": False,
+                "source": "Webcam C270 Mono",
+                "error": "Detector is starting",
+            },
         }
 
 
@@ -292,6 +301,11 @@ def player_action(action: str) -> None:
     if not Path("/usr/bin/playerctl").exists():
         raise AgentError("На Raspberry Pi ще не встановлено сумісний програвач", HTTPStatus.CONFLICT)
     run_command(["/usr/bin/playerctl", "--all-players", action])
+
+
+def clap_play_pause() -> None:
+    with COMMAND_LOCK:
+        player_action("play-pause")
 
 
 def rate_allowed(address: str) -> bool:
@@ -428,8 +442,11 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global CLAP_LISTENER
     server = ThreadingHTTPServer((LISTEN_ADDRESS, LISTEN_PORT), RequestHandler)
     server.daemon_threads = True
+    CLAP_LISTENER = ClapListener(clap_play_pause)
+    CLAP_LISTENER.start()
     LOGGER.info("LABA audio agent listening on %s:%s", LISTEN_ADDRESS, LISTEN_PORT)
     try:
         server.serve_forever(poll_interval=0.5)

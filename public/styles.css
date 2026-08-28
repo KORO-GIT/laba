@@ -291,6 +291,7 @@ textarea { resize: vertical; line-height: 1.45; }
 .access-item select { padding: 8px 10px; font-size: 11px; }
 .audio-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; }
 .audio-card { min-height: 420px; }
+.clap-card { grid-column: 1 / -1; min-height: 0; }
 .audio-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .audio-card-heading h3 { margin: 0; font-size: 22px; }
 .audio-card-heading .eyebrow { margin-bottom: 7px; }

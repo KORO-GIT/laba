@@ -78,7 +78,7 @@ WebSocket Mainsail проходить через LABA: портал переві
 - вибрати PipeWire sink, змінити гучність і mute;
 - керувати play/pause/next/previous/stop сумісного MPRIS-програвача.
 
-На Pi активний `laba-audio-agent.service`. Він слухає тільки Tailscale IP `100.69.168.10:1985`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і не виконує shell. Credential Pi зашифрований у `/etc/credstore.encrypted/laba-audio-agent-token`; plaintext-копії після deployment видалені. `playerctl` встановлено, PipeWire/WirePlumber активні, Logitech C270 доступна як mono source. Bluetooth-контролер `PiLABA4B` увімкнений і не заблокований rfkill. Колонка ще не спарована, тому доступний лише вбудований аудіовихід.
+На Pi активний `laba-audio-agent.service`. Він слухає тільки Tailscale IP `100.69.168.10:1985`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і не виконує shell. Credential Pi зашифрований у `/etc/credstore.encrypted/laba-audio-agent-token`; plaintext-копії після deployment видалені. `playerctl` встановлено, PipeWire/WirePlumber активні, Logitech C270 доступна як mono source. Адаптивний детектор локально слухає exact PipeWire source C270: два чіткі хлопки з інтервалом `0,16–0,90` секунди виконують MPRIS `play-pause`, після чого ігнорують імпульси 2 секунди. Bluetooth-контролер `PiLABA4B` увімкнений, а EDIFIER R1080BT підключена й обрана активним аудіовиходом.
 
 YouTube Music не встановлено: офіційний IFrame API відтворює медіа в браузері користувача, а офіційного server-side playback API для подачі звуку з Pi у Bluetooth-колонку немає. MPRIS-кнопки вже готові для локального програвача; вибір між браузерним відтворенням і неофіційним headless-рішенням потрібно зробити окремо.
 
@@ -114,7 +114,7 @@ LABA використовує окремі точний і wildcard-блоки C
 - Завершити вхід головного адміністратора через One-time PIN на новий e-mail, якщо поточна Access-сесія закінчилася.
 - Після зміни положення або освітлення камери перевірити різкість, експозицію і стабільні 25 FPS H.264 під час реального друку.
 - Перевести конкретну Bluetooth-колонку в pairing mode, знайти її у `/admin` → «Аудіо» та натиснути «Спарувати».
-- Визначити спосіб музики: офіційний YouTube player у браузері або окремо погоджений неофіційний програвач на Pi. Після появи локального плеєра додати clap/voice automation поверх готових MPRIS-команд.
+- За потреби відкалібрувати пороги хлопків під інше розташування камери або гучність колонок; поточний профіль перевірено на Webcam C270 під час відтворення YouTube Music.
 - Після зміни пароля користувача Pi перевірити обидва VNC-шляхи: локальний `192.168.0.63:5900` та кнопку в LABA.
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
