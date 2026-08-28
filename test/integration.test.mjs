@@ -101,10 +101,31 @@ test('development server serves portal API and protected admin writes', async (c
     })
   });
   assert.equal(created.status, 201);
+  const createdDevice = await created.json();
 
   const proxiedAsset = await fetch(`${root}/assets/device.js`, {
     headers: { 'X-Forwarded-Host': 'camera-01-laba.zpseapil.club' }
   });
   assert.equal(proxiedAsset.status, 200);
   assert.equal(await proxiedAsset.text(), 'window.deviceAsset = "/assets/device.js";');
+
+  const disabled = await fetch(`${root}/api/admin/devices/${createdDevice.id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Request': '1',
+      Origin: root
+    },
+    body: JSON.stringify({
+      slug: 'camera-01', name: 'Camera 01', kind: 'camera', driver: 'http',
+      host: '127.0.0.1', protocol: 'http', uiPort: upstreamPort, apiPort: null,
+      notes: '', enabled: false, sortOrder: 20
+    })
+  });
+  assert.equal(disabled.status, 200);
+
+  const disabledProxy = await fetch(`${root}/assets/device.js`, {
+    headers: { 'X-Forwarded-Host': 'camera-01-laba.zpseapil.club' }
+  });
+  assert.equal(disabledProxy.status, 404);
 });

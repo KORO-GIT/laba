@@ -459,7 +459,7 @@ async function proxyHttp(request, reply) {
   const slug = subdomainSlug(request.headers);
   if (!slug) return reply.code(404).send({ error: 'Unknown portal host' });
   const device = statements.deviceBySlug.get(slug);
-  if (!device) return reply.code(404).send({ error: 'Устройство не найдено' });
+  if (!device || !device.enabled) return reply.code(404).send({ error: 'Устройство не найдено' });
   if (!canOpenDevice(request.portalUser, device)) return reply.code(403).send({ error: 'Нет доступа к устройству' });
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     && request.headers['sec-fetch-site'] === 'cross-site') {
@@ -488,7 +488,7 @@ app.server.on('upgrade', async (request, socket, head) => {
     if (!slug) throw new Error('Unknown host');
     const user = await resolveUser(request.headers);
     const device = statements.deviceBySlug.get(slug);
-    if (!device || !canOpenDevice(user, device)) throw new Error('Forbidden');
+    if (!device || !device.enabled || !canOpenDevice(user, device)) throw new Error('Forbidden');
     const target = proxyTarget(device);
     if (!target) throw new Error('No browser stream configured');
     request.portalDevice = device;
