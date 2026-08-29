@@ -389,8 +389,9 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .starlink-control-row strong { margin-bottom: 4px; font-size: 12px; }
 .starlink-control-row small { color: var(--faint); font-size: 10px; line-height: 1.4; }
 .starlink-control-form { grid-template-columns: minmax(150px, 1fr) minmax(150px, .75fr) auto; }
-.starlink-sleep-control { grid-template-columns: minmax(150px, 1fr) auto minmax(115px, .55fr) minmax(110px, .45fr) auto; }
+.starlink-sleep-control { grid-template-columns: minmax(150px, 1fr) auto minmax(115px, .55fr) minmax(110px, .45fr); }
 .starlink-sleep-control .field > span { margin-bottom: 4px; }
+.starlink-sleep-control > .button { grid-column: 2 / -1; justify-self: end; }
 .starlink-control-row select, .starlink-control-row input { padding: 9px 10px; font-size: 11px; }
 .starlink-restricted-control { opacity: .62; }
 .starlink-restricted-control .button:disabled { cursor: not-allowed; }
@@ -489,6 +490,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .starlink-detail-grid { grid-template-columns: 1fr; }
   .starlink-sleep-control { grid-template-columns: 1fr 1fr; }
   .starlink-sleep-control > div:first-child { grid-column: 1 / -1; }
+  .starlink-sleep-control > .button { grid-column: 2; }
   .starlink-router-summary { grid-template-columns: 1fr; }
   .desktop-credentials { grid-template-columns: 1fr 1fr; }
   .desktop-credentials > div:first-child { grid-column: 1 / -1; }
@@ -517,6 +519,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .starlink-metrics, .starlink-chart-grid { grid-template-columns: 1fr; }
   .starlink-control-form, .starlink-sleep-control { grid-template-columns: 1fr; align-items: stretch; }
   .starlink-sleep-control > div:first-child { grid-column: auto; }
+  .starlink-sleep-control > .button { grid-column: auto; justify-self: stretch; }
   .starlink-control-row > .switch-row { justify-self: start; }
   .starlink-danger-actions { justify-content: flex-start; }
   .desktop-actions { justify-content: flex-start; }

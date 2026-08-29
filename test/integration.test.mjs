@@ -279,6 +279,7 @@ test('development server serves portal API and protected admin writes', async (c
   const adminPage = await fetch(`${root}/admin`).then((response) => response.text());
   assert.match(adminPage, /id="starlink-router-tab"/);
   assert.match(adminPage, /Лише власник/);
+  assert.match(adminPage, /до 30 подій/);
 
   const rejectedStarlinkReboot = await fetch(`${root}/api/admin/starlink/reboot`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true })

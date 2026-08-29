@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.12.0';
+import { initDesktop } from './desktop.js?v=0.12.1';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');
@@ -444,7 +444,12 @@ function renderStarlinkEvents(events) {
     EVENT_REASON_OBSTRUCTED: 'Перешкода сигналу',
     EVENT_REASON_NO_DOWNLINK: 'Втрачено downlink',
     EVENT_REASON_NO_PINGS: 'Немає відповіді на ping',
-    EVENT_REASON_THERMAL_SHUTDOWN: 'Температурне вимкнення'
+    EVENT_REASON_THERMAL_SHUTDOWN: 'Температурне вимкнення',
+    EVENT_REASON_OUTAGE_UNKNOWN: 'Коротка втрата зв’язку',
+    EVENT_REASON_OUTAGE_NO_PINGS: 'Немає відповіді від Starlink PoP',
+    EVENT_REASON_OUTAGE_NO_DOWNLINK: 'Втрачено супутниковий downlink',
+    EVENT_REASON_OUTAGE_OBSTRUCTED: 'Сигнал перекрито перешкодою',
+    EVENT_REASON_HIGH_DOWNLINK_PACKET_LOSS: 'Високі втрати пакетів downlink'
   };
   const rows = [...(events || [])].reverse().map((event) => {
     const row = el('div', 'starlink-event');
@@ -452,12 +457,15 @@ function renderStarlinkEvents(events) {
     const description = el('div');
     const reason = eventLabels[event.reason] || String(event.reason || 'Подія Starlink').replace(/^EVENT_REASON_/, '').replaceAll('_', ' ');
     description.append(el('strong', '', reason), el('small', '', `Тривалість: ${metric(event.durationSeconds, 'с', 1)}`));
-    const time = el('time', '', event.startedAt ? new Date(event.startedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—');
+    const time = el('time', '', event.startedAt ? new Date(event.startedAt).toLocaleString('uk-UA', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }) : '—');
+    if (event.startedAt) time.dateTime = event.startedAt;
     row.append(dot, description, time);
     return row;
   });
   list.replaceChildren(...rows);
-  if (!rows.length) list.append(el('p', 'audio-empty', 'За останні 15 хвилин помітних подій не було.'));
+  if (!rows.length) list.append(el('p', 'audio-empty', 'Останніх мережевих подій немає.'));
 }
 
 function showStarlinkDevice(view) {
