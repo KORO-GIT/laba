@@ -17,6 +17,8 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 Environment=LABA_CLAP_ENABLED=true
 Environment=LABA_CLAP_SOURCE=alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.mono-fallback
+StateDirectory=laba-audio-agent
+StateDirectoryMode=0700
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=10

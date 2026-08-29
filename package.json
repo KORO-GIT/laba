@@ -1,13 +1,13 @@
 {
   "name": "laba-device-portal",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "Secure multi-printer and camera portal for laba.zpseapil.club",
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs && node --check src/database.mjs && node --check src/security.mjs && node --check src/probes.mjs && node --check src/audio-agent.mjs && node --check src/starlink-agent.mjs && node --check scripts/configure-usb-camera.mjs && node --check scripts/configure-audio-agent.mjs && node --check scripts/configure-starlink-agent.mjs && python3 -m py_compile deploy/desktop/laba-wayvnc-attach.py deploy/audio/laba-audio-agent.py deploy/audio/laba_clap_detector.py deploy/starlink/laba-starlink-agent.py deploy/starlink/laba_starlink_model.py deploy/starlink/provision-token.py scripts/test-clap-detector.py scripts/test-starlink-model.py && python3 scripts/test-clap-detector.py && python3 scripts/test-starlink-model.py && node --check public/dashboard.js && node --check public/admin.js && node --check public/desktop.js && node --check public/camera.js && node --check public/vendor/go2rtc/video-rtc.js && node --check public/vendor/go2rtc/video-stream.js",
+    "check": "node --check src/server.mjs && node --check src/database.mjs && node --check src/security.mjs && node --check src/probes.mjs && node --check src/audio-agent.mjs && node --check src/starlink-agent.mjs && node --check scripts/configure-usb-camera.mjs && node --check scripts/configure-audio-agent.mjs && node --check scripts/configure-starlink-agent.mjs && python3 -m py_compile deploy/desktop/laba-wayvnc-attach.py deploy/audio/laba-audio-agent.py deploy/audio/laba_clap_detector.py deploy/starlink/laba-starlink-agent.py deploy/starlink/laba_starlink_model.py deploy/starlink/provision-token.py scripts/test-audio-agent-config.py scripts/test-clap-detector.py scripts/test-starlink-model.py && python3 scripts/test-audio-agent-config.py && python3 scripts/test-clap-detector.py && python3 scripts/test-starlink-model.py && node --check public/dashboard.js && node --check public/admin.js && node --check public/desktop.js && node --check public/camera.js && node --check public/vendor/go2rtc/video-rtc.js && node --check public/vendor/go2rtc/video-stream.js",
     "test": "node --test"
   },
   "engines": {

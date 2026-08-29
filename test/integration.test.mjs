@@ -87,7 +87,12 @@ test('development server serves portal API and protected admin writes', async (c
       available: true, sinks: [{ id: 57, name: 'Test Speaker', default: true }],
       defaultSinkId: 57, volume: 40, muted: false
     },
-    player: { available: false, status: 'Stopped', player: null, title: null, artist: null }
+    player: { available: false, status: 'Stopped', player: null, title: null, artist: null },
+    clap: {
+      enabled: true, listening: true, source: 'Webcam C270 Mono',
+      config: { sensitivity: 70, maxIntervalMs: 1100, minIntervalMs: 160 },
+      limits: { sensitivity: { min: 30, max: 80 }, maxIntervalMs: { min: 350, max: 1500 } }
+    }
   };
   const starlinkStatus = {
     version: 1,
@@ -236,6 +241,31 @@ test('development server serves portal API and protected admin writes', async (c
     authorization: 'Bearer test-audio-agent-token-with-at-least-32-characters', body: null
   });
 
+  const rejectedClapConfig = await fetch(`${root}/api/admin/audio/clap/config`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: false, sensitivity: 74, maxIntervalMs: 1050 })
+  });
+  assert.equal(rejectedClapConfig.status, 403);
+
+  const updatedClapConfig = await fetch(`${root}/api/admin/audio/clap/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ enabled: false, sensitivity: 74, maxIntervalMs: 1050 })
+  });
+  assert.equal(updatedClapConfig.status, 200);
+  assert.deepEqual(audioRequests.at(-1), {
+    method: 'POST', url: '/v1/clap/config',
+    authorization: 'Bearer test-audio-agent-token-with-at-least-32-characters',
+    body: { enabled: false, sensitivity: 74, maxIntervalMs: 1050 }
+  });
+
+  const invalidClapConfig = await fetch(`${root}/api/admin/audio/clap/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ enabled: true, sensitivity: 100, maxIntervalMs: 2000 })
+  });
+  assert.equal(invalidClapConfig.status, 400);
+
   const rejectedAudioWrite = await fetch(`${root}/api/admin/audio/bluetooth/power`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: false })
   });
@@ -278,6 +308,9 @@ test('development server serves portal API and protected admin writes', async (c
 
   const adminPage = await fetch(`${root}/admin`).then((response) => response.text());
   assert.match(adminPage, /id="starlink-router-tab"/);
+  assert.match(adminPage, /id="clap-enabled"/);
+  assert.match(adminPage, /id="clap-sensitivity"/);
+  assert.match(adminPage, /id="clap-max-interval"/);
   assert.match(adminPage, /Лише власник/);
   assert.match(adminPage, /до 30 подій/);
 

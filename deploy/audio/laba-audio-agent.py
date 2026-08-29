@@ -18,7 +18,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from laba_clap_detector import ClapListener
+from laba_clap_detector import (
+    DEFAULT_MAX_GESTURE_INTERVAL_MS,
+    DEFAULT_SENSITIVITY,
+    MAX_MAX_GESTURE_INTERVAL_MS,
+    MAX_SENSITIVITY,
+    MIN_MAX_GESTURE_INTERVAL_MS,
+    MIN_SENSITIVITY,
+    ClapListener,
+)
 
 
 LISTEN_ADDRESS = os.environ.get("LABA_AUDIO_LISTEN_ADDRESS", "100.69.168.10")
@@ -32,6 +40,10 @@ BLUETOOTH_ACTIONS = {"pair", "trust", "untrust", "connect", "disconnect", "remov
 PLAYER_ACTIONS = {"play", "pause", "play-pause", "next", "previous", "stop"}
 GREETING_WAV = Path("/opt/laba-audio-agent/bazhaju-zdorovya.wav")
 GREETING_DUCK_FACTOR = 0.35
+CLAP_CONFIG_PATH = Path(os.environ.get(
+    "LABA_CLAP_CONFIG_PATH",
+    "/var/lib/laba-audio-agent/clap-config.json",
+))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger("laba-audio-agent")
@@ -60,6 +72,59 @@ def credential(name: str) -> str:
 
 
 AUTH_TOKEN = credential("AUDIO_AGENT_TOKEN")
+
+
+def default_clap_config() -> dict[str, object]:
+    enabled = os.environ.get("LABA_CLAP_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    return {
+        "enabled": enabled,
+        "sensitivity": DEFAULT_SENSITIVITY,
+        "maxIntervalMs": DEFAULT_MAX_GESTURE_INTERVAL_MS,
+    }
+
+
+def normalized_clap_config(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError("clap config must be an object")
+    enabled = value.get("enabled")
+    sensitivity = value.get("sensitivity")
+    max_interval_ms = value.get("maxIntervalMs")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    if type(sensitivity) is not int or not MIN_SENSITIVITY <= sensitivity <= MAX_SENSITIVITY:
+        raise ValueError("sensitivity is outside the allowed range")
+    if (
+        type(max_interval_ms) is not int
+        or not MIN_MAX_GESTURE_INTERVAL_MS <= max_interval_ms <= MAX_MAX_GESTURE_INTERVAL_MS
+    ):
+        raise ValueError("maxIntervalMs is outside the allowed range")
+    return {
+        "enabled": enabled,
+        "sensitivity": sensitivity,
+        "maxIntervalMs": max_interval_ms,
+    }
+
+
+def load_clap_config() -> dict[str, object]:
+    fallback = default_clap_config()
+    try:
+        if not CLAP_CONFIG_PATH.is_file():
+            return fallback
+        return normalized_clap_config(json.loads(CLAP_CONFIG_PATH.read_text(encoding="utf-8")))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        LOGGER.warning("Cannot load clap config, using safe defaults: %s", error)
+        return fallback
+
+
+def save_clap_config(config: dict[str, object]) -> None:
+    CLAP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = CLAP_CONFIG_PATH.with_suffix(".tmp")
+    temporary_path.write_text(
+        json.dumps(config, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.chmod(0o600)
+    os.replace(temporary_path, CLAP_CONFIG_PATH)
 
 
 def clean_output(value: str) -> str:
@@ -213,7 +278,7 @@ def player_status() -> dict[str, object]:
 def full_status() -> dict[str, object]:
     with COMMAND_LOCK:
         return {
-            "version": 3,
+            "version": 4,
             "adapter": bluetooth_adapter(),
             "devices": bluetooth_devices(),
             "audio": pipewire_status(),
@@ -374,6 +439,18 @@ def clap_greeting() -> None:
                     LOGGER.exception("Cannot restore MPRIS volume for %s", name)
 
 
+def set_clap_config(body: dict[str, object]) -> None:
+    if not CLAP_LISTENER:
+        raise AgentError("Детектор хлопків ще запускається", HTTPStatus.SERVICE_UNAVAILABLE)
+    try:
+        config = normalized_clap_config(body)
+    except ValueError as error:
+        raise AgentError("Некоректні налаштування детектора хлопків", HTTPStatus.BAD_REQUEST) from error
+    save_clap_config(config)
+    CLAP_LISTENER.configure(int(config["sensitivity"]), int(config["maxIntervalMs"]))
+    CLAP_LISTENER.set_enabled(bool(config["enabled"]))
+
+
 def rate_allowed(address: str) -> bool:
     now = time.monotonic()
     with RATE_LOCK:
@@ -485,6 +562,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not isinstance(action, str):
                 raise AgentError("Поле action має бути string", HTTPStatus.BAD_REQUEST)
             player_action(action)
+        elif path == "/v1/clap/config":
+            set_clap_config(body)
         else:
             raise AgentError("Шлях не знайдено", HTTPStatus.NOT_FOUND)
         return full_status()
@@ -511,7 +590,14 @@ def main() -> None:
     global CLAP_LISTENER
     server = ThreadingHTTPServer((LISTEN_ADDRESS, LISTEN_PORT), RequestHandler)
     server.daemon_threads = True
-    CLAP_LISTENER = ClapListener(clap_play_pause, clap_greeting)
+    clap_config = load_clap_config()
+    CLAP_LISTENER = ClapListener(
+        clap_play_pause,
+        clap_greeting,
+        sensitivity=int(clap_config["sensitivity"]),
+        max_interval_ms=int(clap_config["maxIntervalMs"]),
+    )
+    CLAP_LISTENER.set_enabled(bool(clap_config["enabled"]))
     CLAP_LISTENER.start()
     LOGGER.info("LABA audio agent listening on %s:%s", LISTEN_ADDRESS, LISTEN_PORT)
     try:

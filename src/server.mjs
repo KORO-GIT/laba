@@ -335,6 +335,11 @@ const audioSinkSchema = z.object({ nodeId: z.coerce.number().int().min(1).max(1_
 const playerActionSchema = z.object({
   action: z.enum(['play', 'pause', 'play-pause', 'next', 'previous', 'stop'])
 }).strict();
+const clapConfigSchema = z.object({
+  enabled: z.boolean(),
+  sensitivity: z.coerce.number().int().min(30).max(80),
+  maxIntervalMs: z.coerce.number().int().min(350).max(1_500)
+}).strict();
 const starlinkConfirmSchema = z.object({ confirm: z.literal(true) }).strict();
 const starlinkGpsSchema = z.object({ inhibited: z.boolean() }).strict();
 const starlinkPowerSaveSchema = z.object({
@@ -651,6 +656,17 @@ app.post('/api/admin/audio/player', {
   if (!body) return;
   const result = await audioAgentRequest('/v1/player/action', { method: 'POST', body });
   audit(request.portalUser.email, `audio.player.${body.action}`, 'audio', null);
+  return result;
+});
+
+app.post('/api/admin/audio/clap/config', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(clapConfigSchema, request.body, reply);
+  if (!body) return;
+  const result = await audioAgentRequest('/v1/clap/config', { method: 'POST', body });
+  audit(request.portalUser.email, 'audio.clap.config', 'audio', null, body);
   return result;
 });
 

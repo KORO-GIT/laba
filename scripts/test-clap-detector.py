@@ -48,6 +48,13 @@ def impulse_samples(random_source: random.Random, burst: bool) -> list[float]:
     ]
 
 
+def weak_impulse_samples(random_source: random.Random, burst: bool) -> list[float]:
+    return [
+        random_source.gauss(0.0, 0.10 if burst and index < 100 else 0.008)
+        for index in range(MODULE.FRAME_SAMPLES)
+    ]
+
+
 def electric_arc_samples(random_source: random.Random, burst: bool) -> list[float]:
     return [
         (0.65 if index % 2 == 0 else -0.65) if burst and index < 40 else random_source.gauss(0.0, 0.008)
@@ -115,6 +122,36 @@ def test_slow_human_double_clap_triggers() -> None:
     assert events == ["clap", "clap-pair", "double-clap"], events
 
 
+def test_sensitivity_controls_weak_claps() -> None:
+    results: dict[int, list[str]] = {}
+    for sensitivity in (30, MODULE.MAX_SENSITIVITY):
+        detector = MODULE.AdaptiveClapDetector(sensitivity=sensitivity)
+        random_source = random.Random(101)
+        events: list[str] = []
+        for frame_number in range(250):
+            now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+            burst = 2.00 <= now < 2.02 or 2.40 <= now < 2.42
+            event = detector.process(pcm_frame(weak_impulse_samples(random_source, burst)), now)
+            if event:
+                events.append(event)
+        results[sensitivity] = events
+    assert results[30] == [], results
+    assert results[MODULE.MAX_SENSITIVITY] == ["clap", "clap-pair", "double-clap"], results
+
+
+def test_configurable_slow_interval_triggers() -> None:
+    detector = MODULE.AdaptiveClapDetector(max_interval_ms=1_300)
+    random_source = random.Random(41)
+    events: list[str] = []
+    for frame_number in range(300):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 3.20 <= now < 3.22
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert events == ["clap", "clap-pair", "double-clap"], events
+
+
 def test_electric_arc_pair_is_rejected() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(19)
@@ -145,6 +182,21 @@ def test_sustained_rhythmic_pair_is_rejected() -> None:
     assert all(metrics["activeRatio"] > MODULE.MAX_CLAP_ACTIVE_RATIO for metrics in rejected_metrics)
 
 
+def test_high_sensitivity_still_rejects_interference() -> None:
+    for sample_factory in (electric_arc_samples, sustained_rhythmic_beat_samples):
+        for seed in (18, 42, 43, 44, 54, 73):
+            detector = MODULE.AdaptiveClapDetector(sensitivity=MODULE.MAX_SENSITIVITY)
+            random_source = random.Random(seed)
+            events: list[str] = []
+            for frame_number in range(250):
+                now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+                burst = 2.00 <= now < 2.02 or 2.38 <= now < 2.40
+                event = detector.process(pcm_frame(sample_factory(random_source, burst)), now)
+                if event:
+                    events.append(event)
+            assert events == [], (sample_factory.__name__, seed, events)
+
+
 def test_too_fast_pair_is_not_a_gesture() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(23)
@@ -158,12 +210,29 @@ def test_too_fast_pair_is_not_a_gesture() -> None:
     assert "double-clap" not in events and "triple-clap" not in events, events
 
 
+def test_listener_exposes_live_configuration() -> None:
+    listener = MODULE.ClapListener(lambda: None, lambda: None)
+    listener.configure(76, 1_250)
+    listener.set_enabled(False)
+    status = listener.status()
+    assert status["enabled"] is False
+    assert status["config"] == {
+        "sensitivity": 76,
+        "maxIntervalMs": 1_250,
+        "minIntervalMs": round(MODULE.MIN_GESTURE_INTERVAL * 1_000),
+    }
+
+
 test_music_does_not_trigger()
 test_double_clap_triggers_once()
 test_triple_clap_supersedes_double_clap()
 test_fast_human_double_clap_triggers()
 test_slow_human_double_clap_triggers()
+test_sensitivity_controls_weak_claps()
+test_configurable_slow_interval_triggers()
 test_electric_arc_pair_is_rejected()
 test_sustained_rhythmic_pair_is_rejected()
+test_high_sensitivity_still_rejects_interference()
 test_too_fast_pair_is_not_a_gesture()
+test_listener_exposes_live_configuration()
 print("Clap detector tests passed")

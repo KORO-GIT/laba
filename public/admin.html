@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.12.2">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.13.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -130,7 +130,23 @@
             <span id="clap-status-dot" class="audio-status-dot"></span>
             <span id="clap-status">Підключення до Webcam C270…</span>
           </div>
-          <p id="clap-details" class="form-hint">Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Тримайте ритм 0,18–0,90 секунди; короткі електричні розряди відсіюються.</p>
+          <div class="clap-config-grid">
+            <div class="clap-config-toggle">
+              <div><strong>Розпізнавання хлопків</strong><small>Вмикає або повністю зупиняє обробку USB-мікрофона.</small></div>
+              <label class="switch-row"><input id="clap-enabled" type="checkbox"><span class="switch"></span><span id="clap-enabled-label">Увімкнено</span></label>
+            </div>
+            <div class="clap-config-control">
+              <div class="volume-row"><label for="clap-sensitivity">Чутливість</label><output id="clap-sensitivity-value" for="clap-sensitivity">70%</output></div>
+              <input id="clap-sensitivity" type="range" min="30" max="80" step="1" value="70">
+              <small>Вища чутливість краще чує тихі хлопки, але збільшує ризик реакції на сторонні звуки.</small>
+            </div>
+            <div class="clap-config-control">
+              <div class="volume-row"><label for="clap-max-interval">Максимальна пауза між хлопками</label><output id="clap-max-interval-value" for="clap-max-interval">1,10 с</output></div>
+              <input id="clap-max-interval" type="range" min="350" max="1500" step="50" value="1100">
+              <small>Більше значення полегшує повільний ритм, але трохи затримує виконання подвійного хлопка.</small>
+            </div>
+          </div>
+          <p id="clap-details" class="form-hint">Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Електричні розряди відсіюються окремим акустичним фільтром.</p>
         </article>
       </div>
     </section>
@@ -335,6 +351,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.12.2"></script>
+  <script type="module" src="/assets/admin.js?v=0.13.0"></script>
 </body>
 </html>

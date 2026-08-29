@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.12.2';
+import { initDesktop } from './desktop.js?v=0.13.0';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');
@@ -300,17 +300,32 @@ function renderAudio() {
   const clap = state.audio?.clap || {};
   const clapOnline = Boolean(clap.enabled && clap.listening);
   const clapState = document.querySelector('#clap-state');
-  clapState.textContent = clapOnline ? 'СЛУХАЄ' : clap.enabled ? 'ПОМИЛКА' : 'ВИМК.';
+  clapState.textContent = clapOnline ? 'СЛУХАЄ' : clap.enabled ? (clap.error ? 'ПОМИЛКА' : 'ЗАПУСК') : 'ВИМК.';
   clapState.classList.toggle('off', !clapOnline);
   document.querySelector('#clap-status-dot').classList.toggle('online', clapOnline);
   document.querySelector('#clap-status').textContent = clapOnline
     ? `${clap.source || 'Webcam C270 Mono'} · 2 хлопки → Play / Pause · 3 → привітання`
-    : clap.error || 'Детектор хлопків вимкнений';
+    : clap.enabled ? (clap.error || 'Запуск прослуховування…') : 'Розпізнавання хлопків вимкнено';
+  const clapConfig = clap.config || {};
+  const sensitivity = document.querySelector('#clap-sensitivity');
+  const maxInterval = document.querySelector('#clap-max-interval');
+  const enabled = document.querySelector('#clap-enabled');
+  if (document.activeElement !== enabled) enabled.checked = Boolean(clap.enabled);
+  document.querySelector('#clap-enabled-label').textContent = clap.enabled ? 'Увімкнено' : 'Вимкнено';
+  if (document.activeElement !== sensitivity) sensitivity.value = String(clapConfig.sensitivity ?? 70);
+  if (document.activeElement !== maxInterval) maxInterval.value = String(clapConfig.maxIntervalMs ?? 1100);
+  sensitivity.disabled = !clap.config;
+  maxInterval.disabled = !clap.config;
+  enabled.disabled = !clap.config;
+  document.querySelector('#clap-sensitivity-value').textContent = `${sensitivity.value}%`;
+  document.querySelector('#clap-max-interval-value').textContent = `${new Intl.NumberFormat('uk-UA', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  }).format(Number(maxInterval.value) / 1000)} с`;
   const lastGesture = clap.lastGestureAt ? new Date(clap.lastGestureAt).toLocaleString('uk-UA') : null;
   const lastGestureName = clap.lastGesture === 'greeting' ? 'привітання' : 'Play / Pause';
   document.querySelector('#clap-details').textContent = lastGesture
     ? `Остання команда: ${lastGestureName}, ${lastGesture}. Подвійних: ${clap.doubleClapCount || 0}, потрійних: ${clap.tripleClapCount || 0}.`
-    : 'Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Тримайте ритм 0,35–0,80 секунди; короткі електричні розряди відсіюються.';
+    : 'Два чіткі хлопки перемикають Play / Pause. Три — приглушують музику, відтворюють «Бажаю здоров’я!» та повертають попередню гучність. Електричні розряди відсіюються окремим акустичним фільтром.';
 }
 
 async function loadAudio({ quiet = false } = {}) {
@@ -333,6 +348,14 @@ async function audioMutation(path, body, successMessage) {
   state.audio = await api(path, { method: 'POST', body: JSON.stringify(body) });
   renderAudio();
   if (successMessage) showToast(successMessage);
+}
+
+async function saveClapConfig(successMessage = 'Налаштування хлопків збережено') {
+  await audioMutation('/api/admin/audio/clap/config', {
+    enabled: document.querySelector('#clap-enabled').checked,
+    sensitivity: Number(document.querySelector('#clap-sensitivity').value),
+    maxIntervalMs: Number(document.querySelector('#clap-max-interval').value)
+  }, successMessage);
 }
 
 function metric(value, unit, digits = 1) {
@@ -818,6 +841,28 @@ document.querySelectorAll('[data-player-action]').forEach((button) => button.add
   try { await audioMutation('/api/admin/audio/player', { action: button.dataset.playerAction }); }
   catch (error) { showToast(error.message, true); }
 }));
+document.querySelector('#clap-enabled').addEventListener('change', async (event) => {
+  event.currentTarget.disabled = true;
+  try { await saveClapConfig(event.currentTarget.checked ? 'Керування хлопками увімкнено' : 'Керування хлопками вимкнено'); }
+  catch (error) { showToast(error.message, true); await loadAudio({ quiet: true }); }
+  finally { event.currentTarget.disabled = false; }
+});
+document.querySelector('#clap-sensitivity').addEventListener('input', (event) => {
+  document.querySelector('#clap-sensitivity-value').textContent = `${event.currentTarget.value}%`;
+});
+document.querySelector('#clap-sensitivity').addEventListener('change', async () => {
+  try { await saveClapConfig('Чутливість хлопків збережено'); }
+  catch (error) { showToast(error.message, true); await loadAudio({ quiet: true }); }
+});
+document.querySelector('#clap-max-interval').addEventListener('input', (event) => {
+  document.querySelector('#clap-max-interval-value').textContent = `${new Intl.NumberFormat('uk-UA', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  }).format(Number(event.currentTarget.value) / 1000)} с`;
+});
+document.querySelector('#clap-max-interval').addEventListener('change', async () => {
+  try { await saveClapConfig('Інтервал між хлопками збережено'); }
+  catch (error) { showToast(error.message, true); await loadAudio({ quiet: true }); }
+});
 document.querySelector('#refresh-starlink').addEventListener('click', async (event) => {
   event.currentTarget.disabled = true;
   try { await loadStarlink({ includeMap: true }); showToast('Дані Starlink оновлено'); }
