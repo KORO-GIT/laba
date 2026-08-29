@@ -89,6 +89,32 @@ def test_triple_clap_supersedes_double_clap() -> None:
     assert events == ["clap", "clap-pair", "triple-clap"], events
 
 
+def test_fast_human_double_clap_triggers() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(31)
+    events: list[str] = []
+    for frame_number in range(250):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 2.24 <= now < 2.26
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert events == ["clap", "clap-pair", "double-clap"], events
+
+
+def test_slow_human_double_clap_triggers() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(37)
+    events: list[str] = []
+    for frame_number in range(280):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 2.86 <= now < 2.88
+        event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
+        if event:
+            events.append(event)
+    assert events == ["clap", "clap-pair", "double-clap"], events
+
+
 def test_electric_arc_pair_is_rejected() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(19)
@@ -125,7 +151,7 @@ def test_too_fast_pair_is_not_a_gesture() -> None:
     events: list[str] = []
     for frame_number in range(250):
         now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
-        burst = 2.00 <= now < 2.02 or 2.22 <= now < 2.24
+        burst = 2.00 <= now < 2.02 or 2.14 <= now < 2.16
         event = detector.process(pcm_frame(impulse_samples(random_source, burst)), now)
         if event:
             events.append(event)
@@ -135,6 +161,8 @@ def test_too_fast_pair_is_not_a_gesture() -> None:
 test_music_does_not_trigger()
 test_double_clap_triggers_once()
 test_triple_clap_supersedes_double_clap()
+test_fast_human_double_clap_triggers()
+test_slow_human_double_clap_triggers()
 test_electric_arc_pair_is_rejected()
 test_sustained_rhythmic_pair_is_rejected()
 test_too_fast_pair_is_not_a_gesture()
