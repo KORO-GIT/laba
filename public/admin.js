@@ -1,10 +1,11 @@
-import { initDesktop } from './desktop.js?v=0.11.0';
+import { initDesktop } from './desktop.js?v=0.12.0';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');
 let audioPollTimer = null;
 let starlinkPollTimer = null;
 let starlinkLoading = false;
+let starlinkDeviceView = 'dish';
 
 function showToast(message, isError = false) {
   toast.textContent = message;
@@ -459,6 +460,20 @@ function renderStarlinkEvents(events) {
   if (!rows.length) list.append(el('p', 'audio-empty', 'За останні 15 хвилин помітних подій не було.'));
 }
 
+function showStarlinkDevice(view) {
+  const routerAvailable = Boolean(state.starlink?.router?.available);
+  starlinkDeviceView = view === 'router' && routerAvailable ? 'router' : 'dish';
+  const dishActive = starlinkDeviceView === 'dish';
+  const dishTab = document.querySelector('#starlink-dish-tab');
+  const routerTab = document.querySelector('#starlink-router-tab');
+  dishTab.classList.toggle('active', dishActive);
+  dishTab.setAttribute('aria-selected', String(dishActive));
+  routerTab.classList.toggle('active', !dishActive);
+  routerTab.setAttribute('aria-selected', String(!dishActive));
+  document.querySelector('#starlink-dish-view').classList.toggle('hidden', !dishActive);
+  document.querySelector('#starlink-router-view').classList.toggle('hidden', dishActive);
+}
+
 function renderStarlink() {
   const data = state.starlink;
   if (!data) return;
@@ -472,6 +487,7 @@ function renderStarlink() {
   live.textContent = data.connected ? 'ОНЛАЙН' : String(data.state || 'ОФЛАЙН');
   live.classList.toggle('online', Boolean(data.connected));
   live.classList.toggle('offline', !data.connected);
+  document.querySelector('#starlink-dish-tab-state').textContent = data.connected ? 'ОНЛАЙН' : 'ОФЛАЙН';
   document.querySelector('#starlink-ping').textContent = metric(network.pingMs ?? history.ping?.currentMs, 'мс');
   document.querySelector('#starlink-ping-average').textContent = metric(history.ping?.averageMs, 'мс');
   document.querySelector('#starlink-p95').textContent = `p95 ${metric(history.ping?.p95Ms, 'мс')}`;
@@ -488,6 +504,31 @@ function renderStarlink() {
   renderStarlinkCharts(history);
 
   const device = data.device || {};
+  const router = data.router || {
+    available: false,
+    state: device.bypassMode ? 'BYPASSED' : 'NOT_DETECTED'
+  };
+  const routerAvailable = Boolean(router.available);
+  const routerStateLabels = { ONLINE: 'ДОСТУПНИЙ', BYPASSED: 'BYPASS', NOT_DETECTED: 'НЕ ВИЯВЛЕНО' };
+  const routerState = routerStateLabels[router.state] || 'НЕ ВИЯВЛЕНО';
+  const routerTab = document.querySelector('#starlink-router-tab');
+  routerTab.disabled = !routerAvailable;
+  routerTab.classList.toggle('unavailable', !routerAvailable);
+  routerTab.setAttribute('aria-disabled', String(!routerAvailable));
+  document.querySelector('#starlink-router-tab-state').textContent = routerState;
+  const routerHealth = document.querySelector('#starlink-router-health');
+  routerHealth.textContent = routerState;
+  routerHealth.classList.toggle('off', !routerAvailable);
+  document.querySelector('#starlink-router-state').textContent = routerAvailable
+    ? 'Фірмовий роутер виявлено'
+    : router.state === 'BYPASSED' ? 'Фірмовий роутер вимкнено' : 'Фірмовий роутер не виявлено';
+  document.querySelector('#starlink-router-description').textContent = routerAvailable
+    ? 'Роутер виявлено у телеметрії тарілки. Розділ підготовлено для майбутнього безпечного керування Wi-Fi та клієнтами.'
+    : router.state === 'BYPASSED'
+      ? 'Starlink працює у bypass-режимі, тому фірмовий роутер не бере участі в мережі. Окремий ping не виконується: стан уже надходить у звичайній телеметрії тарілки.'
+      : 'Фірмовий роутер не знайдено у телеметрії тарілки. Додатковий мережевий ping не виконується.';
+  if (!routerAvailable && starlinkDeviceView === 'router') starlinkDeviceView = 'dish';
+  showStarlinkDevice(starlinkDeviceView);
   const orientation = data.orientation || {};
   document.querySelector('#starlink-model').textContent = device.hardwareVersion || 'Starlink';
   document.querySelector('#starlink-firmware').textContent = device.softwareVersion || '—';
@@ -523,8 +564,8 @@ function renderStarlink() {
   document.querySelector('#starlink-gps-label').textContent = gps.inhibited ? 'Увімкнено' : 'Вимкнено';
   const snow = document.querySelector('#starlink-snow-mode');
   if (document.activeElement !== snow) snow.value = config.snowMeltMode || 'AUTO';
-  snow.disabled = !capabilities.snowMelt;
-  document.querySelector('#starlink-apply-snow').disabled = !capabilities.snowMelt;
+  snow.disabled = true;
+  document.querySelector('#starlink-apply-snow').disabled = true;
   const sleepEnabled = document.querySelector('#starlink-sleep-enabled');
   sleepEnabled.checked = Boolean(config.powerSaveEnabled);
   sleepEnabled.disabled = !capabilities.powerSave;
@@ -774,6 +815,8 @@ document.querySelector('#refresh-starlink').addEventListener('click', async (eve
   try { await loadStarlink({ includeMap: true }); showToast('Дані Starlink оновлено'); }
   finally { event.currentTarget.disabled = false; }
 });
+document.querySelector('#starlink-dish-tab').addEventListener('click', () => showStarlinkDevice('dish'));
+document.querySelector('#starlink-router-tab').addEventListener('click', () => showStarlinkDevice('router'));
 document.querySelector('#starlink-gps-inhibit').addEventListener('change', async (event) => {
   event.currentTarget.disabled = true;
   try {
@@ -782,13 +825,6 @@ document.querySelector('#starlink-gps-inhibit').addEventListener('change', async
     showToast(error.message, true);
     await loadStarlink({ quiet: true });
   } finally { event.currentTarget.disabled = false; }
-});
-document.querySelector('#starlink-apply-snow').addEventListener('click', async (event) => {
-  event.currentTarget.disabled = true;
-  try {
-    await starlinkMutation('/api/admin/starlink/snow-melt', { mode: document.querySelector('#starlink-snow-mode').value }, 'Режим підігріву оновлено');
-  } catch (error) { showToast(error.message, true); }
-  finally { event.currentTarget.disabled = false; }
 });
 document.querySelector('#starlink-apply-sleep').addEventListener('click', async (event) => {
   event.currentTarget.disabled = true;

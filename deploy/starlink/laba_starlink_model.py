@@ -11,6 +11,29 @@ from typing import Any, Iterable
 MAX_SERIES_POINTS = 180
 
 
+def normalize_router_status(downstream_routers: Any) -> dict[str, Any]:
+    """Derive router availability from the dish response without extra probes."""
+    raw_routers: list[Any]
+    if isinstance(downstream_routers, dict):
+        raw_routers = list(downstream_routers.values())
+    elif isinstance(downstream_routers, list):
+        raw_routers = downstream_routers
+    else:
+        raw_routers = []
+    roles = [
+        str(router.get("role") or "UNKNOWN").upper()
+        for router in raw_routers
+        if isinstance(router, dict)
+    ]
+    bypassed = "BYPASSED" in roles
+    available = any(role not in {"", "UNKNOWN", "BYPASSED"} for role in roles) and not bypassed
+    return {
+        "available": available,
+        "state": "BYPASSED" if bypassed else "ONLINE" if available else "NOT_DETECTED",
+        "source": "DISH_TELEMETRY",
+    }
+
+
 def finite_number(value: Any, default: float | None = None) -> float | None:
     try:
         number = float(value)
@@ -190,11 +213,8 @@ def normalize_status(
     ready_states = status.get("readyStates", {})
     disablement = str(status.get("disablementCode") or "UNKNOWN")
     connected = disablement == "OKAY" and bool(status.get("isSnrAboveNoiseFloor", False))
-    downstream_routers = status.get("downstreamRouters", {})
-    bypass = any(
-        isinstance(router, dict) and router.get("role") == "BYPASSED"
-        for router in downstream_routers.values()
-    )
+    router = normalize_router_status(status.get("downstreamRouters", {}))
+    bypass = router["state"] == "BYPASSED"
     has_actuators = str(status.get("hasActuators") or alignment.get("hasActuators") or "UNKNOWN")
     history = normalize_history(history_response.get("dishGetHistory", {}))
     location = diagnostics.get("location", {})
@@ -225,6 +245,7 @@ def normalize_status(
             "downloadRestrictedReason": status.get("dlBandwidthRestrictedReason"),
             "uploadRestrictedReason": status.get("ulBandwidthRestrictedReason"),
         },
+        "router": router,
         "obstruction": {
             "fractionPercent": rounded((finite_number(obstruction.get("fractionObstructed"), 0) or 0) * 100, 3),
             "currentlyObstructed": bool(obstruction.get("currentlyObstructed", False)),
@@ -268,7 +289,10 @@ def normalize_status(
             "reboot": True,
             "gpsInhibit": True,
             "powerSave": True,
-            "snowMelt": True,
+            # Current Starlink policy accepts this setting only from the
+            # account owner. Keep its value visible, but never advertise a
+            # local write capability that will be rejected upstream.
+            "snowMelt": False,
             "clearObstructionMap": True,
             "stow": has_actuators not in {"HAS_ACTUATORS_NO", "UNKNOWN", ""},
             "location": location_available,

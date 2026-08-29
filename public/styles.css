@@ -320,6 +320,26 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .player-controls .button-primary { min-width: 130px; }
 .starlink-toolbar { align-items: flex-end; }
 .starlink-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.starlink-device-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.starlink-device-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 54px;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  background: rgba(255,255,255,.02);
+  cursor: pointer;
+  transition: border-color .2s, color .2s, background .2s, opacity .2s;
+}
+.starlink-device-tab span { font-size: 12px; font-weight: 780; }
+.starlink-device-tab small { color: var(--faint); font-size: 9px; font-weight: 760; letter-spacing: .06em; }
+.starlink-device-tab.active { border-color: rgba(242,100,48,.32); color: var(--ink); background: rgba(242,100,48,.075); }
+.starlink-device-tab.active small { color: var(--accent-light); }
+.starlink-device-tab.unavailable, .starlink-device-tab:disabled { opacity: .46; filter: grayscale(1); cursor: not-allowed; }
 .starlink-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
 .starlink-metric {
   min-width: 0;
@@ -372,6 +392,8 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .starlink-sleep-control { grid-template-columns: minmax(150px, 1fr) auto minmax(115px, .55fr) minmax(110px, .45fr) auto; }
 .starlink-sleep-control .field > span { margin-bottom: 4px; }
 .starlink-control-row select, .starlink-control-row input { padding: 9px 10px; font-size: 11px; }
+.starlink-restricted-control { opacity: .62; }
+.starlink-restricted-control .button:disabled { cursor: not-allowed; }
 .starlink-danger-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .starlink-events-card { min-height: 100%; }
 .starlink-event-list { display: flex; flex-direction: column; gap: 7px; max-height: 450px; overflow: auto; }
@@ -381,6 +403,14 @@ input[type="range"] { height: 34px; padding: 0; border: 0; box-shadow: none; acc
 .starlink-event strong { font-size: 10px; }
 .starlink-event small { margin-top: 3px; color: var(--faint); font-size: 9px; }
 .starlink-event time { color: var(--muted); font-size: 9px; }
+.starlink-router-card { min-height: 300px; border-color: rgba(255,255,255,.075); background: linear-gradient(145deg, rgba(255,255,255,.025), rgba(255,255,255,.01)); }
+.starlink-router-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 18px; }
+.starlink-router-summary > div { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: rgba(0,0,0,.1); }
+.starlink-router-summary span, .starlink-router-summary strong { display: block; }
+.starlink-router-summary span { margin-bottom: 8px; color: var(--faint); font-size: 9px; text-transform: uppercase; }
+.starlink-router-summary strong { color: var(--muted); font-size: 11px; }
+.starlink-router-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.starlink-router-actions .button:disabled { cursor: not-allowed; }
 .desktop-toolbar { align-items: flex-end; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .desktop-local-card {
@@ -459,6 +489,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .starlink-detail-grid { grid-template-columns: 1fr; }
   .starlink-sleep-control { grid-template-columns: 1fr 1fr; }
   .starlink-sleep-control > div:first-child { grid-column: 1 / -1; }
+  .starlink-router-summary { grid-template-columns: 1fr; }
   .desktop-credentials { grid-template-columns: 1fr 1fr; }
   .desktop-credentials > div:first-child { grid-column: 1 / -1; }
 }
@@ -482,6 +513,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .bluetooth-device-actions { justify-content: flex-start; }
   .player-controls { flex-wrap: wrap; }
   .starlink-toolbar-actions { justify-content: flex-start; }
+  .starlink-device-tabs { grid-template-columns: 1fr; }
   .starlink-metrics, .starlink-chart-grid { grid-template-columns: 1fr; }
   .starlink-control-form, .starlink-sleep-control { grid-template-columns: 1fr; align-items: stretch; }
   .starlink-sleep-control > div:first-child { grid-column: auto; }

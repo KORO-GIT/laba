@@ -62,7 +62,18 @@ assert status["device"]["bypassMode"] is True
 assert status["network"]["downloadMbps"] == 12.5
 assert status["gps"]["inhibited"] is True
 assert status["capabilities"]["stow"] is False
+assert status["capabilities"]["snowMelt"] is False
 assert status["config"]["snowMeltMode"] == "ALWAYS_OFF"
+assert status["router"] == {
+    "available": False,
+    "state": "BYPASSED",
+    "source": "DISH_TELEMETRY",
+}
+
+active_router = MODEL.normalize_router_status({"router": {"role": "ROUTER"}})
+assert active_router["available"] is True
+assert active_router["state"] == "ONLINE"
+assert MODEL.normalize_router_status({})["state"] == "NOT_DETECTED"
 
 obstruction = MODEL.normalize_obstruction_map({
     "dishGetObstructionMap": {"numRows": 2, "numCols": 2, "snr": [-1, 0, 0.5, 1]},

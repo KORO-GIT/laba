@@ -245,14 +245,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             }})
             return collect_status(force=True)
         if path == "/v1/snow-melt":
-            mode = body.get("mode")
-            if mode not in {"AUTO", "ALWAYS_ON", "ALWAYS_OFF"}:
-                raise AgentError("Некоректний режим сніготанення", HTTPStatus.BAD_REQUEST)
-            execute_control({"dish_set_config": {"dish_config": {
-                "snow_melt_mode": mode,
-                "apply_snow_melt_mode": True,
-            }}})
-            return collect_status(force=True)
+            raise AgentError(
+                "Змінювати підігрів може лише власник акаунта у застосунку Starlink",
+                HTTPStatus.FORBIDDEN,
+            )
         if path == "/v1/clear-obstruction-map":
             if not self.require_boolean(body, "confirm"):
                 raise AgentError("Потрібне підтвердження очищення карти", HTTPStatus.BAD_REQUEST)

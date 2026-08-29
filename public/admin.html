@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.11.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.12.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -148,6 +148,16 @@
         </div>
       </div>
 
+      <div class="starlink-device-tabs" role="tablist" aria-label="Обладнання Starlink">
+        <button id="starlink-dish-tab" class="starlink-device-tab active" type="button" role="tab" aria-selected="true" aria-controls="starlink-dish-view">
+          <span>Тарілка</span><small id="starlink-dish-tab-state">ПІДКЛЮЧЕННЯ</small>
+        </button>
+        <button id="starlink-router-tab" class="starlink-device-tab unavailable" type="button" role="tab" aria-selected="false" aria-controls="starlink-router-view" aria-disabled="true" disabled>
+          <span>Роутер Starlink</span><small id="starlink-router-tab-state">НЕ ВИЯВЛЕНО</small>
+        </button>
+      </div>
+
+      <div id="starlink-dish-view" class="starlink-device-view" role="tabpanel" aria-labelledby="starlink-dish-tab">
       <div class="starlink-metrics" aria-live="polite">
         <article class="starlink-metric starlink-metric-primary"><span>Поточний ping</span><strong id="starlink-ping">—</strong><small>до Starlink PoP</small></article>
         <article class="starlink-metric"><span>Середній ping</span><strong id="starlink-ping-average">—</strong><small>за 15 хвилин</small></article>
@@ -198,10 +208,10 @@
             <div><strong>Ignore GPS</strong><small>Забороняє тарілці використовувати GPS.</small></div>
             <label class="switch-row"><input id="starlink-gps-inhibit" type="checkbox"><span class="switch"></span><span id="starlink-gps-label">Вимкнено</span></label>
           </div>
-          <div class="starlink-control-row starlink-control-form">
-            <div><strong>Підігрів</strong><small>Автоматичний режим рекомендований.</small></div>
-            <select id="starlink-snow-mode"><option value="AUTO">Автоматично</option><option value="ALWAYS_ON">Завжди увімкнено</option><option value="ALWAYS_OFF">Завжди вимкнено</option></select>
-            <button id="starlink-apply-snow" class="button button-ghost" type="button">Застосувати</button>
+          <div class="starlink-control-row starlink-control-form starlink-restricted-control">
+            <div><strong>Підігрів</strong><small id="starlink-snow-restriction">Режим доступний лише власнику акаунта у застосунку Starlink.</small></div>
+            <select id="starlink-snow-mode" aria-describedby="starlink-snow-restriction" disabled><option value="AUTO">Автоматично</option><option value="ALWAYS_ON">Завжди увімкнено</option><option value="ALWAYS_OFF">Завжди вимкнено</option></select>
+            <button id="starlink-apply-snow" class="button button-ghost" type="button" disabled>Лише власник</button>
           </div>
           <div class="starlink-control-row starlink-sleep-control">
             <div><strong>Режим сну</strong><small>Розклад задається за київським часом.</small></div>
@@ -224,6 +234,27 @@
         <article class="editor-card starlink-events-card">
           <div class="starlink-card-heading"><div><p class="eyebrow">ПОДІЇ</p><h3>Останні зміни зв’язку</h3></div><span>15 хв</span></div>
           <div id="starlink-event-list" class="starlink-event-list"><p class="audio-empty">Подій ще немає.</p></div>
+        </article>
+      </div>
+      </div>
+
+      <div id="starlink-router-view" class="starlink-device-view hidden" role="tabpanel" aria-labelledby="starlink-router-tab">
+        <article class="editor-card starlink-router-card">
+          <div class="starlink-card-heading">
+            <div><p class="eyebrow">РОУТЕР STARLINK</p><h3>Локальна мережа</h3></div>
+            <span id="starlink-router-health" class="record-state off">НЕ ВИЯВЛЕНО</span>
+          </div>
+          <div class="starlink-router-summary">
+            <div><span>Стан</span><strong id="starlink-router-state">Фірмовий роутер вимкнено</strong></div>
+            <div><span>Джерело перевірки</span><strong>Телеметрія тарілки</strong></div>
+            <div><span>Додаткове навантаження</span><strong>Немає</strong></div>
+          </div>
+          <p id="starlink-router-description" class="form-hint">Starlink працює у bypass-режимі, тому фірмовий роутер не бере участі в мережі. Окремий ping не виконується: стан уже надходить у звичайній телеметрії тарілки.</p>
+          <div class="starlink-router-actions" aria-label="Майбутні функції роутера">
+            <button class="button button-ghost" type="button" disabled>Wi-Fi</button>
+            <button class="button button-ghost" type="button" disabled>Підключені пристрої</button>
+            <button class="button button-ghost" type="button" disabled>Перезавантаження</button>
+          </div>
         </article>
       </div>
     </section>
@@ -304,6 +335,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.11.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.12.0"></script>
 </body>
 </html>

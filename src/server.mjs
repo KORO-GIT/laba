@@ -342,9 +342,6 @@ const starlinkPowerSaveSchema = z.object({
   startMinutesUtc: z.coerce.number().int().min(0).max(1439),
   durationMinutes: z.coerce.number().int().min(1).max(1440)
 }).strict();
-const starlinkSnowMeltSchema = z.object({
-  mode: z.enum(['AUTO', 'ALWAYS_ON', 'ALWAYS_OFF'])
-}).strict();
 
 function secretPayload(raw) {
   if (!raw) return null;
@@ -703,13 +700,9 @@ app.post('/api/admin/starlink/power-save', {
 app.post('/api/admin/starlink/snow-melt', {
   preHandler: [requireAdmin, guardWrite],
   config: { rateLimit: { max: 10, timeWindow: '10 minutes' } }
-}, async (request, reply) => {
-  const body = parseOrReply(starlinkSnowMeltSchema, request.body, reply);
-  if (!body) return;
-  const result = await starlinkAgentRequest('/v1/snow-melt', { method: 'POST', body });
-  audit(request.portalUser.email, 'starlink.snow-melt', 'starlink', null, body);
-  return result;
-});
+}, async (_request, reply) => reply.code(403).send({
+  error: 'Змінювати підігрів може лише власник акаунта у застосунку Starlink'
+}));
 
 app.post('/api/admin/starlink/clear-obstruction-map', {
   preHandler: [requireAdmin, guardWrite],

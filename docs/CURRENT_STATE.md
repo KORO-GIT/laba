@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.11.1`.
+- Поточна версія застосунку: `0.12.0`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.
 - Systemd unit: `laba-portal.service`.
@@ -86,7 +86,9 @@ YouTube Music не встановлено: офіційний IFrame API від�
 
 ## Starlink
 
-В адмінпанелі `/admin` є вкладка `Starlink`. Вона показує live ping/download/upload, 15-хвилинні середні/p95/втрати/трафік/живлення, прошивку, uptime, Ethernet/GPS/health, події та карту перешкод. Керування обмежено Ignore GPS, power-save schedule, snow-melt, clear-map і підтвердженим reboot. Stow/unstow capability-gated і для поточної Starlink Mini приховано, оскільки `hasActuators: HAS_ACTUATORS_NO`.
+В адмінпанелі `/admin` є вкладка `Starlink`. Вона показує live ping/download/upload, 15-хвилинні середні/p95/втрати/трафік/живлення, прошивку, uptime, Ethernet/GPS/health, події та карту перешкод. Керування обмежено Ignore GPS, power-save schedule, clear-map і підтвердженим reboot. Режим підігріву показується read-only із поясненням, що змінити його може лише власник акаунта у застосунку Starlink; portal і Pi agent повертають `403` без надсилання gRPC-команди. Stow/unstow capability-gated і для поточної Starlink Mini приховано, оскільки `hasActuators: HAS_ACTUATORS_NO`.
+
+У Starlink-розділі підготовлено окрему вкладку фірмового роутера. Її стан береться з поля `downstreamRouters` уже наявної телеметрії тарілки, тому додаткових ping, таймерів або мережевих запитів немає. У поточному bypass-режимі вкладка показує `BYPASS`, залишається сірою та недоступною; майбутні кнопки Wi-Fi, клієнтів і перезавантаження відображаються лише як вимкнена заготовка.
 
 На Pi `laba-starlink-agent.service` слухає лише Tailscale IP `100.69.168.10:1986`, приймає тільки VPS `100.68.61.33`, перевіряє окремий bearer credential і звертається тільки до `192.168.100.1:9200`. Agent використовує pinned/checksummed `grpcurl 1.9.3`, не запускає shell і не приймає довільні method/payload. Credential зашифрований у `/etc/credstore.encrypted/laba-starlink-agent-token`; plaintext-копії після deployment видалені.
 
@@ -129,4 +131,4 @@ LABA використовує окремі точний і wildcard-блоки C
 - Оновлювати pinned go2rtc та пакет uStreamer тільки після перевірки changelog і повторного тесту exact API allowlist.
 - За потреби посилити Tailscale ACL так, щоб VPS мав доступ лише до потрібних LAN-вузлів і портів.
 
-Остання production-перевірка: LABA `0.11.1`, `laba-starlink-agent`, `laba-audio-agent`, `laba-desktop-gateway`, Caddy і `tailscaled` active; портал слухає тільки `127.0.0.1:3020`, desktop gateway — `127.0.0.1:6080`, Starlink agent — тільки `100.69.168.10:1986`. Детектор хлопків перевірено регресійним тестом на широкому ритмічному профілі нічної перешкоди з інтервалом `0,38` секунди; хибний жест не формується, а подвійний і потрійний тестові хлопки проходять. Із desktop gateway прибрано process-level `--idle-timeout`, який завершував enabled unit із кодом 0 після простою; gateway тепер постійно готовий до кнопки noVNC. Starlink agent повернув HTTP `200` для status/map лише з VPS із credential і `401` без credential; карта має `123×123`/`15129` значень. `systemd-analyze security` оцінив Starlink unit як `2.8 OK`; тимчасові plaintext tokens і probe-файли видалені. На VPS повторно пройшли `npm run check`, `npm test` — 6/6 та `npm audit --omit=dev` — 0 відомих вразливостей.
+Остання production-перевірка: LABA `0.12.0`, `laba-starlink-agent`, `laba-audio-agent`, `laba-desktop-gateway`, Caddy і `tailscaled` active; портал слухає тільки `127.0.0.1:3020`, desktop gateway — `127.0.0.1:6080`, Starlink agent — тільки `100.69.168.10:1986`. Детектор хлопків перевірено регресійним тестом на широкому ритмічному профілі нічної перешкоди з інтервалом `0,38` секунди; хибний жест не формується, а подвійний і потрійний тестові хлопки проходять. Starlink router status визначено як `BYPASSED` без додаткового probe; snow-melt write повертає `403` на portal і agent. Із desktop gateway прибрано process-level `--idle-timeout`, який завершував enabled unit із кодом 0 після простою; gateway тепер постійно готовий до кнопки noVNC. Starlink agent повернув HTTP `200` для status/map лише з VPS із credential і `401` без credential; карта має `123×123`/`15129` значень. `systemd-analyze security` оцінив Starlink unit як `2.8 OK`; тимчасові plaintext tokens і probe-файли видалені. На VPS повторно пройшли `npm run check`, `npm test` — 6/6 та `npm audit --omit=dev` — 0 відомих вразливостей.

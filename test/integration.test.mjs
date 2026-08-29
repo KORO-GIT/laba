@@ -94,12 +94,13 @@ test('development server serves portal API and protected admin writes', async (c
     connected: true,
     state: 'CONNECTED',
     device: { hardwareVersion: 'mini1_panda_prod2', bypassMode: true, uptimeSeconds: 3600 },
+    router: { available: false, state: 'BYPASSED', source: 'DISH_TELEMETRY' },
     network: { pingMs: 24.5, downloadMbps: 31.2, uploadMbps: 7.4, ethernetMbps: 1000 },
     obstruction: { fractionPercent: 3.7, currentlyObstructed: false },
     gps: { satellites: 12, valid: true, inhibited: false, locationAvailable: false },
     config: { snowMeltMode: 'AUTO', powerSaveEnabled: false, powerSaveStartMinutesUtc: 0, powerSaveDurationMinutes: 1 },
     health: { alerts: [], hardwareSelfTestCodes: [] },
-    capabilities: { reboot: true, gpsInhibit: true, powerSave: true, snowMelt: true, clearObstructionMap: true, stow: false },
+    capabilities: { reboot: true, gpsInhibit: true, powerSave: true, snowMelt: false, clearObstructionMap: true, stow: false },
     history: { ping: { averageMs: 27.1 }, loss: { averagePercent: 0.2 }, series: { pingMs: [24, 28] }, events: [] }
   };
   const upstream = http.createServer(async (request, response) => {
@@ -259,10 +260,25 @@ test('development server serves portal API and protected admin writes', async (c
   const starlink = await fetch(`${root}/api/admin/starlink`).then((response) => response.json());
   assert.equal(starlink.connected, true);
   assert.equal(starlink.device.bypassMode, true);
+  assert.equal(starlink.router.state, 'BYPASSED');
   assert.deepEqual(starlinkRequests.at(-1), {
     method: 'GET', url: '/v1/status',
     authorization: 'Bearer test-starlink-agent-token-with-at-least-32-characters', body: null
   });
+
+  const starlinkRequestsBeforeSnowMelt = starlinkRequests.length;
+  const rejectedSnowMelt = await fetch(`${root}/api/admin/starlink/snow-melt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ mode: 'ALWAYS_ON' })
+  });
+  assert.equal(rejectedSnowMelt.status, 403);
+  assert.match((await rejectedSnowMelt.json()).error, /власник/);
+  assert.equal(starlinkRequests.length, starlinkRequestsBeforeSnowMelt);
+
+  const adminPage = await fetch(`${root}/admin`).then((response) => response.text());
+  assert.match(adminPage, /id="starlink-router-tab"/);
+  assert.match(adminPage, /Лише власник/);
 
   const rejectedStarlinkReboot = await fetch(`${root}/api/admin/starlink/reboot`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true })
