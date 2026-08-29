@@ -55,6 +55,14 @@ def electric_arc_samples(random_source: random.Random, burst: bool) -> list[floa
     ]
 
 
+def sustained_rhythmic_beat_samples(random_source: random.Random, burst: bool) -> list[float]:
+    """Match the wide, weak bursts found in the 2026-08-29 false-trigger logs."""
+    return [
+        random_source.gauss(0.0, 0.070 if burst else 0.008)
+        for _ in range(MODULE.FRAME_SAMPLES)
+    ]
+
+
 def test_double_clap_triggers_once() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(7)
@@ -94,6 +102,23 @@ def test_electric_arc_pair_is_rejected() -> None:
     assert events == [], events
 
 
+def test_sustained_rhythmic_pair_is_rejected() -> None:
+    detector = MODULE.AdaptiveClapDetector()
+    random_source = random.Random(29)
+    events: list[str] = []
+    rejected_metrics: list[dict[str, float]] = []
+    for frame_number in range(250):
+        now = frame_number * MODULE.FRAME_MILLISECONDS / 1000
+        burst = 2.00 <= now < 2.02 or 2.38 <= now < 2.40
+        event = detector.process(pcm_frame(sustained_rhythmic_beat_samples(random_source, burst)), now)
+        if burst:
+            rejected_metrics.append(dict(detector.last_metrics))
+        if event:
+            events.append(event)
+    assert events == [], events
+    assert all(metrics["activeRatio"] > MODULE.MAX_CLAP_ACTIVE_RATIO for metrics in rejected_metrics)
+
+
 def test_too_fast_pair_is_not_a_gesture() -> None:
     detector = MODULE.AdaptiveClapDetector()
     random_source = random.Random(23)
@@ -111,5 +136,6 @@ test_music_does_not_trigger()
 test_double_clap_triggers_once()
 test_triple_clap_supersedes_double_clap()
 test_electric_arc_pair_is_rejected()
+test_sustained_rhythmic_pair_is_rejected()
 test_too_fast_pair_is_not_a_gesture()
 print("Clap detector tests passed")

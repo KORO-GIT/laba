@@ -25,6 +25,9 @@ FRAME_BYTES = FRAME_SAMPLES * 2
 DEFAULT_SOURCE = "alsa_input.usb-046d_C270_HD_WEBCAM_200901010001-02.mono-fallback"
 MIN_GESTURE_INTERVAL = 0.35
 MAX_GESTURE_INTERVAL = 0.80
+MIN_CLAP_PEAK = 0.32
+MIN_CLAP_RMS = 0.060
+MAX_CLAP_ACTIVE_RATIO = 0.58
 
 
 class AdaptiveClapDetector:
@@ -97,7 +100,7 @@ class AdaptiveClapDetector:
             "highRatio": high_ratio,
         }
         warmed_up = len(self.noise_rms) >= 50
-        impulse = (
+        broad_impulse = (
             warmed_up
             and now >= self.cooldown_until
             and now - self.last_impulse_at >= 0.12
@@ -112,9 +115,21 @@ class AdaptiveClapDetector:
             and high_ratio <= 1.75
         )
 
+        # Rhythmic audio from the speakers and machinery can satisfy the broad
+        # impulse thresholds, but it normally fills most of the 20 ms frame.
+        # A hand clap recorded by the webcam is both stronger and shorter. Keep
+        # the broad classifier for protecting the adaptive noise baseline, then
+        # apply this stricter transient shape before forming a clap gesture.
+        clap_impulse = (
+            broad_impulse
+            and peak >= max(MIN_CLAP_PEAK, baseline_rms * 6.0)
+            and rms >= max(MIN_CLAP_RMS, baseline_rms * 3.0)
+            and active_ratio <= MAX_CLAP_ACTIVE_RATIO
+        )
+
         # Only quiet and ordinary frames shape the adaptive background. This
         # keeps a clap from immediately raising its own detection threshold.
-        if not impulse and rms <= max(0.18, baseline_rms * 3.0):
+        if not broad_impulse and rms <= max(0.18, baseline_rms * 3.0):
             self.noise_rms.append(rms)
             self.noise_high.append(high_rms)
 
@@ -124,7 +139,7 @@ class AdaptiveClapDetector:
             return "double-clap"
         if len(self.clap_times) == 1 and now - self.clap_times[0] > MAX_GESTURE_INTERVAL:
             self.clap_times.clear()
-        if not impulse:
+        if not clap_impulse:
             return None
 
         self.last_impulse_at = now
