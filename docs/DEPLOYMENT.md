@@ -337,6 +337,8 @@ node --env-file=/opt/laba/.env -e "fetch(process.env.STARLINK_AGENT_URL + '/v1/s
 
 Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. `laba-ustreamer.service` захоплює hardware MJPEG 1280×720@30, вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`. `laba-h264-encoder.service` кодує browser-compatible H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с через `libx264 ultrafast/zerolatency`, використовує GOP 13, повторює SPS/PPS на кожному ключовому кадрі та слухає тільки `127.0.0.1:8556`. Це свідомий вибір: Raspberry Pi `h264_v4l2m2m` скидає GOP до 60 кадрів і не дає стабільно сформувати короткі декодовані HLS-сегменти. MJPEG залишається другим codec source тільки для snapshot і резервної сумісності.
 
+Сервіси навмисно не мають жорсткого `Requires=` між USB-захопленням, H.264-кодером і go2rtc. Після холодного старту USB-камера може з'явитися пізніше за `multi-user.target`: uStreamer продовжує повторні спроби, FFmpeg окремо повторює підключення до loopback-джерела, а go2rtc одразу лишається доступним для незалежної IP-камери. `StartLimitIntervalSec=0` і `Restart=always` не дають разовій помилці порядку запуску залишити відео вимкненим до ручного рестарту.
+
 Підготовлені файли:
 
 - `deploy/go2rtc/laba-ustreamer.service` — захоплення C270 через hardware MJPEG без мережевої публікації;

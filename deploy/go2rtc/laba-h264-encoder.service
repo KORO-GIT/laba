@@ -1,8 +1,7 @@
 [Unit]
 Description=LABA Logitech C270 low-latency H.264 encoder
 After=network-online.target laba-ustreamer.service
-Wants=network-online.target
-Requires=laba-ustreamer.service
+Wants=network-online.target laba-ustreamer.service
 StartLimitIntervalSec=0
 
 [Service]
