@@ -432,6 +432,22 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(workflowAdmin.boards[0].lanes.find((lane) => lane.key === 'ready').targetStatus, 'НА ОБЛІТ');
   assert.deepEqual(workflowAdmin.boards[1].sourceStatuses, ['ВТРАЧЕНИЙ', 'ПОТРЕБУЄ СЕРВІСУ']);
 
+  const lostRecordAlreadyInKyiv = {
+    ...repairRecord,
+    rowNumber: 5,
+    boardIdentifier: '019',
+    identifiers: ['019', 'KIT-UA-NM-019'],
+    status: 'ВТРАЧЕНИЙ',
+    boardLocation: '',
+    caseLocation: '  київ  '
+  };
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [lostRecordAlreadyInKyiv] })
+  });
+  let service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 0);
+
   const lostRecord = {
     ...repairRecord,
     rowNumber: 6,
@@ -445,7 +461,7 @@ test('development server serves portal API and protected admin writes', async (c
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [lostRecord] })
   });
   assert.equal(syncedLost.status, 200);
-  let service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
   assert.equal(service.cards.length, 1);
   assert.equal(service.cards[0].asset, 'ТАРА');
   assert.equal(service.cards[0].boardIdentifier, '020');

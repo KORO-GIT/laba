@@ -777,10 +777,12 @@ function synchronizeAccountingRecords(records) {
     const caseLocation = normalizedStatus(record.caseLocation);
     const sourceModule = statements.workflowModuleByStatus.get(status)?.module ?? null;
     const lostContainer = sourceModule === 'service' && status === lostAccountingStatus;
-    const completedService = sourceModule === 'service' && (
-      (lostContainer && caseLocation === kyivLocation)
-      || (!lostContainer && boardLocation === repairLocation && caseLocation === repairLocation)
-    );
+    const lostContainerInKyiv = lostContainer && caseLocation === kyivLocation;
+    const serviceBoardInRepair = sourceModule === 'service'
+      && !lostContainer
+      && boardLocation === repairLocation
+      && caseLocation === repairLocation;
+    const completedService = lostContainerInKyiv || serviceBoardInRepair;
     const module = completedService ? null : sourceModule;
     return {
       ...record,
