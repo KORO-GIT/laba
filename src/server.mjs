@@ -156,6 +156,10 @@ const staticModuleDefinitions = {
 const maintenanceModules = ['workshop', 'service'];
 const moduleKeys = [...maintenanceModules, 'devices'];
 const moduleAccessLevels = ['viewer', 'operator', 'admin'];
+const serviceShippedLaneKey = 'shipped';
+const lostAccountingStatus = 'ВТРАЧЕНИЙ';
+const kyivLocation = 'КИЇВ';
+const repairLocation = 'НА РЕМОНТІ';
 
 function normalizedStatus(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('uk-UA');
@@ -521,6 +525,8 @@ const accountingRecordSchema = z.object({
   boardIdentifier: z.string().trim().min(1).max(160),
   identifiers: z.array(z.string().trim().min(1).max(240)).max(20).default([]),
   status: z.string().trim().min(1).max(120),
+  boardLocation: z.string().trim().max(120).optional().default(''),
+  caseLocation: z.string().trim().max(120).optional().default(''),
   sourceComment: z.string().trim().max(45000).optional().default('')
 }).strict();
 const accountingSyncSchema = z.object({
@@ -630,26 +636,98 @@ function workflowAdminPayload(module) {
   };
 }
 
+function accountingActionForLane(card, lane) {
+  if (!lane) return null;
+  if (card.module === 'service' && lane.key === serviceShippedLaneKey) {
+    const lostContainer = normalizedStatus(card.source_status) === lostAccountingStatus;
+    return {
+      actionKind: 'locations',
+      sourceLane: lane.key,
+      targetStatus: '',
+      targetBoardLocation: lostContainer ? null : repairLocation,
+      targetCaseLocation: lostContainer ? kyivLocation : repairLocation
+    };
+  }
+  const targetStatus = String(lane.targetStatus || '').trim();
+  if (!targetStatus) return null;
+  return {
+    actionKind: 'status',
+    sourceLane: lane.key,
+    targetStatus,
+    targetBoardLocation: null,
+    targetCaseLocation: null
+  };
+}
+
+function accountingActionMatches(row, action) {
+  return row.action_kind === action.actionKind
+    && row.source_lane === action.sourceLane
+    && row.target_status === action.targetStatus
+    && (row.target_board_location ?? null) === action.targetBoardLocation
+    && (row.target_case_location ?? null) === action.targetCaseLocation;
+}
+
+function enqueueAccountingAction(cardId, action) {
+  if (!action) return;
+  db.prepare(`
+    INSERT OR IGNORE INTO accounting_outbox (
+      card_id, action_kind, source_lane, target_status,
+      target_board_location, target_case_location
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    cardId,
+    action.actionKind,
+    action.sourceLane,
+    action.targetStatus,
+    action.targetBoardLocation,
+    action.targetCaseLocation
+  );
+}
+
 function reconcileWorkflowOutbox(module) {
-  const stale = db.prepare(`
-    SELECT o.id, c.id AS card_id, l.target_status
+  const definition = maintenanceDefinition(module);
+  if (!definition) return;
+  const lanes = new Map(definition.lanes.map((lane) => [lane.key, lane]));
+  const cards = db.prepare(`
+    SELECT id, module, lane, source_status
+    FROM maintenance_cards
+    WHERE module = ? AND removed_at IS NULL
+  `).all(module);
+  const pending = db.prepare(`
+    SELECT o.*, c.module, c.lane, c.source_status, c.removed_at
     FROM accounting_outbox o
     JOIN maintenance_cards c ON c.id = o.card_id
-    LEFT JOIN workflow_lanes l ON l.module = c.module AND l.lane_key = c.lane
     WHERE c.module = ? AND o.state = 'pending'
-      AND (l.target_status IS NULL OR l.target_status = '' OR l.target_status != o.target_status)
   `).all(module);
+  const pendingByCard = new Map();
+  for (const action of pending) {
+    const actions = pendingByCard.get(action.card_id) || [];
+    actions.push(action);
+    pendingByCard.set(action.card_id, actions);
+  }
   const cancel = db.prepare(`
     UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND state = 'pending'
   `);
-  const replace = db.prepare(`
-    INSERT OR IGNORE INTO accounting_outbox (card_id, target_status) VALUES (?, ?)
-  `);
-  for (const action of stale) {
-    cancel.run(action.id);
-    if (action.target_status) replace.run(action.card_id, action.target_status);
-  }
+  db.transaction(() => {
+    for (const card of cards) {
+      const desired = accountingActionForLane(card, lanes.get(card.lane));
+      const current = pendingByCard.get(card.id) || [];
+      let matching = false;
+      for (const action of current) {
+        if (desired && !matching && accountingActionMatches(action, desired)) {
+          matching = true;
+        } else {
+          cancel.run(action.id);
+        }
+      }
+      if (desired && !matching) enqueueAccountingAction(card.id, desired);
+      pendingByCard.delete(card.id);
+    }
+    for (const actions of pendingByCard.values()) {
+      for (const action of actions) cancel.run(action.id);
+    }
+  })();
 }
 
 function maintenanceCardPayload(row) {
@@ -695,12 +773,21 @@ function reorderMaintenanceLane(module, cardId, lane, beforeCardId) {
 function synchronizeAccountingRecords(records) {
   const normalized = records.map((record) => {
     const status = normalizedStatus(record.status);
-    const module = statements.workflowModuleByStatus.get(status)?.module ?? null;
-    const lostContainer = module === 'service' && status === 'ВТРАЧЕНИЙ';
+    const boardLocation = normalizedStatus(record.boardLocation);
+    const caseLocation = normalizedStatus(record.caseLocation);
+    const sourceModule = statements.workflowModuleByStatus.get(status)?.module ?? null;
+    const lostContainer = sourceModule === 'service' && status === lostAccountingStatus;
+    const completedService = sourceModule === 'service' && (
+      (lostContainer && caseLocation === kyivLocation)
+      || (!lostContainer && boardLocation === repairLocation && caseLocation === repairLocation)
+    );
+    const module = completedService ? null : sourceModule;
     return {
       ...record,
       asset: lostContainer ? 'ТАРА' : record.asset,
       status,
+      boardLocation,
+      caseLocation,
       module,
       entryLaneKey: module ? statements.workflowBoardByModule.get(module)?.entry_lane_key : null,
       sourceKey: `${record.spreadsheetId}:${record.sheetId}:${record.rowNumber}`
@@ -767,7 +854,10 @@ function synchronizeAccountingRecords(records) {
   return statements.pendingAccountingActions.all(200).map((row) => ({
     id: row.id,
     cardId: row.card_id,
+    actionKind: row.action_kind,
     targetStatus: row.target_status,
+    targetBoardLocation: row.target_board_location,
+    targetCaseLocation: row.target_case_location,
     attempts: row.attempts,
     source: {
       spreadsheetId: row.source_spreadsheet_id,
@@ -905,7 +995,6 @@ app.post('/api/maintenance/:module/cards/:id/move', {
   const body = parseOrReply(maintenanceMoveSchema, request.body, reply);
   if (!body) return;
   const targetLane = definition.lanes.find((lane) => lane.key === body.lane);
-  const sourceLane = definition.lanes.find((lane) => lane.key === card.lane);
   if (!targetLane) return reply.code(400).send({ error: 'Невідома колонка' });
   if (body.beforeCardId) {
     const before = statements.maintenanceCardById.get(body.beforeCardId);
@@ -925,17 +1014,14 @@ app.post('/api/maintenance/:module/cards/:id/move', {
         VALUES (?, ?, 'lane.change', ?, ?)
       `).run(card.id, request.portalUser.email, card.lane, body.lane);
     }
-    if (card.lane !== body.lane && sourceLane?.targetStatus) {
+    if (card.lane !== body.lane) {
       db.prepare(`
         UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
-        WHERE card_id = ? AND target_status = ? AND state = 'pending'
-      `).run(card.id, sourceLane.targetStatus);
+        WHERE card_id = ? AND state = 'pending'
+      `).run(card.id);
     }
-    if (card.lane !== body.lane && targetLane.targetStatus) {
-      db.prepare(`
-        INSERT OR IGNORE INTO accounting_outbox (card_id, target_status)
-        VALUES (?, ?)
-      `).run(card.id, targetLane.targetStatus);
+    if (card.lane !== body.lane) {
+      enqueueAccountingAction(card.id, accountingActionForLane(card, targetLane));
     }
   })();
   audit(request.portalUser.email, 'maintenance.move', 'maintenance-card', card.id, {
@@ -1064,13 +1150,7 @@ app.post('/api/internal/accounting/ack', {
   const retireAppliedCard = db.prepare(`
     UPDATE maintenance_cards
     SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND removed_at IS NULL
-      AND EXISTS (
-        SELECT 1 FROM workflow_lanes l
-        WHERE l.module = maintenance_cards.module
-          AND l.lane_key = maintenance_cards.lane
-          AND l.target_status = ?
-      )
+    WHERE id = ? AND removed_at IS NULL AND lane = ?
   `);
   let accepted = 0;
   db.transaction(() => {
@@ -1079,7 +1159,7 @@ app.post('/api/internal/accounting/ack', {
       if (!action) continue;
       if (result.success) {
         applied.run(result.id);
-        retireAppliedCard.run(action.maintenance_card_id, action.target_status);
+        retireAppliedCard.run(action.maintenance_card_id, action.source_lane);
       } else {
         failed.run(result.error || 'Помилка синхронізації', result.id);
       }
@@ -1184,7 +1264,9 @@ app.patch('/api/admin/workflows/:module', {
       lane.title,
       lane.color.toLowerCase(),
       (index + 1) * 10,
-      lane.targetStatus ? normalizedStatus(lane.targetStatus) : null
+      module === 'service' && lane.key === serviceShippedLaneKey
+        ? null
+        : lane.targetStatus ? normalizedStatus(lane.targetStatus) : null
     ));
     const deleteLane = db.prepare('DELETE FROM workflow_lanes WHERE module = ? AND lane_key = ? AND is_system = 0');
     removedCustomLanes.forEach((lane) => deleteLane.run(module, lane.lane_key));

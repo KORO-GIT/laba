@@ -193,7 +193,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS accounting_outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     card_id INTEGER NOT NULL REFERENCES maintenance_cards(id) ON DELETE CASCADE,
-    target_status TEXT NOT NULL,
+    action_kind TEXT NOT NULL DEFAULT 'status',
+    source_lane TEXT NOT NULL DEFAULT '',
+    target_status TEXT NOT NULL DEFAULT '',
+    target_board_location TEXT,
+    target_case_location TEXT,
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'applied', 'failed', 'cancelled')),
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
@@ -227,8 +231,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_maintenance_board ON maintenance_cards(module, removed_at, lane, sort_order, id);
   CREATE INDEX IF NOT EXISTS idx_maintenance_source ON maintenance_cards(source_spreadsheet_id, source_sheet_id, source_row_number);
   CREATE INDEX IF NOT EXISTS idx_maintenance_events_card ON maintenance_events(card_id, id DESC);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_accounting_outbox_pending
-    ON accounting_outbox(card_id, target_status) WHERE state = 'pending';
 `);
 
 db.transaction(() => {
@@ -286,6 +288,40 @@ if (!maintenanceCardColumns.has('report_number')) {
 if (!maintenanceCardColumns.has('source_comment')) {
   db.exec("ALTER TABLE maintenance_cards ADD COLUMN source_comment TEXT NOT NULL DEFAULT ''");
 }
+
+const accountingOutboxColumns = new Set(db.pragma('table_info(accounting_outbox)').map((column) => column.name));
+if (!accountingOutboxColumns.has('action_kind')) {
+  db.exec("ALTER TABLE accounting_outbox ADD COLUMN action_kind TEXT NOT NULL DEFAULT 'status'");
+}
+if (!accountingOutboxColumns.has('source_lane')) {
+  db.exec("ALTER TABLE accounting_outbox ADD COLUMN source_lane TEXT NOT NULL DEFAULT ''");
+}
+if (!accountingOutboxColumns.has('target_board_location')) {
+  db.exec('ALTER TABLE accounting_outbox ADD COLUMN target_board_location TEXT');
+}
+if (!accountingOutboxColumns.has('target_case_location')) {
+  db.exec('ALTER TABLE accounting_outbox ADD COLUMN target_case_location TEXT');
+}
+db.exec(`
+  UPDATE accounting_outbox
+  SET source_lane = COALESCE((
+    SELECT lane FROM maintenance_cards WHERE maintenance_cards.id = accounting_outbox.card_id
+  ), '')
+  WHERE source_lane = ''
+`);
+db.exec('DROP INDEX IF EXISTS idx_accounting_outbox_pending');
+db.exec(`
+  CREATE UNIQUE INDEX idx_accounting_outbox_pending
+  ON accounting_outbox (
+    card_id,
+    action_kind,
+    source_lane,
+    target_status,
+    COALESCE(target_board_location, ''),
+    COALESCE(target_case_location, '')
+  )
+  WHERE state = 'pending'
+`);
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_status ON maintenance_card_status_assignments(status_id, card_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_label ON maintenance_card_label_assignments(label_id, card_id)');
@@ -419,7 +455,8 @@ export const statements = {
     FROM maintenance_events WHERE card_id = ? ORDER BY id DESC LIMIT ?
   `),
   pendingAccountingActions: db.prepare(`
-    SELECT o.id, o.card_id, o.target_status, o.attempts,
+    SELECT o.id, o.card_id, o.action_kind, o.source_lane, o.target_status,
+      o.target_board_location, o.target_case_location, o.attempts,
       c.source_spreadsheet_id, c.source_sheet_id, c.source_row_number,
       c.board_identifier, c.source_status
     FROM accounting_outbox o

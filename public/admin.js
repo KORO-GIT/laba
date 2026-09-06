@@ -862,10 +862,14 @@ function renderWorkflowLanes() {
       renderWorkflowEntryLane();
     });
     const target = document.createElement('input');
-    target.value = lane.targetStatus || '';
+    const fixedServiceLocations = workflow.key === 'service' && lane.key === 'shipped';
+    target.value = fixedServiceLocations ? '' : lane.targetStatus || '';
     target.maxLength = 120;
-    target.placeholder = 'Не змінювати статус';
-    target.setAttribute('aria-label', 'Статус для запису в Облік');
+    target.placeholder = fixedServiceLocations ? 'Розташування змінюються автоматично' : 'Не змінювати статус';
+    target.setAttribute('aria-label', fixedServiceLocations
+      ? 'Розташування в Обліку змінюються автоматично'
+      : 'Статус для запису в Облік');
+    target.disabled = fixedServiceLocations;
     target.addEventListener('input', () => { lane.targetStatus = target.value; });
     const remove = workflowIconButton('×', lane.system ? 'Системну колонку не можна видалити' : 'Видалити колонку', lane.system, () => {
       if (!window.confirm(`Видалити колонку «${lane.title}»?`)) return;

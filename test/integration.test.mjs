@@ -437,7 +437,9 @@ test('development server serves portal API and protected admin writes', async (c
     rowNumber: 6,
     boardIdentifier: '020',
     identifiers: ['020', 'KIT-UA-NM-020'],
-    status: 'ВТРАЧЕНИЙ'
+    status: 'ВТРАЧЕНИЙ',
+    boardLocation: '',
+    caseLocation: 'ЛАБА'
   };
   const syncedLost = await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [lostRecord] })
@@ -458,9 +460,74 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(reportResponse.status, 200);
   assert.equal((await reportResponse.json()).reportNumber, 'РП-2026-020');
 
+  const movedLostToShipped = await fetch(`${root}/api/maintenance/service/cards/${service.cards[0].id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ lane: 'shipped', beforeCardId: null })
+  });
+  assert.equal(movedLostToShipped.status, 200);
+  const lostLocationAction = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [lostRecord] })
+  }).then((response) => response.json());
+  assert.equal(lostLocationAction.actions.length, 1);
+  assert.equal(lostLocationAction.actions[0].actionKind, 'locations');
+  assert.equal(lostLocationAction.actions[0].targetStatus, '');
+  assert.equal(lostLocationAction.actions[0].targetBoardLocation, null);
+  assert.equal(lostLocationAction.actions[0].targetCaseLocation, 'КИЇВ');
+  await fetch(`${root}/api/internal/accounting/ack`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ results: [{ id: lostLocationAction.actions[0].id, success: true }] })
+  });
+  service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 0);
+
   await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders,
-    body: JSON.stringify({ records: [{ ...lostRecord, status: 'НА ОБЛІТ' }] })
+    body: JSON.stringify({ records: [{ ...lostRecord, caseLocation: 'КИЇВ' }] })
+  });
+  service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 0);
+
+  const serviceRecord = {
+    ...repairRecord,
+    rowNumber: 7,
+    boardIdentifier: '021',
+    identifiers: ['021', 'KIT-UA-NM-021'],
+    status: 'ПОТРЕБУЄ СЕРВІСУ',
+    boardLocation: 'ЛАБА',
+    caseLocation: 'БОСТОН'
+  };
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [serviceRecord] })
+  });
+  service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 1);
+  const movedServiceToShipped = await fetch(`${root}/api/maintenance/service/cards/${service.cards[0].id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ lane: 'shipped', beforeCardId: null })
+  });
+  assert.equal(movedServiceToShipped.status, 200);
+  const serviceLocationAction = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [serviceRecord] })
+  }).then((response) => response.json());
+  assert.equal(serviceLocationAction.actions.length, 1);
+  assert.equal(serviceLocationAction.actions[0].actionKind, 'locations');
+  assert.equal(serviceLocationAction.actions[0].targetStatus, '');
+  assert.equal(serviceLocationAction.actions[0].targetBoardLocation, 'НА РЕМОНТІ');
+  assert.equal(serviceLocationAction.actions[0].targetCaseLocation, 'НА РЕМОНТІ');
+  await fetch(`${root}/api/internal/accounting/ack`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ results: [{ id: serviceLocationAction.actions[0].id, success: true }] })
+  });
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [{
+      ...serviceRecord,
+      boardLocation: 'НА РЕМОНТІ',
+      caseLocation: 'НА РЕМОНТІ'
+    }] })
   });
   service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
   assert.equal(service.cards.length, 0);
