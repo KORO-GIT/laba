@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.15.1';
+import { initDesktop } from './desktop.js?v=0.16.0';
 
 const state = {
   me: null,
@@ -672,7 +672,7 @@ function renderWorkflowBoards(selectedModule = state.editingWorkflow?.key) {
   list.replaceChildren(...state.workflows.map((workflow) => recordButton({
     symbol: 'KB',
     title: workflow.title,
-    subtitle: `${ukrainianCount(workflow.sourceStatuses.length, 'статус', 'статуси', 'статусів')} Обліку`,
+    subtitle: `${ukrainianCount(workflow.sourceStatuses.length, 'статус', 'статуси', 'статусів')} Обліку · ${ukrainianCount(workflow.cardStatuses.length, 'позначка', 'позначки', 'позначок')}`,
     enabled: true,
     statusText: `${workflow.lanes.length} КОЛ.`,
     selected: workflow.key === selectedModule,
@@ -716,6 +716,52 @@ function addWorkflowStatus() {
   input.value = '';
   renderWorkflowStatuses();
   input.focus();
+}
+
+function renderWorkflowCardStatuses() {
+  const workflow = state.editingWorkflow;
+  const rows = workflow.cardStatuses.map((status, index) => {
+    const row = el('div', 'workflow-card-status-row');
+    const statusLabel = status.name || 'Новий статус';
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'workflow-color';
+    color.value = status.color;
+    color.title = `Колір статусу «${statusLabel}»`;
+    color.setAttribute('aria-label', color.title);
+    color.addEventListener('input', () => { status.color = color.value; });
+    const name = document.createElement('input');
+    name.value = status.name;
+    name.maxLength = 80;
+    name.required = true;
+    name.placeholder = 'Назва статусу';
+    name.setAttribute('aria-label', 'Назва статусу картки');
+    name.addEventListener('input', () => { status.name = name.value; });
+    const remove = workflowIconButton('×', `Видалити статус «${statusLabel}»`, false, () => {
+      if (!window.confirm(`Видалити статус «${statusLabel}»? Він зникне з усіх карток цієї дошки.`)) return;
+      workflow.cardStatuses.splice(index, 1);
+      renderWorkflowCardStatuses();
+      renderWorkflowBoards(workflow.key);
+    });
+    remove.classList.add('workflow-remove-lane');
+    row.append(color, name, remove);
+    return row;
+  });
+  document.querySelector('#workflow-card-status-list').replaceChildren(
+    ...(rows.length ? rows : [el('p', 'workflow-card-status-empty', 'Додаткових статусів ще немає')])
+  );
+}
+
+function addWorkflowCardStatus() {
+  const palette = ['#f4b942', '#4f9de8', '#b6ee73', '#bb86fc', '#f26430'];
+  state.editingWorkflow.cardStatuses.push({
+    id: null,
+    name: '',
+    color: palette[state.editingWorkflow.cardStatuses.length % palette.length]
+  });
+  renderWorkflowCardStatuses();
+  renderWorkflowBoards(state.editingWorkflow.key);
+  document.querySelector('#workflow-card-status-list .workflow-card-status-row:last-child input[aria-label="Назва статусу картки"]')?.select();
 }
 
 function renderWorkflowEntryLane() {
@@ -851,6 +897,7 @@ function editWorkflow(module) {
   formValue('workflow-description', source.description);
   document.querySelector('#workflow-form-title').textContent = source.title;
   renderWorkflowStatuses();
+  renderWorkflowCardStatuses();
   renderWorkflowLanes();
   renderWorkflowAccess();
   renderWorkflowBoards(source.key);
@@ -867,6 +914,7 @@ function workflowPayload() {
     description: workflow.description,
     entryLaneKey: workflow.entryLaneKey,
     sourceStatuses: workflow.sourceStatuses,
+    cardStatuses: workflow.cardStatuses.map(({ id, name, color }) => ({ id, name, color })),
     lanes: workflow.lanes.map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
     access: state.workflowUsers.map((user) => ({
       userId: user.id,
@@ -1111,6 +1159,7 @@ document.querySelector('#workflow-status-input').addEventListener('keydown', (ev
   event.preventDefault();
   addWorkflowStatus();
 });
+document.querySelector('#add-workflow-card-status').addEventListener('click', addWorkflowCardStatus);
 document.querySelector('#add-workflow-lane').addEventListener('click', addWorkflowLane);
 document.querySelector('#workflow-entry-lane').addEventListener('change', (event) => {
   if (state.editingWorkflow) state.editingWorkflow.entryLaneKey = event.currentTarget.value;

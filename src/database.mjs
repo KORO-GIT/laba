@@ -117,6 +117,18 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS workflow_card_statuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module TEXT NOT NULL REFERENCES workflow_boards(module) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#f4b942',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (module, normalized_name)
+  );
+
   CREATE TABLE IF NOT EXISTS maintenance_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     module TEXT NOT NULL CHECK (module IN ('workshop', 'service')),
@@ -138,6 +150,13 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (module, source_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS maintenance_card_status_assignments (
+    card_id INTEGER NOT NULL REFERENCES maintenance_cards(id) ON DELETE CASCADE,
+    status_id INTEGER NOT NULL REFERENCES workflow_card_statuses(id) ON DELETE CASCADE,
+    assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (card_id, status_id)
   );
 
   CREATE TABLE IF NOT EXISTS maintenance_events (
@@ -177,6 +196,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_module_access_user ON user_module_access(user_id, module);
   CREATE INDEX IF NOT EXISTS idx_workflow_lanes_order ON workflow_lanes(module, sort_order, lane_key);
   CREATE INDEX IF NOT EXISTS idx_workflow_status_module ON workflow_source_statuses(module, normalized_status);
+  CREATE INDEX IF NOT EXISTS idx_workflow_card_status_order ON workflow_card_statuses(module, sort_order, id);
   CREATE INDEX IF NOT EXISTS idx_maintenance_board ON maintenance_cards(module, removed_at, lane, sort_order, id);
   CREATE INDEX IF NOT EXISTS idx_maintenance_source ON maintenance_cards(source_spreadsheet_id, source_sheet_id, source_row_number);
   CREATE INDEX IF NOT EXISTS idx_maintenance_events_card ON maintenance_events(card_id, id DESC);
@@ -217,6 +237,8 @@ if (!deviceColumns.has('parent_device_id')) {
   db.exec('ALTER TABLE devices ADD COLUMN parent_device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices(parent_device_id, sort_order)');
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_status ON maintenance_card_status_assignments(status_id, card_id)');
 
 const bootstrap = db.prepare('SELECT id FROM users WHERE email = ?').get(config.bootstrapAdminEmail);
 if (!bootstrap) {
@@ -308,6 +330,10 @@ export const statements = {
     SELECT normalized_status, display_status FROM workflow_source_statuses
     WHERE module = ? ORDER BY display_status COLLATE NOCASE
   `),
+  listWorkflowCardStatuses: db.prepare(`
+    SELECT id, name, color FROM workflow_card_statuses
+    WHERE module = ? ORDER BY sort_order, id
+  `),
   workflowModuleByStatus: db.prepare(`
     SELECT module FROM workflow_source_statuses WHERE normalized_status = ?
   `),
@@ -319,6 +345,13 @@ export const statements = {
     SELECT * FROM maintenance_cards
     WHERE module = ? AND removed_at IS NULL
     ORDER BY lane, sort_order, id
+  `),
+  listMaintenanceCardStatuses: db.prepare(`
+    SELECT s.id, s.name, s.color
+    FROM maintenance_card_status_assignments a
+    JOIN workflow_card_statuses s ON s.id = a.status_id
+    WHERE a.card_id = ?
+    ORDER BY s.sort_order, s.id
   `),
   listMaintenanceEvents: db.prepare(`
     SELECT id, actor_email, action, from_lane, to_lane, created_at
@@ -380,7 +413,7 @@ export function serializeUser(row) {
   };
 }
 
-export function serializeMaintenanceCard(row, events = []) {
+export function serializeMaintenanceCard(row, events = [], cardStatuses = []) {
   let identifiers = [];
   try { identifiers = JSON.parse(row.identifiers_json || '[]'); } catch {}
   return {
@@ -394,6 +427,7 @@ export function serializeMaintenanceCard(row, events = []) {
     sourceRowNumber: row.source_row_number,
     sourceStatus: row.source_status,
     lane: row.lane,
+    cardStatuses,
     sortOrder: row.sort_order,
     notes: row.notes,
     createdAt: row.created_at,

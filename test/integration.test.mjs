@@ -416,6 +416,7 @@ test('development server serves portal API and protected admin writes', async (c
   assert.deepEqual(workflowAdmin.boards.map((board) => board.key), ['workshop', 'service']);
   assert.equal(workflowAdmin.boards[0].entryLaneKey, 'new');
   assert.deepEqual(workflowAdmin.boards[0].sourceStatuses, ['ПОТРЕБУЄ ОГЛЯДУ', 'ТЕХНІЧНІ ПРОБЛЕМИ']);
+  assert.deepEqual(workflowAdmin.boards[0].cardStatuses, []);
   assert.equal(workflowAdmin.boards[0].lanes.find((lane) => lane.key === 'ready').targetStatus, 'НА ОБЛІТ');
 
   const workshopSettings = workflowAdmin.boards[0];
@@ -427,6 +428,10 @@ test('development server serves portal API and protected admin writes', async (c
       description: 'Керований процес ремонту.',
       entryLaneKey: 'inspection',
       sourceStatuses: ['ПОТРЕБУЄ ДІАГНОСТИКИ'],
+      cardStatuses: [
+        { id: null, name: 'Чекаємо запчастини', color: '#f4b942' },
+        { id: null, name: 'Потрібне погодження', color: '#4f9de8' }
+      ],
       lanes: [
         ...workshopSettings.lanes.slice(0, 2).map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
         { key: 'quality_control', title: 'Контроль якості', color: '#36c5a8', targetStatus: '' },
@@ -449,6 +454,11 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(updatedWorkflow.entryLaneKey, 'inspection');
   assert.equal(updatedWorkflow.lanes[2].key, 'quality_control');
   assert.equal(updatedWorkflow.lanes[2].color, '#36c5a8');
+  assert.deepEqual(updatedWorkflow.cardStatuses.map(({ name, color }) => ({ name, color })), [
+    { name: 'Чекаємо запчастини', color: '#f4b942' },
+    { name: 'Потрібне погодження', color: '#4f9de8' }
+  ]);
+  assert.ok(updatedWorkflow.cardStatuses.every((status) => Number.isInteger(status.id)));
   const viewerWorkflowUser = workflowAdmin.users.find((user) => user.email === 'viewer@test.local');
   assert.equal(updatedWorkflow.access.find((grant) => grant.userId === viewerWorkflowUser.id).level, 'operator');
 
@@ -481,6 +491,27 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(workshop.cards.length, 1);
   assert.equal(workshop.cards[0].lane, 'inspection');
   assert.equal(workshop.lanes[2].key, 'quality_control');
+  assert.equal(workshop.cardStatuses.length, 2);
+
+  const updatedCardResponse = await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      notes: 'Очікуємо постачання.',
+      cardStatusIds: updatedWorkflow.cardStatuses.map((status) => status.id)
+    })
+  });
+  assert.equal(updatedCardResponse.status, 200);
+  const updatedCard = await updatedCardResponse.json();
+  assert.equal(updatedCard.notes, 'Очікуємо постачання.');
+  assert.deepEqual(updatedCard.cardStatuses.map((status) => status.name), ['Чекаємо запчастини', 'Потрібне погодження']);
+
+  const invalidCardStatus = await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ notes: updatedCard.notes, cardStatusIds: [999999] })
+  });
+  assert.equal(invalidCardStatus.status, 400);
 
   await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}/move`, {
     method: 'POST',
@@ -501,6 +532,11 @@ test('development server serves portal API and protected admin writes', async (c
       description: updatedWorkflow.description,
       entryLaneKey: updatedWorkflow.entryLaneKey,
       sourceStatuses: updatedWorkflow.sourceStatuses,
+      cardStatuses: updatedWorkflow.cardStatuses.slice(0, 1).map((status) => ({
+        id: status.id,
+        name: 'Очікуємо запчастини',
+        color: status.color
+      })),
       lanes: updatedWorkflow.lanes.map(({ key, title, color, targetStatus }) => ({
         key,
         title,
@@ -511,6 +547,8 @@ test('development server serves portal API and protected admin writes', async (c
     })
   });
   assert.equal(remappedWorkflowResponse.status, 200);
+  const cardAfterStatusSettings = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.deepEqual(cardAfterStatusSettings.cards[0].cardStatuses.map((status) => status.name), ['Очікуємо запчастини']);
   const remappedActions = await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [diagnosisRecord] })
   }).then((response) => response.json());

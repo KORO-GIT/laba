@@ -281,8 +281,11 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-card-asset { color: var(--muted); font-size: 10px; font-weight: 760; }
 .maintenance-card h3 { margin: 12px 0 16px; overflow-wrap: anywhere; font-size: 18px; line-height: 1.15; }
 .maintenance-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: auto; }
-.source-status, .notes-indicator { max-width: 100%; overflow: hidden; padding: 5px 7px; border-radius: 6px; color: var(--accent-light); background: rgba(242,100,48,.1); font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.source-status, .notes-indicator, .card-custom-status { max-width: 100%; overflow: hidden; padding: 5px 7px; border-radius: 6px; color: var(--accent-light); background: rgba(242,100,48,.1); font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .notes-indicator { color: var(--muted); background: rgba(255,255,255,.055); }
+.card-custom-status { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--card-status-color) 36%, transparent); color: var(--ink); background: color-mix(in srgb, var(--card-status-color) 12%, transparent); }
+.card-custom-status::before { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--card-status-color); content: ''; }
+.card-custom-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lane-empty { margin: 0; padding: 28px 10px; color: var(--faint); text-align: center; font-size: 10px; }
 .card-placeholder { min-height: 76px; border: 1px dashed rgba(242,100,48,.62); border-radius: 11px; background: rgba(242,100,48,.075); animation: placeholder-pulse .8s ease-in-out infinite alternate; }
 .drag-source { display: none; }
@@ -298,6 +301,17 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-details > div { display: grid; grid-template-columns: 135px minmax(0, 1fr); gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .maintenance-details dt { color: var(--muted); font-size: 10px; }
 .maintenance-details dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; font-weight: 720; text-align: right; }
+.maintenance-card-statuses { min-width: 0; margin: 0 0 20px; border: 0; padding: 0; }
+.maintenance-card-statuses legend { margin-bottom: 9px; padding: 0; color: var(--muted); font-size: 10px; }
+.maintenance-card-status-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.maintenance-card-status-option { --card-status-color: var(--accent); position: relative; max-width: 100%; display: inline-flex; align-items: center; gap: 8px; overflow: hidden; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: rgba(255,255,255,.018); cursor: pointer; font-size: 10px; font-weight: 760; transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease; }
+.maintenance-card-status-option:hover { border-color: color-mix(in srgb, var(--card-status-color) 42%, var(--line)); color: var(--ink); transform: translateY(-1px); }
+.maintenance-card-status-option:has(input:checked) { border-color: color-mix(in srgb, var(--card-status-color) 58%, transparent); color: var(--ink); background: color-mix(in srgb, var(--card-status-color) 11%, transparent); }
+.maintenance-card-status-option input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.maintenance-card-status-mark { width: 9px; height: 9px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--card-status-color) 72%, white); border-radius: 50%; background: transparent; transition: background .16s ease, box-shadow .16s ease; }
+.maintenance-card-status-option input:checked + .maintenance-card-status-mark { background: var(--card-status-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--card-status-color) 12%, transparent); }
+.maintenance-card-status-option:has(input:focus-visible) { outline: 2px solid var(--card-status-color); outline-offset: 2px; }
+.maintenance-card-statuses:disabled .maintenance-card-status-option { cursor: default; opacity: .78; transform: none; }
 .maintenance-notes textarea { min-height: 140px; user-select: text; }
 #save-card { width: 100%; margin-top: 11px; }
 #save-card.unsaved { box-shadow: 0 0 0 3px rgba(242,100,48,.16); }
@@ -413,6 +427,13 @@ textarea { resize: vertical; line-height: 1.45; }
 .workflow-status-chip button { width: 22px; height: 22px; display: grid; place-items: center; flex: 0 0 auto; border: 0; border-radius: 6px; padding: 0; color: var(--muted); background: transparent; cursor: pointer; font-size: 16px; }
 .workflow-status-chip button:hover { color: var(--ink); background: rgba(255,255,255,.08); }
 .workflow-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 9px; }
+.workflow-card-statuses-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+.workflow-card-statuses-heading .button { flex: 0 0 auto; }
+.workflow-card-status-list { display: flex; flex-direction: column; gap: 8px; }
+.workflow-card-status-row { display: grid; grid-template-columns: 46px minmax(0, 1fr) 34px; align-items: center; gap: 9px; padding: 9px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.018); transition: border-color .18s ease, background .18s ease; }
+.workflow-card-status-row:focus-within { border-color: var(--line-strong); background: rgba(255,255,255,.03); }
+.workflow-card-status-row input { min-width: 0; }
+.workflow-card-status-empty { margin: 0; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--faint); font-size: 10px; text-align: center; }
 .workflow-lanes-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .workflow-lanes-heading .button { flex: 0 0 auto; }
 .workflow-lane-labels, .workflow-lane-row { display: grid; grid-template-columns: 68px 46px minmax(130px, .8fr) minmax(180px, 1.2fr) 34px; align-items: center; gap: 9px; }
@@ -658,6 +679,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .editor-card { padding: 18px; }
   .access-item { grid-template-columns: 1fr; }
   .workflow-add-row { grid-template-columns: 1fr; }
+  .workflow-card-statuses-heading { align-items: stretch; flex-direction: column; }
   .workflow-lanes-heading { align-items: stretch; flex-direction: column; }
   .workflow-lane-labels { display: none; }
   .workflow-lane-row { grid-template-columns: 68px 46px minmax(0, 1fr) 34px; }

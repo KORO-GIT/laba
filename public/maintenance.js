@@ -9,7 +9,7 @@ const state = {
   me: null,
   data: null,
   selectedId: null,
-  notesDirty: false,
+  cardDirty: false,
   dragging: null,
   boardLoading: false,
   refreshTimer: null
@@ -61,7 +61,7 @@ function filteredCards() {
   return state.data.cards.filter((card) => {
     if (assetFilter.value && card.asset !== assetFilter.value) return false;
     if (!query) return true;
-    return [card.asset, card.boardIdentifier, card.sourceStatus, ...card.identifiers]
+    return [card.asset, card.boardIdentifier, card.sourceStatus, ...card.identifiers, ...(card.cardStatuses || []).map((status) => status.name)]
       .some((value) => String(value).toLocaleLowerCase('uk-UA').includes(query));
   });
 }
@@ -92,6 +92,13 @@ function cardNode(card) {
   const status = el('span', 'source-status', card.sourceStatus);
   const meta = el('div', 'maintenance-card-meta');
   meta.append(status);
+  (card.cardStatuses || []).forEach((cardStatus) => {
+    const chip = el('span', 'card-custom-status');
+    chip.style.setProperty('--card-status-color', cardStatus.color);
+    chip.title = cardStatus.name;
+    chip.append(el('span', 'card-custom-status-label', cardStatus.name));
+    meta.append(chip);
+  });
   if (card.notes) meta.append(el('span', 'notes-indicator', 'Примітка'));
   article.append(accent, asset, title, meta);
   article.addEventListener('click', () => {
@@ -144,6 +151,44 @@ function detailRow(term, value) {
   return row;
 }
 
+function renderCardStatusOptions(card) {
+  const fieldset = document.querySelector('#card-status-fieldset');
+  const container = document.querySelector('#card-status-list');
+  const availableStatuses = state.data.cardStatuses || [];
+  const selectedIds = new Set((card.cardStatuses || []).map((status) => status.id));
+  const visibleStatuses = state.data.canEdit
+    ? availableStatuses
+    : availableStatuses.filter((status) => selectedIds.has(status.id));
+  fieldset.classList.toggle('hidden', visibleStatuses.length === 0);
+  fieldset.disabled = !state.data.canEdit;
+  if (state.cardDirty) return;
+  const options = visibleStatuses.map((status) => {
+    const label = el('label', 'maintenance-card-status-option');
+    label.style.setProperty('--card-status-color', status.color);
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = String(status.id);
+    input.checked = selectedIds.has(status.id);
+    const mark = el('span', 'maintenance-card-status-mark');
+    label.append(input, mark, el('span', '', status.name));
+    return label;
+  });
+  container.replaceChildren(...options);
+}
+
+function syncCardDirty() {
+  const card = state.data?.cards.find((item) => item.id === state.selectedId);
+  if (!card) return;
+  const savedStatusIds = (card.cardStatuses || []).map((status) => status.id).sort((left, right) => left - right);
+  const selectedStatusIds = [...document.querySelectorAll('#card-status-list input:checked')]
+    .map((input) => Number(input.value))
+    .sort((left, right) => left - right);
+  state.cardDirty = document.querySelector('#card-notes').value !== card.notes
+    || savedStatusIds.length !== selectedStatusIds.length
+    || savedStatusIds.some((statusId, index) => statusId !== selectedStatusIds[index]);
+  document.querySelector('#save-card').classList.toggle('unsaved', state.cardDirty);
+}
+
 function renderOpenCard() {
   const card = state.data.cards.find((item) => item.id === state.selectedId);
   if (!card) return closeCard(true);
@@ -157,11 +202,12 @@ function renderOpenCard() {
     detailRow('Джерело', `${card.sourceName} / ${card.sourceSheetName}, рядок ${card.sourceRowNumber}`)
   );
   const notes = document.querySelector('#card-notes');
-  if (!state.notesDirty) notes.value = card.notes;
+  if (!state.cardDirty) notes.value = card.notes;
   notes.disabled = !state.data.canEdit;
+  renderCardStatusOptions(card);
   const saveButton = document.querySelector('#save-card');
   saveButton.classList.toggle('hidden', !state.data.canEdit);
-  saveButton.classList.toggle('unsaved', state.notesDirty);
+  saveButton.classList.toggle('unsaved', state.cardDirty);
   const events = card.events.filter((event) => event.action === 'lane.change').map((event) => {
     const item = el('article', 'history-item');
     item.append(
@@ -178,16 +224,16 @@ function renderOpenCard() {
 
 function openCard(id) {
   state.selectedId = id;
-  state.notesDirty = false;
+  state.cardDirty = false;
   renderOpenCard();
   dialog.classList.remove('hidden');
   document.body.classList.add('dialog-open');
 }
 
 function closeCard(force = false) {
-  if (!force && state.notesDirty && !window.confirm('Закрити картку без збереження приміток?')) return;
+  if (!force && state.cardDirty && !window.confirm('Закрити картку без збереження змін?')) return;
   state.selectedId = null;
-  state.notesDirty = false;
+  state.cardDirty = false;
   dialog.classList.add('hidden');
   document.body.classList.remove('dialog-open');
 }
@@ -197,14 +243,19 @@ async function saveCard() {
   button.disabled = true;
   try {
     const updated = await api(`/api/maintenance/${module}/cards/${state.selectedId}`, {
-      method: 'PATCH', body: JSON.stringify({ notes: document.querySelector('#card-notes').value })
+      method: 'PATCH',
+      body: JSON.stringify({
+        notes: document.querySelector('#card-notes').value,
+        cardStatusIds: [...document.querySelectorAll('#card-status-list input:checked')]
+          .map((input) => Number(input.value))
+      })
     });
     const index = state.data.cards.findIndex((card) => card.id === updated.id);
     state.data.cards[index] = updated;
-    state.notesDirty = false;
+    state.cardDirty = false;
     renderBoard();
     renderOpenCard();
-    showToast('Примітки збережено');
+    showToast('Зміни збережено');
   } catch (error) { showToast(error.message, true); }
   finally { button.disabled = false; }
 }
@@ -351,7 +402,7 @@ function scheduleBoardRefresh(delay) {
   clearTimeout(state.refreshTimer);
   const nextDelay = delay ?? (state.data?.sync?.pending ? 2500 : 8000);
   state.refreshTimer = setTimeout(async () => {
-    if (!state.dragging && !state.notesDirty && document.visibilityState === 'visible') {
+    if (!state.dragging && !state.cardDirty && document.visibilityState === 'visible') {
       await loadBoard({ quiet: true });
     }
     scheduleBoardRefresh();
@@ -359,15 +410,17 @@ function scheduleBoardRefresh(delay) {
 }
 
 async function refreshVisibleBoard() {
-  if (document.visibilityState !== 'visible' || state.dragging || state.notesDirty) return;
+  if (document.visibilityState !== 'visible' || state.dragging || state.cardDirty) return;
   await loadBoard({ quiet: true });
   scheduleBoardRefresh();
 }
 
 document.querySelectorAll('[data-close-dialog]').forEach((node) => node.addEventListener('click', () => closeCard()));
 document.querySelector('#card-notes').addEventListener('input', () => {
-  state.notesDirty = true;
-  document.querySelector('#save-card').classList.add('unsaved');
+  syncCardDirty();
+});
+document.querySelector('#card-status-list').addEventListener('change', () => {
+  syncCardDirty();
 });
 document.querySelector('#save-card').addEventListener('click', saveCard);
 function syncSearchClearButton() {

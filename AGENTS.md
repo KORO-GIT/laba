@@ -27,7 +27,7 @@ npm audit --omit=dev
 - Секрети пристроїв шифруються AES-256-GCM. Не створювати другий механізм шифрування.
 - В upstream не передаються Cloudflare assertion, Access cookie і користувацький `Authorization`.
 - Не можна вимкнути останнього активного адміністратора.
-- Редактор `/admin` → `Дошки` зберігає workflow у `workflow_boards`, `workflow_lanes` і `workflow_source_statuses`; не повертати назви колонок або відповідність статусів у hardcoded-константи.
+- Редактор `/admin` → `Дошки` зберігає workflow у `workflow_boards`, `workflow_lanes`, `workflow_source_statuses` і `workflow_card_statuses`; призначення кількох статусів картці зберігаються в `maintenance_card_status_assignments`. Не повертати назви колонок, відповідність статусів або кастомні статуси у hardcoded-константи.
 - Системні ключі колонок незмінні, а головний адміністратор завжди має `admin` на кожній дошці. Зміна кінцевого статусу має скасувати лише застарілі pending outbox-дії, не створювати повторні дії для вже оброблених карток.
 - Успішний ack accounting outbox одразу позначає картку вилученою з активної дошки, лише якщо вона досі перебуває в колонці з тим самим кінцевим статусом. Канбан оновлюється фоновим polling без кешу; не вимагати від користувача ручного reload.
 - Усі state-changing admin API перевіряють Origin і маркер `X-Portal-Request`.

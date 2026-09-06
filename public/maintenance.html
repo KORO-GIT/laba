@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.15.1">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.16.0">
 </head>
 <body class="maintenance-page">
   <div class="noise" aria-hidden="true"></div>
@@ -49,13 +49,17 @@
         <button class="icon-button" type="button" data-close-dialog aria-label="Закрити">×</button>
       </header>
       <dl id="card-details" class="maintenance-details"></dl>
+      <fieldset id="card-status-fieldset" class="maintenance-card-statuses hidden">
+        <legend>Статуси роботи</legend>
+        <div id="card-status-list" class="maintenance-card-status-list"></div>
+      </fieldset>
       <label class="field maintenance-notes"><span>Примітки до роботи</span><textarea id="card-notes" rows="6" maxlength="4000" placeholder="Що перевірено, що потрібно зробити"></textarea></label>
-      <button id="save-card" class="button button-primary" type="button">Зберегти примітки</button>
+      <button id="save-card" class="button button-primary" type="button">Зберегти зміни</button>
       <section class="maintenance-history"><h3>Історія картки</h3><div id="card-history"></div></section>
     </article>
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/maintenance.js?v=0.15.1"></script>
+  <script type="module" src="/assets/maintenance.js?v=0.16.0"></script>
 </body>
 </html>

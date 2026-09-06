@@ -439,19 +439,30 @@ const maintenanceMoveSchema = z.object({
   beforeCardId: z.union([z.coerce.number().int().positive(), z.literal(null)]).optional().default(null)
 }).strict();
 const maintenanceEditSchema = z.object({
-  notes: z.string().trim().max(4000)
-}).strict();
+  notes: z.string().trim().max(4000),
+  cardStatusIds: z.array(z.coerce.number().int().positive()).max(30).optional()
+}).strict().superRefine((card, context) => {
+  if (card.cardStatusIds && new Set(card.cardStatusIds).size !== card.cardStatusIds.length) {
+    context.addIssue({ code: 'custom', path: ['cardStatusIds'], message: 'Статуси картки повторюються' });
+  }
+});
 const workflowLaneSchema = z.object({
   key: z.string().trim().regex(/^[a-z][a-z0-9_]{0,63}$/),
   title: z.string().trim().min(1).max(80),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/),
   targetStatus: z.string().trim().max(120).optional().default('')
 }).strict();
+const workflowCardStatusSchema = z.object({
+  id: z.union([z.coerce.number().int().positive(), z.literal(null)]).optional().default(null),
+  name: z.string().trim().min(1).max(80),
+  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/)
+}).strict();
 const workflowSettingsSchema = z.object({
   title: z.string().trim().min(2).max(80),
   description: z.string().trim().max(240).optional().default(''),
   entryLaneKey: z.string().trim().regex(/^[a-z][a-z0-9_]{0,63}$/),
   sourceStatuses: z.array(z.string().trim().min(1).max(120)).min(1).max(30),
+  cardStatuses: z.array(workflowCardStatusSchema).max(30).optional(),
   lanes: z.array(workflowLaneSchema).min(2).max(16),
   access: z.array(z.object({
     userId: z.coerce.number().int().positive(),
@@ -468,6 +479,16 @@ const workflowSettingsSchema = z.object({
   const statuses = workflow.sourceStatuses.map(normalizedStatus);
   if (new Set(statuses).size !== statuses.length) {
     context.addIssue({ code: 'custom', path: ['sourceStatuses'], message: 'Статуси Обліку повторюються' });
+  }
+  if (workflow.cardStatuses) {
+    const cardStatusNames = workflow.cardStatuses.map((status) => normalizedStatus(status.name));
+    if (new Set(cardStatusNames).size !== cardStatusNames.length) {
+      context.addIssue({ code: 'custom', path: ['cardStatuses'], message: 'Статуси карток повторюються' });
+    }
+    const cardStatusIds = workflow.cardStatuses.map((status) => status.id).filter(Boolean);
+    if (new Set(cardStatusIds).size !== cardStatusIds.length) {
+      context.addIssue({ code: 'custom', path: ['cardStatuses'], message: 'Статус картки зазначено кілька разів' });
+    }
   }
   const userIds = workflow.access.map((grant) => grant.userId);
   if (new Set(userIds).size !== userIds.length) {
@@ -551,6 +572,11 @@ function maintenanceDefinition(module) {
     description: board.description,
     entryLaneKey: board.entry_lane_key,
     sourceStatuses: statements.listWorkflowStatuses.all(module).map((row) => row.display_status),
+    cardStatuses: statements.listWorkflowCardStatuses.all(module).map((status) => ({
+      id: status.id,
+      name: status.name,
+      color: status.color
+    })),
     lanes: statements.listWorkflowLanes.all(module).map((lane) => ({
       key: lane.lane_key,
       title: lane.title,
@@ -613,7 +639,12 @@ function maintenanceCardPayload(row) {
     toLane: event.to_lane,
     createdAt: event.created_at
   }));
-  return serializeMaintenanceCard(row, events);
+  const cardStatuses = statements.listMaintenanceCardStatuses.all(row.id).map((status) => ({
+    id: status.id,
+    name: status.name,
+    color: status.color
+  }));
+  return serializeMaintenanceCard(row, events, cardStatuses);
 }
 
 function reorderMaintenanceLane(module, cardId, lane, beforeCardId) {
@@ -813,6 +844,7 @@ app.get('/api/maintenance/:module', async (request, reply) => {
     title: definition.title,
     description: definition.description,
     lanes: definition.lanes,
+    cardStatuses: definition.cardStatuses,
     access,
     canEdit: accessRank(access) >= accessRank('operator'),
     cards,
@@ -885,7 +917,8 @@ app.patch('/api/maintenance/:module/cards/:id', {
   config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
 }, async (request, reply) => {
   const module = String(request.params.module || '');
-  if (!maintenanceDefinition(module)) return reply.code(404).send({ error: 'Розділ не знайдено' });
+  const definition = maintenanceDefinition(module);
+  if (!definition) return reply.code(404).send({ error: 'Розділ не знайдено' });
   if (accessRank(moduleAccess(request.portalUser, module)) < accessRank('operator')) {
     return reply.code(403).send({ error: 'Потрібні права виконавця' });
   }
@@ -895,13 +928,37 @@ app.patch('/api/maintenance/:module/cards/:id', {
   }
   const body = parseOrReply(maintenanceEditSchema, request.body, reply);
   if (!body) return;
-  db.prepare(`
-    UPDATE maintenance_cards SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).run(body.notes, card.id);
-  db.prepare(`
-    INSERT INTO maintenance_events (card_id, actor_email, action) VALUES (?, ?, 'notes.update')
-  `).run(card.id, request.portalUser.email);
-  audit(request.portalUser.email, 'maintenance.update', 'maintenance-card', card.id, { module });
+  const previousStatusIds = statements.listMaintenanceCardStatuses.all(card.id).map((status) => status.id);
+  const nextStatusIds = body.cardStatusIds ?? previousStatusIds;
+  const allowedStatusIds = new Set(definition.cardStatuses.map((status) => status.id));
+  if (!nextStatusIds.every((statusId) => allowedStatusIds.has(statusId))) {
+    return reply.code(400).send({ error: 'Один зі статусів не належить цій дошці' });
+  }
+  const notesChanged = body.notes !== card.notes;
+  const statusesChanged = previousStatusIds.length !== nextStatusIds.length
+    || previousStatusIds.some((statusId) => !nextStatusIds.includes(statusId));
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE maintenance_cards SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(body.notes, card.id);
+    if (statusesChanged) {
+      db.prepare('DELETE FROM maintenance_card_status_assignments WHERE card_id = ?').run(card.id);
+      const assign = db.prepare(`
+        INSERT INTO maintenance_card_status_assignments (card_id, status_id) VALUES (?, ?)
+      `);
+      nextStatusIds.forEach((statusId) => assign.run(card.id, statusId));
+    }
+    if (notesChanged) {
+      db.prepare(`
+        INSERT INTO maintenance_events (card_id, actor_email, action) VALUES (?, ?, 'notes.update')
+      `).run(card.id, request.portalUser.email);
+    }
+  })();
+  audit(request.portalUser.email, 'maintenance.update', 'maintenance-card', card.id, {
+    module,
+    notesChanged,
+    cardStatusIds: nextStatusIds
+  });
   return maintenanceCardPayload(statements.maintenanceCardById.get(card.id));
 });
 
@@ -1012,6 +1069,7 @@ app.patch('/api/admin/workflows/:module', {
   }
 
   const normalizedStatuses = body.sourceStatuses.map(normalizedStatus);
+  const cardStatuses = body.cardStatuses ?? current.cardStatuses;
   const conflictingStatus = normalizedStatuses.find((status) => {
     const assigned = statements.workflowModuleByStatus.get(status);
     return assigned && assigned.module !== module;
@@ -1029,6 +1087,11 @@ app.patch('/api/admin/workflows/:module', {
     return reply.code(400).send({ error: 'Один із користувачів більше не існує' });
   }
   const bootstrapAdmin = users.find((user) => user.email.toLowerCase() === config.bootstrapAdminEmail);
+  const existingCardStatuses = statements.listWorkflowCardStatuses.all(module);
+  const existingCardStatusIds = new Set(existingCardStatuses.map((status) => status.id));
+  if (!cardStatuses.every((status) => status.id === null || existingCardStatusIds.has(status.id))) {
+    return reply.code(400).send({ error: 'Один зі статусів картки більше не існує' });
+  }
 
   db.transaction(() => {
     db.prepare(`
@@ -1066,6 +1129,36 @@ app.patch('/api/admin/workflows/:module', {
     `);
     normalizedStatuses.forEach((status) => insertStatus.run(status, status, module));
 
+    const retainedCardStatusIds = new Set(cardStatuses.map((status) => status.id).filter(Boolean));
+    const deleteCardStatus = db.prepare('DELETE FROM workflow_card_statuses WHERE module = ? AND id = ?');
+    existingCardStatuses
+      .filter((status) => !retainedCardStatusIds.has(status.id))
+      .forEach((status) => deleteCardStatus.run(module, status.id));
+    const reserveCardStatusName = db.prepare(`
+      UPDATE workflow_card_statuses
+      SET normalized_name = '__LABA_TMP_' || id || '_' || hex(randomblob(8))
+      WHERE module = ? AND id = ?
+    `);
+    existingCardStatuses
+      .filter((status) => retainedCardStatusIds.has(status.id))
+      .forEach((status) => reserveCardStatusName.run(module, status.id));
+    const updateCardStatus = db.prepare(`
+      UPDATE workflow_card_statuses
+      SET name = ?, normalized_name = ?, color = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE module = ? AND id = ?
+    `);
+    const insertCardStatus = db.prepare(`
+      INSERT INTO workflow_card_statuses (module, name, normalized_name, color, sort_order)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    cardStatuses.forEach((status, index) => {
+      const name = status.name.trim().replace(/\s+/g, ' ');
+      const normalizedName = normalizedStatus(name);
+      const color = status.color.toLowerCase();
+      if (status.id) updateCardStatus.run(name, normalizedName, color, (index + 1) * 10, module, status.id);
+      else insertCardStatus.run(module, name, normalizedName, color, (index + 1) * 10);
+    });
+
     if (bootstrapAdmin) {
       db.prepare('DELETE FROM user_module_access WHERE module = ? AND user_id != ?')
         .run(module, bootstrapAdmin.id);
@@ -1092,6 +1185,7 @@ app.patch('/api/admin/workflows/:module', {
     entryLaneKey: body.entryLaneKey,
     laneKeys: body.lanes.map((lane) => lane.key),
     sourceStatuses: normalizedStatuses,
+    cardStatuses: cardStatuses.map((status) => status.name),
     accessCount: body.access.filter((grant) => grant.level !== 'none').length
   });
   return workflowAdminPayload(module);
