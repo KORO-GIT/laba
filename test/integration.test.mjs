@@ -400,6 +400,9 @@ test('development server serves portal API and protected admin writes', async (c
   });
   assert.equal(ack.status, 200);
 
+  workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.equal(workshop.cards.length, 0);
+
   await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders,
     body: JSON.stringify({ records: [{ ...repairRecord, status: 'НА ОБЛІТ' }] })

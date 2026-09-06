@@ -5,7 +5,15 @@ const toast = document.querySelector('#toast');
 const search = document.querySelector('#search');
 const clearSearch = document.querySelector('#clear-search');
 const assetFilter = document.querySelector('#asset-filter');
-const state = { me: null, data: null, selectedId: null, notesDirty: false, dragging: null };
+const state = {
+  me: null,
+  data: null,
+  selectedId: null,
+  notesDirty: false,
+  dragging: null,
+  boardLoading: false,
+  refreshTimer: null
+};
 
 function showToast(message, error = false) {
   toast.textContent = message;
@@ -17,6 +25,7 @@ function showToast(message, error = false) {
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    cache: 'no-store',
     headers: {
       Accept: 'application/json',
       ...(options.body ? { 'Content-Type': 'application/json', 'X-Portal-Request': '1' } : {}),
@@ -320,6 +329,8 @@ function cleanupDragVisuals(drag) {
 }
 
 async function loadBoard({ quiet = false } = {}) {
+  if (state.boardLoading) return;
+  state.boardLoading = true;
   try {
     const data = await api(`/api/maintenance/${module}`);
     state.data = data;
@@ -331,7 +342,26 @@ async function loadBoard({ quiet = false } = {}) {
     if (state.selectedId) renderOpenCard();
   } catch (error) {
     if (!quiet) showToast(error.message, true);
+  } finally {
+    state.boardLoading = false;
   }
+}
+
+function scheduleBoardRefresh(delay) {
+  clearTimeout(state.refreshTimer);
+  const nextDelay = delay ?? (state.data?.sync?.pending ? 2500 : 8000);
+  state.refreshTimer = setTimeout(async () => {
+    if (!state.dragging && !state.notesDirty && document.visibilityState === 'visible') {
+      await loadBoard({ quiet: true });
+    }
+    scheduleBoardRefresh();
+  }, nextDelay);
+}
+
+async function refreshVisibleBoard() {
+  if (document.visibilityState !== 'visible' || state.dragging || state.notesDirty) return;
+  await loadBoard({ quiet: true });
+  scheduleBoardRefresh();
 }
 
 document.querySelectorAll('[data-close-dialog]').forEach((node) => node.addEventListener('click', () => closeCard()));
@@ -366,6 +396,8 @@ search.addEventListener('keydown', (event) => {
 clearSearch.addEventListener('click', clearSearchValue);
 assetFilter.addEventListener('change', renderBoard);
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.classList.contains('hidden')) closeCard(); });
+document.addEventListener('visibilitychange', refreshVisibleBoard);
+window.addEventListener('focus', refreshVisibleBoard);
 
 async function start() {
   try {
@@ -373,9 +405,7 @@ async function start() {
     state.me = await api('/api/me');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
     await loadBoard();
-    setInterval(() => {
-      if (!state.dragging && !state.notesDirty && document.visibilityState === 'visible') loadBoard({ quiet: true });
-    }, 8000);
+    scheduleBoardRefresh();
   } catch (error) { showToast(error.message, true); }
 }
 

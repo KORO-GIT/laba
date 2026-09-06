@@ -925,7 +925,12 @@ app.post('/api/internal/accounting/ack', {
 }, async (request, reply) => {
   const body = parseOrReply(accountingAckSchema, request.body, reply);
   if (!body) return;
-  const find = db.prepare("SELECT * FROM accounting_outbox WHERE id = ? AND state = 'pending'");
+  const find = db.prepare(`
+    SELECT o.*, c.id AS maintenance_card_id
+    FROM accounting_outbox o
+    JOIN maintenance_cards c ON c.id = o.card_id
+    WHERE o.id = ? AND o.state = 'pending'
+  `);
   const applied = db.prepare(`
     UPDATE accounting_outbox
     SET state = 'applied', attempts = attempts + 1, last_error = NULL,
@@ -938,12 +943,28 @@ app.post('/api/internal/accounting/ack', {
       attempts = attempts + 1, last_error = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND state = 'pending'
   `);
+  const retireAppliedCard = db.prepare(`
+    UPDATE maintenance_cards
+    SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND removed_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM workflow_lanes l
+        WHERE l.module = maintenance_cards.module
+          AND l.lane_key = maintenance_cards.lane
+          AND l.target_status = ?
+      )
+  `);
   let accepted = 0;
   db.transaction(() => {
     for (const result of body.results) {
-      if (!find.get(result.id)) continue;
-      if (result.success) applied.run(result.id);
-      else failed.run(result.error || 'Помилка синхронізації', result.id);
+      const action = find.get(result.id);
+      if (!action) continue;
+      if (result.success) {
+        applied.run(result.id);
+        retireAppliedCard.run(action.maintenance_card_id, action.target_status);
+      } else {
+        failed.run(result.error || 'Помилка синхронізації', result.id);
+      }
       accepted += 1;
     }
   })();
