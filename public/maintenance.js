@@ -11,6 +11,8 @@ const state = {
   selectedId: null,
   cardDirty: false,
   dragging: null,
+  movePending: 0,
+  mutationVersion: 0,
   boardLoading: false,
   refreshTimer: null
 };
@@ -335,7 +337,7 @@ async function saveCard() {
 }
 
 function beginPointerDrag(event) {
-  if (event.button !== 0 || event.target.closest('button, input, textarea, select, a')) return;
+  if (state.movePending || event.button !== 0 || event.target.closest('button, input, textarea, select, a')) return;
   const card = event.currentTarget;
   const point = { x: event.clientX, y: event.clientY };
   const drag = {
@@ -415,23 +417,51 @@ async function finishPointerDrag(event) {
   }
   event.preventDefault();
   const lane = drag.placeholder.closest('.maintenance-lane')?.dataset.lane;
-  const next = drag.placeholder.nextElementSibling;
-  const beforeCardId = next?.classList.contains('maintenance-card') ? Number(next.dataset.cardId) : null;
+  let next = drag.placeholder.nextElementSibling;
+  while (next && (!next.classList.contains('maintenance-card') || Number(next.dataset.cardId) === drag.cardId)) {
+    next = next.nextElementSibling;
+  }
+  const beforeCardId = next ? Number(next.dataset.cardId) : null;
+  if (!lane) {
+    cleanupDragVisuals(drag);
+    state.dragging = { moved: true };
+    setTimeout(() => { state.dragging = null; }, 0);
+    renderBoard();
+    return;
+  }
+  const previousCards = state.data.cards;
+  state.movePending += 1;
+  state.mutationVersion += 1;
+  applyOptimisticMove(drag.cardId, lane, beforeCardId);
   cleanupDragVisuals(drag);
   state.dragging = { moved: true };
   setTimeout(() => { state.dragging = null; }, 0);
-  if (!lane) return renderBoard();
+  renderBoard();
   try {
     const updated = await api(`/api/maintenance/${module}/cards/${drag.cardId}/move`, {
       method: 'POST', body: JSON.stringify({ lane, beforeCardId })
     });
     const index = state.data.cards.findIndex((card) => card.id === updated.id);
     state.data.cards[index] = updated;
-    await loadBoard({ quiet: true });
+    renderBoard();
   } catch (error) {
+    state.data.cards = previousCards;
+    renderBoard();
     showToast(error.message, true);
+  } finally {
+    state.movePending = Math.max(0, state.movePending - 1);
     await loadBoard({ quiet: true });
   }
+}
+
+function applyOptimisticMove(cardId, lane, beforeCardId) {
+  const card = state.data.cards.find((item) => item.id === cardId);
+  if (!card || !lane) return;
+  const cards = state.data.cards.filter((item) => item.id !== cardId);
+  const moved = { ...card, lane };
+  const beforeIndex = beforeCardId ? cards.findIndex((item) => item.id === beforeCardId) : -1;
+  cards.splice(beforeIndex >= 0 ? beforeIndex : cards.length, 0, moved);
+  state.data.cards = cards;
 }
 
 function cancelPointerDrag() {
@@ -456,8 +486,10 @@ function cleanupDragVisuals(drag) {
 async function loadBoard({ quiet = false } = {}) {
   if (state.boardLoading) return;
   state.boardLoading = true;
+  const mutationVersion = state.mutationVersion;
   try {
     const data = await api(`/api/maintenance/${module}`);
+    if (quiet && (mutationVersion !== state.mutationVersion || state.movePending || state.dragging?.moved)) return;
     state.data = data;
     document.title = `LABA — ${data.title}`;
     document.querySelector('#page-title').textContent = data.title;
@@ -477,7 +509,7 @@ function scheduleBoardRefresh(delay) {
   clearTimeout(state.refreshTimer);
   const nextDelay = delay ?? (state.data?.sync?.pending ? 2500 : 8000);
   state.refreshTimer = setTimeout(async () => {
-    if (!state.dragging && !state.cardDirty && document.visibilityState === 'visible') {
+    if (!state.dragging && !state.movePending && !state.cardDirty && document.visibilityState === 'visible') {
       await loadBoard({ quiet: true });
     }
     scheduleBoardRefresh();
@@ -485,7 +517,7 @@ function scheduleBoardRefresh(delay) {
 }
 
 async function refreshVisibleBoard() {
-  if (document.visibilityState !== 'visible' || state.dragging || state.cardDirty) return;
+  if (document.visibilityState !== 'visible' || state.dragging || state.movePending || state.cardDirty) return;
   await loadBoard({ quiet: true });
   scheduleBoardRefresh();
 }
