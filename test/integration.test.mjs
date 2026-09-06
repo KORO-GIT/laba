@@ -407,6 +407,113 @@ test('development server serves portal API and protected admin writes', async (c
   workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
   assert.equal(workshop.cards.length, 0);
 
+  const deniedWorkflowAdmin = await fetch(`${root}/api/admin/workflows`, { headers: viewerHeaders });
+  assert.equal(deniedWorkflowAdmin.status, 403);
+  const workflowAdmin = await fetch(`${root}/api/admin/workflows`).then((response) => response.json());
+  assert.deepEqual(workflowAdmin.boards.map((board) => board.key), ['workshop', 'service']);
+  assert.equal(workflowAdmin.boards[0].entryLaneKey, 'new');
+  assert.deepEqual(workflowAdmin.boards[0].sourceStatuses, ['ПОТРЕБУЄ ОГЛЯДУ', 'ТЕХНІЧНІ ПРОБЛЕМИ']);
+  assert.equal(workflowAdmin.boards[0].lanes.find((lane) => lane.key === 'ready').targetStatus, 'НА ОБЛІТ');
+
+  const workshopSettings = workflowAdmin.boards[0];
+  const updatedWorkflowResponse = await fetch(`${root}/api/admin/workflows/workshop`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      title: 'Ремонтна майстерня',
+      description: 'Керований процес ремонту.',
+      entryLaneKey: 'inspection',
+      sourceStatuses: ['ПОТРЕБУЄ ДІАГНОСТИКИ'],
+      lanes: [
+        ...workshopSettings.lanes.slice(0, 2).map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
+        { key: 'quality_control', title: 'Контроль якості', color: '#36c5a8', targetStatus: '' },
+        ...workshopSettings.lanes.slice(2).map(({ key, title, color, targetStatus }) => ({
+          key,
+          title,
+          color,
+          targetStatus: key === 'ready' ? 'ГОТОВО ДО ОБЛЬОТУ' : targetStatus
+        }))
+      ],
+      access: workflowAdmin.users.map((user) => ({
+        userId: user.id,
+        level: user.primaryAdmin ? 'admin' : 'operator'
+      }))
+    })
+  });
+  assert.equal(updatedWorkflowResponse.status, 200);
+  const updatedWorkflow = await updatedWorkflowResponse.json();
+  assert.equal(updatedWorkflow.title, 'Ремонтна майстерня');
+  assert.equal(updatedWorkflow.entryLaneKey, 'inspection');
+  assert.equal(updatedWorkflow.lanes[2].key, 'quality_control');
+  assert.equal(updatedWorkflow.lanes[2].color, '#36c5a8');
+  const viewerWorkflowUser = workflowAdmin.users.find((user) => user.email === 'viewer@test.local');
+  assert.equal(updatedWorkflow.access.find((grant) => grant.userId === viewerWorkflowUser.id).level, 'operator');
+
+  const collisionResponse = await fetch(`${root}/api/admin/workflows/service`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      title: workflowAdmin.boards[1].title,
+      description: workflowAdmin.boards[1].description,
+      entryLaneKey: workflowAdmin.boards[1].entryLaneKey,
+      sourceStatuses: ['ПОТРЕБУЄ ДІАГНОСТИКИ'],
+      lanes: workflowAdmin.boards[1].lanes.map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
+      access: workflowAdmin.boards[1].access
+    })
+  });
+  assert.equal(collisionResponse.status, 409);
+
+  const diagnosisRecord = {
+    ...repairRecord,
+    rowNumber: 5,
+    boardIdentifier: '015',
+    identifiers: ['015', 'KIT-UA-NM-015'],
+    status: 'ПОТРЕБУЄ ДІАГНОСТИКИ'
+  };
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [diagnosisRecord] })
+  });
+  workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.equal(workshop.title, 'Ремонтна майстерня');
+  assert.equal(workshop.cards.length, 1);
+  assert.equal(workshop.cards[0].lane, 'inspection');
+  assert.equal(workshop.lanes[2].key, 'quality_control');
+
+  await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ lane: 'ready', beforeCardId: null })
+  });
+  const customStatusAction = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [diagnosisRecord] })
+  }).then((response) => response.json());
+  assert.equal(customStatusAction.actions.length, 1);
+  assert.equal(customStatusAction.actions.at(-1).targetStatus, 'ГОТОВО ДО ОБЛЬОТУ');
+
+  const remappedWorkflowResponse = await fetch(`${root}/api/admin/workflows/workshop`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      title: updatedWorkflow.title,
+      description: updatedWorkflow.description,
+      entryLaneKey: updatedWorkflow.entryLaneKey,
+      sourceStatuses: updatedWorkflow.sourceStatuses,
+      lanes: updatedWorkflow.lanes.map(({ key, title, color, targetStatus }) => ({
+        key,
+        title,
+        color,
+        targetStatus: key === 'ready' ? 'ПЕРЕВІРЕНО' : targetStatus
+      })),
+      access: updatedWorkflow.access
+    })
+  });
+  assert.equal(remappedWorkflowResponse.status, 200);
+  const remappedActions = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [diagnosisRecord] })
+  }).then((response) => response.json());
+  assert.equal(remappedActions.actions.length, 1);
+  assert.equal(remappedActions.actions[0].targetStatus, 'ПЕРЕВІРЕНО');
+
   const devices = await fetch(`${root}/api/devices`).then((response) => response.json());
   assert.equal(devices.length, 1);
   assert.equal(devices[0].slug, 'k1se-01');

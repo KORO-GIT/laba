@@ -1,6 +1,17 @@
-import { initDesktop } from './desktop.js?v=0.14.1';
+import { initDesktop } from './desktop.js?v=0.15.0';
 
-const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
+const state = {
+  me: null,
+  devices: [],
+  users: [],
+  workflows: [],
+  workflowUsers: [],
+  editingWorkflow: null,
+  audit: [],
+  audio: null,
+  starlink: null,
+  starlinkMap: null
+};
 const toast = document.querySelector('#toast');
 let audioPollTimer = null;
 let starlinkPollTimer = null;
@@ -47,13 +58,13 @@ function deviceIntegration(device) {
   return device.streamName ? 'go2rtc' : device.driver;
 }
 
-function recordButton({ symbol, title, subtitle, enabled, selected, onClick }) {
+function recordButton({ symbol, title, subtitle, enabled, selected, statusText, onClick }) {
   const button = el('button', `record${selected ? ' active' : ''}`);
   button.type = 'button';
   const icon = el('span', 'record-symbol', symbol);
   const main = el('span', 'record-main');
   main.append(el('strong', '', title), el('small', '', subtitle));
-  const status = el('span', `record-state${enabled ? '' : ' off'}`, enabled ? 'УВІМК.' : 'ВИМК.');
+  const status = el('span', `record-state${enabled ? '' : ' off'}`, statusText ?? (enabled ? 'УВІМК.' : 'ВИМК.'));
   button.append(icon, main, status);
   button.addEventListener('click', onClick);
   return button;
@@ -640,6 +651,260 @@ function startStarlinkPolling() {
   }, 5_000);
 }
 
+function workflowAccessLabel(level) {
+  return {
+    none: 'Немає доступу',
+    viewer: 'Перегляд',
+    operator: 'Виконавець',
+    admin: 'Адміністратор'
+  }[level] || level;
+}
+
+function ukrainianCount(value, one, few, many) {
+  const number = Math.abs(Number(value));
+  if (number % 10 === 1 && number % 100 !== 11) return `${number} ${one}`;
+  if ([2, 3, 4].includes(number % 10) && ![12, 13, 14].includes(number % 100)) return `${number} ${few}`;
+  return `${number} ${many}`;
+}
+
+function renderWorkflowBoards(selectedModule = state.editingWorkflow?.key) {
+  const list = document.querySelector('#workflow-board-list');
+  list.replaceChildren(...state.workflows.map((workflow) => recordButton({
+    symbol: 'KB',
+    title: workflow.title,
+    subtitle: `${ukrainianCount(workflow.sourceStatuses.length, 'статус', 'статуси', 'статусів')} Обліку`,
+    enabled: true,
+    statusText: `${workflow.lanes.length} КОЛ.`,
+    selected: workflow.key === selectedModule,
+    onClick: () => editWorkflow(workflow.key)
+  })));
+}
+
+function renderWorkflowStatuses() {
+  const container = document.querySelector('#workflow-status-list');
+  const workflow = state.editingWorkflow;
+  const chips = workflow.sourceStatuses.map((status) => {
+    const chip = el('span', 'workflow-status-chip');
+    chip.append(el('span', '', status));
+    const remove = el('button', '', '×');
+    remove.type = 'button';
+    remove.title = `Видалити статус «${status}»`;
+    remove.setAttribute('aria-label', remove.title);
+    remove.addEventListener('click', () => {
+      if (workflow.sourceStatuses.length === 1) {
+        showToast('Дошка повинна мати щонайменше один вхідний статус', true);
+        return;
+      }
+      workflow.sourceStatuses = workflow.sourceStatuses.filter((item) => item !== status);
+      renderWorkflowStatuses();
+    });
+    chip.append(remove);
+    return chip;
+  });
+  container.replaceChildren(...chips);
+}
+
+function addWorkflowStatus() {
+  const input = document.querySelector('#workflow-status-input');
+  const status = input.value.trim().replace(/\s+/g, ' ').toLocaleUpperCase('uk-UA');
+  if (!status) return input.focus();
+  if (state.editingWorkflow.sourceStatuses.includes(status)) {
+    showToast('Такий статус уже додано', true);
+    return input.select();
+  }
+  state.editingWorkflow.sourceStatuses.push(status);
+  input.value = '';
+  renderWorkflowStatuses();
+  input.focus();
+}
+
+function renderWorkflowEntryLane() {
+  const workflow = state.editingWorkflow;
+  const select = document.querySelector('#workflow-entry-lane');
+  const options = workflow.lanes.map((lane) => {
+    const option = el('option', '', lane.title);
+    option.value = lane.key;
+    return option;
+  });
+  select.replaceChildren(...options);
+  if (!workflow.lanes.some((lane) => lane.key === workflow.entryLaneKey)) {
+    workflow.entryLaneKey = workflow.lanes[0]?.key || '';
+  }
+  select.value = workflow.entryLaneKey;
+}
+
+function workflowIconButton(symbol, title, disabled, onClick) {
+  const button = el('button', 'icon-button workflow-icon-button', symbol);
+  button.type = 'button';
+  button.title = title;
+  button.setAttribute('aria-label', title);
+  button.disabled = disabled;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderWorkflowLanes() {
+  const workflow = state.editingWorkflow;
+  const rows = workflow.lanes.map((lane, index) => {
+    const row = el('div', 'workflow-lane-row');
+    const order = el('div', 'workflow-order-buttons');
+    order.append(
+      workflowIconButton('↑', 'Перемістити колонку ліворуч', index === 0, () => moveWorkflowLane(index, -1)),
+      workflowIconButton('↓', 'Перемістити колонку праворуч', index === workflow.lanes.length - 1, () => moveWorkflowLane(index, 1))
+    );
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'workflow-color';
+    color.value = lane.color;
+    color.title = `Колір колонки «${lane.title}»`;
+    color.setAttribute('aria-label', color.title);
+    color.addEventListener('input', () => { lane.color = color.value; });
+    const title = document.createElement('input');
+    title.value = lane.title;
+    title.maxLength = 80;
+    title.required = true;
+    title.setAttribute('aria-label', 'Назва колонки');
+    title.addEventListener('input', () => {
+      lane.title = title.value;
+      renderWorkflowEntryLane();
+    });
+    const target = document.createElement('input');
+    target.value = lane.targetStatus || '';
+    target.maxLength = 120;
+    target.placeholder = 'Не змінювати статус';
+    target.setAttribute('aria-label', 'Статус для запису в Облік');
+    target.addEventListener('input', () => { lane.targetStatus = target.value; });
+    const remove = workflowIconButton('×', lane.system ? 'Системну колонку не можна видалити' : 'Видалити колонку', lane.system, () => {
+      if (!window.confirm(`Видалити колонку «${lane.title}»?`)) return;
+      workflow.lanes.splice(index, 1);
+      renderWorkflowLanes();
+      renderWorkflowEntryLane();
+    });
+    remove.classList.add('workflow-remove-lane');
+    row.append(order, color, title, target, remove);
+    return row;
+  });
+  document.querySelector('#workflow-lane-list').replaceChildren(...rows);
+  renderWorkflowEntryLane();
+}
+
+function moveWorkflowLane(index, direction) {
+  const destination = index + direction;
+  if (destination < 0 || destination >= state.editingWorkflow.lanes.length) return;
+  const [lane] = state.editingWorkflow.lanes.splice(index, 1);
+  state.editingWorkflow.lanes.splice(destination, 0, lane);
+  renderWorkflowLanes();
+}
+
+function addWorkflowLane() {
+  const palette = ['#4f9de8', '#b6ee73', '#f4b942', '#bb86fc', '#f26430'];
+  const suffix = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  state.editingWorkflow.lanes.push({
+    key: `stage_${suffix}`,
+    title: 'Нова колонка',
+    color: palette[state.editingWorkflow.lanes.length % palette.length],
+    targetStatus: '',
+    system: false
+  });
+  renderWorkflowLanes();
+  document.querySelector('#workflow-lane-list .workflow-lane-row:last-child input[aria-label="Назва колонки"]')?.select();
+}
+
+function renderWorkflowAccess() {
+  const workflow = state.editingWorkflow;
+  const grants = new Map(workflow.access.map((grant) => [grant.userId, grant.level]));
+  const rows = state.workflowUsers.map((user) => {
+    const row = el('label', 'access-item');
+    const description = el('span');
+    description.append(
+      el('strong', '', user.displayName || user.email),
+      el('small', '', `${user.email}${user.enabled ? '' : ' · вимкнено'}`)
+    );
+    const select = document.createElement('select');
+    select.dataset.userId = String(user.id);
+    ['none', 'viewer', 'operator', 'admin'].forEach((level) => {
+      const option = el('option', '', workflowAccessLabel(level));
+      option.value = level;
+      select.append(option);
+    });
+    select.value = user.primaryAdmin ? 'admin' : grants.get(user.id) || 'none';
+    select.disabled = user.primaryAdmin;
+    select.addEventListener('change', () => {
+      const grant = workflow.access.find((item) => item.userId === user.id);
+      if (grant) grant.level = select.value;
+      else workflow.access.push({ userId: user.id, level: select.value });
+    });
+    row.append(description, select);
+    return row;
+  });
+  document.querySelector('#workflow-access-list').replaceChildren(...rows);
+}
+
+function editWorkflow(module) {
+  const source = state.workflows.find((workflow) => workflow.key === module);
+  if (!source) return;
+  state.editingWorkflow = structuredClone(source);
+  const form = document.querySelector('#workflow-form');
+  form.classList.remove('hidden');
+  formValue('workflow-module', source.key);
+  formValue('workflow-title', source.title);
+  formValue('workflow-description', source.description);
+  document.querySelector('#workflow-form-title').textContent = source.title;
+  renderWorkflowStatuses();
+  renderWorkflowLanes();
+  renderWorkflowAccess();
+  renderWorkflowBoards(source.key);
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function workflowPayload() {
+  const workflow = state.editingWorkflow;
+  workflow.title = document.querySelector('#workflow-title').value;
+  workflow.description = document.querySelector('#workflow-description').value;
+  workflow.entryLaneKey = document.querySelector('#workflow-entry-lane').value;
+  return {
+    title: workflow.title,
+    description: workflow.description,
+    entryLaneKey: workflow.entryLaneKey,
+    sourceStatuses: workflow.sourceStatuses,
+    lanes: workflow.lanes.map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
+    access: state.workflowUsers.map((user) => ({
+      userId: user.id,
+      level: user.primaryAdmin
+        ? 'admin'
+        : workflow.access.find((grant) => grant.userId === user.id)?.level || 'none'
+    }))
+  };
+}
+
+async function saveWorkflow(event) {
+  event.preventDefault();
+  const workflow = state.editingWorkflow;
+  if (!workflow) return;
+  const button = document.querySelector('#save-workflow');
+  button.disabled = true;
+  try {
+    const updated = await api(`/api/admin/workflows/${workflow.key}`, {
+      method: 'PATCH', body: JSON.stringify(workflowPayload())
+    });
+    const index = state.workflows.findIndex((item) => item.key === updated.key);
+    state.workflows[index] = updated;
+    editWorkflow(updated.key);
+    await loadUsers();
+    showToast('Налаштування дошки збережено');
+  } catch (error) { showToast(error.message, true); }
+  finally { button.disabled = false; }
+}
+
+async function loadWorkflows() {
+  const payload = await api('/api/admin/workflows');
+  state.workflows = payload.boards;
+  state.workflowUsers = payload.users;
+  renderWorkflowBoards();
+  const selected = state.editingWorkflow?.key;
+  editWorkflow(state.workflows.some((workflow) => workflow.key === selected) ? selected : state.workflows[0]?.key);
+}
+
 async function starlinkMutation(path, body, successMessage) {
   const result = await api(path, { method: 'POST', body: JSON.stringify(body) });
   if (result?.version === 1) {
@@ -789,7 +1054,8 @@ function actionLabel(action) {
   return {
     'device.create': 'Пристрій додано', 'device.update': 'Пристрій змінено',
     'device.test': 'Перевірка зв’язку', 'user.create': 'Користувача додано',
-    'user.update': 'Користувача змінено', 'audio.bluetooth.power': 'Живлення Bluetooth',
+    'user.update': 'Користувача змінено', 'workflow.update': 'Дошку змінено',
+    'audio.bluetooth.power': 'Живлення Bluetooth',
     'audio.bluetooth.scan': 'Пошук Bluetooth', 'audio.bluetooth.pair': 'Bluetooth pairing',
     'audio.bluetooth.connect': 'Bluetooth під’єднано', 'audio.bluetooth.disconnect': 'Bluetooth від’єднано',
     'audio.bluetooth.remove': 'Bluetooth-пристрій видалено', 'audio.volume': 'Гучність змінено',
@@ -827,6 +1093,7 @@ document.querySelectorAll('.admin-tab').forEach((button) => {
     document.querySelectorAll('.admin-panel').forEach((panel) => panel.classList.remove('active'));
     button.classList.add('active');
     document.querySelector(`#panel-${button.dataset.panel}`).classList.add('active');
+    if (button.dataset.panel === 'workflows') await loadWorkflows().catch((error) => showToast(error.message, true));
     if (button.dataset.panel === 'audio') await loadAudio();
     if (button.dataset.panel === 'starlink') await loadStarlink({ includeMap: true });
     if (button.dataset.panel === 'audit') await loadAudit().catch((error) => showToast(error.message, true));
@@ -836,7 +1103,21 @@ document.querySelectorAll('.admin-tab').forEach((button) => {
 document.querySelector('#new-device').addEventListener('click', () => editDevice());
 document.querySelector('#new-user').addEventListener('click', () => editUser());
 document.querySelector('#device-form').addEventListener('submit', saveDevice);
+document.querySelector('#workflow-form').addEventListener('submit', saveWorkflow);
 document.querySelector('#user-form').addEventListener('submit', saveUser);
+document.querySelector('#add-workflow-status').addEventListener('click', addWorkflowStatus);
+document.querySelector('#workflow-status-input').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  addWorkflowStatus();
+});
+document.querySelector('#add-workflow-lane').addEventListener('click', addWorkflowLane);
+document.querySelector('#workflow-entry-lane').addEventListener('change', (event) => {
+  if (state.editingWorkflow) state.editingWorkflow.entryLaneKey = event.currentTarget.value;
+});
+document.querySelector('#workflow-title').addEventListener('input', (event) => {
+  document.querySelector('#workflow-form-title').textContent = event.currentTarget.value || 'Дошка';
+});
 document.querySelector('#test-device').addEventListener('click', testDevice);
 document.querySelector('#device-driver').addEventListener('change', () => toggleDeviceIntegration(true));
 document.querySelector('#device-kind').addEventListener('change', () => toggleDeviceIntegration(false));

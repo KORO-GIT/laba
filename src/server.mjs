@@ -146,42 +146,16 @@ const printerCameraHlsPaths = new Map([
   ['/laba-camera/api/hls/segment.m4s', '/api/hls/segment.m4s']
 ]);
 
-const moduleDefinitions = {
-  workshop: {
-    title: 'Майстерня',
-    description: 'Огляд, ремонт і підготовка бортів до обльоту.',
-    lanes: [
-      { key: 'new', title: 'Нові' },
-      { key: 'inspection', title: 'На огляді' },
-      { key: 'repair', title: 'У ремонті' },
-      { key: 'postponed', title: 'Відкладено' },
-      { key: 'ready', title: 'Готово' }
-    ]
-  },
-  service: {
-    title: 'Сервіс',
-    description: 'Підготовка документів і відправлення на гарантійний сервіс.',
-    lanes: [
-      { key: 'new', title: 'Нові' },
-      { key: 'documents_preparing', title: 'Готуються документи' },
-      { key: 'documents_submitted', title: 'Документи подано' },
-      { key: 'awaiting_shipment', title: 'Очікує відправлення' },
-      { key: 'shipped', title: 'Відправлено' }
-    ]
-  },
+const staticModuleDefinitions = {
   devices: {
     title: 'Пристрої',
     description: 'Принтери, камери та обладнання лабораторії.'
   }
 };
 
-const moduleKeys = Object.keys(moduleDefinitions);
+const maintenanceModules = ['workshop', 'service'];
+const moduleKeys = [...maintenanceModules, 'devices'];
 const moduleAccessLevels = ['viewer', 'operator', 'admin'];
-const workflowStatuses = new Map([
-  ['ПОТРЕБУЄ ОГЛЯДУ', 'workshop'],
-  ['ТЕХНІЧНІ ПРОБЛЕМИ', 'workshop'],
-  ['ПОТРЕБУЄ СЕРВІСУ', 'service']
-]);
 
 function normalizedStatus(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('uk-UA');
@@ -467,6 +441,39 @@ const maintenanceMoveSchema = z.object({
 const maintenanceEditSchema = z.object({
   notes: z.string().trim().max(4000)
 }).strict();
+const workflowLaneSchema = z.object({
+  key: z.string().trim().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  title: z.string().trim().min(1).max(80),
+  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/),
+  targetStatus: z.string().trim().max(120).optional().default('')
+}).strict();
+const workflowSettingsSchema = z.object({
+  title: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(240).optional().default(''),
+  entryLaneKey: z.string().trim().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  sourceStatuses: z.array(z.string().trim().min(1).max(120)).min(1).max(30),
+  lanes: z.array(workflowLaneSchema).min(2).max(16),
+  access: z.array(z.object({
+    userId: z.coerce.number().int().positive(),
+    level: z.enum(['none', ...moduleAccessLevels])
+  }).strict()).max(500)
+}).strict().superRefine((workflow, context) => {
+  const laneKeys = workflow.lanes.map((lane) => lane.key);
+  if (new Set(laneKeys).size !== laneKeys.length) {
+    context.addIssue({ code: 'custom', path: ['lanes'], message: 'Колонки мають повторювані ключі' });
+  }
+  if (!laneKeys.includes(workflow.entryLaneKey)) {
+    context.addIssue({ code: 'custom', path: ['entryLaneKey'], message: 'Вхідної колонки не існує' });
+  }
+  const statuses = workflow.sourceStatuses.map(normalizedStatus);
+  if (new Set(statuses).size !== statuses.length) {
+    context.addIssue({ code: 'custom', path: ['sourceStatuses'], message: 'Статуси Обліку повторюються' });
+  }
+  const userIds = workflow.access.map((grant) => grant.userId);
+  if (new Set(userIds).size !== userIds.length) {
+    context.addIssue({ code: 'custom', path: ['access'], message: 'Користувача зазначено кілька разів' });
+  }
+});
 const accountingRecordSchema = z.object({
   spreadsheetId: z.string().trim().min(1).max(160),
   sheetId: z.coerce.number().int().min(0),
@@ -535,7 +542,66 @@ function adminUserPayload(row) {
 }
 
 function maintenanceDefinition(module) {
-  return ['workshop', 'service'].includes(module) ? moduleDefinitions[module] : null;
+  if (!maintenanceModules.includes(module)) return null;
+  const board = statements.workflowBoardByModule.get(module);
+  if (!board) return null;
+  return {
+    key: module,
+    title: board.title,
+    description: board.description,
+    entryLaneKey: board.entry_lane_key,
+    sourceStatuses: statements.listWorkflowStatuses.all(module).map((row) => row.display_status),
+    lanes: statements.listWorkflowLanes.all(module).map((lane) => ({
+      key: lane.lane_key,
+      title: lane.title,
+      color: lane.color,
+      targetStatus: lane.target_status || '',
+      system: Boolean(lane.is_system)
+    }))
+  };
+}
+
+function moduleDefinition(module) {
+  return maintenanceDefinition(module) ?? staticModuleDefinitions[module] ?? null;
+}
+
+function workflowAdminPayload(module) {
+  const definition = maintenanceDefinition(module);
+  if (!definition) return null;
+  const grants = new Map(
+    statements.listModuleAccess.all(module).map((row) => [row.user_id, row.access_level])
+  );
+  return {
+    ...definition,
+    access: statements.listUsers.all().map((row) => ({
+      userId: row.id,
+      level: row.email.toLowerCase() === config.bootstrapAdminEmail
+        ? 'admin'
+        : grants.get(row.id) ?? 'none'
+    }))
+  };
+}
+
+function reconcileWorkflowOutbox(module) {
+  const stale = db.prepare(`
+    SELECT o.id, c.id AS card_id, l.target_status
+    FROM accounting_outbox o
+    JOIN maintenance_cards c ON c.id = o.card_id
+    LEFT JOIN workflow_lanes l ON l.module = c.module AND l.lane_key = c.lane
+    WHERE c.module = ? AND o.state = 'pending'
+      AND (l.target_status IS NULL OR l.target_status = '' OR l.target_status != o.target_status)
+  `).all(module);
+  const cancel = db.prepare(`
+    UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND state = 'pending'
+  `);
+  const replace = db.prepare(`
+    INSERT OR IGNORE INTO accounting_outbox (card_id, target_status) VALUES (?, ?)
+  `);
+  for (const action of stale) {
+    cancel.run(action.id);
+    if (action.target_status) replace.run(action.card_id, action.target_status);
+  }
 }
 
 function maintenanceCardPayload(row) {
@@ -569,12 +635,17 @@ function reorderMaintenanceLane(module, cardId, lane, beforeCardId) {
 }
 
 function synchronizeAccountingRecords(records) {
-  const normalized = records.map((record) => ({
-    ...record,
-    status: normalizedStatus(record.status),
-    module: workflowStatuses.get(normalizedStatus(record.status)) ?? null,
-    sourceKey: `${record.spreadsheetId}:${record.sheetId}:${record.rowNumber}`
-  }));
+  const normalized = records.map((record) => {
+    const status = normalizedStatus(record.status);
+    const module = statements.workflowModuleByStatus.get(status)?.module ?? null;
+    return {
+      ...record,
+      status,
+      module,
+      entryLaneKey: module ? statements.workflowBoardByModule.get(module)?.entry_lane_key : null,
+      sourceKey: `${record.spreadsheetId}:${record.sheetId}:${record.rowNumber}`
+    };
+  });
   const uniqueKeys = new Set(normalized.map((record) => record.sourceKey));
   if (uniqueKeys.size !== normalized.length) throw new Error('Синхронізація містить дублікати рядків');
 
@@ -583,7 +654,7 @@ function synchronizeAccountingRecords(records) {
       module, source_key, source_spreadsheet_id, source_sheet_id, source_row_number,
       source_name, source_sheet_name, asset, board_identifier, identifiers_json,
       source_status, lane, sort_order, last_seen_at, removed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, CURRENT_TIMESTAMP, NULL)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
     ON CONFLICT(module, source_key) DO UPDATE SET
       source_spreadsheet_id = excluded.source_spreadsheet_id,
       source_sheet_id = excluded.source_sheet_id,
@@ -594,7 +665,7 @@ function synchronizeAccountingRecords(records) {
       board_identifier = excluded.board_identifier,
       identifiers_json = excluded.identifiers_json,
       source_status = excluded.source_status,
-      lane = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN 'new' ELSE maintenance_cards.lane END,
+      lane = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.lane ELSE maintenance_cards.lane END,
       sort_order = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.sort_order ELSE maintenance_cards.sort_order END,
       last_seen_at = CURRENT_TIMESTAMP,
       removed_at = NULL,
@@ -621,6 +692,7 @@ function synchronizeAccountingRecords(records) {
             record.boardIdentifier,
             JSON.stringify([...new Set(record.identifiers)]),
             record.status,
+            record.entryLaneKey,
             (index + 1) * 100
           );
         } else {
@@ -692,7 +764,7 @@ app.get('/api/me', async (request) => {
 
 app.get('/api/modules', async (request) => ({
   modules: moduleKeys
-    .map((key) => ({ key, ...moduleDefinitions[key], access: moduleAccess(request.portalUser, key) }))
+    .map((key) => ({ key, ...moduleDefinition(key), access: moduleAccess(request.portalUser, key) }))
     .filter((module) => module.access !== 'none')
 }));
 
@@ -768,8 +840,9 @@ app.post('/api/maintenance/:module/cards/:id/move', {
   }
   const body = parseOrReply(maintenanceMoveSchema, request.body, reply);
   if (!body) return;
-  const laneKeys = new Set(definition.lanes.map((lane) => lane.key));
-  if (!laneKeys.has(body.lane)) return reply.code(400).send({ error: 'Невідома колонка' });
+  const targetLane = definition.lanes.find((lane) => lane.key === body.lane);
+  const sourceLane = definition.lanes.find((lane) => lane.key === card.lane);
+  if (!targetLane) return reply.code(400).send({ error: 'Невідома колонка' });
   if (body.beforeCardId) {
     const before = statements.maintenanceCardById.get(body.beforeCardId);
     if (!before || before.module !== module || before.lane !== body.lane || before.removed_at) {
@@ -788,17 +861,17 @@ app.post('/api/maintenance/:module/cards/:id/move', {
         VALUES (?, ?, 'lane.change', ?, ?)
       `).run(card.id, request.portalUser.email, card.lane, body.lane);
     }
-    if (module === 'workshop' && body.lane === 'ready') {
-      db.prepare(`
-        INSERT OR IGNORE INTO accounting_outbox (card_id, target_status)
-        VALUES (?, 'НА ОБЛІТ')
-      `).run(card.id);
-    }
-    if (module === 'workshop' && card.lane === 'ready' && body.lane !== 'ready') {
+    if (card.lane !== body.lane && sourceLane?.targetStatus) {
       db.prepare(`
         UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
-        WHERE card_id = ? AND target_status = 'НА ОБЛІТ' AND state = 'pending'
-      `).run(card.id);
+        WHERE card_id = ? AND target_status = ? AND state = 'pending'
+      `).run(card.id, sourceLane.targetStatus);
+    }
+    if (card.lane !== body.lane && targetLane.targetStatus) {
+      db.prepare(`
+        INSERT OR IGNORE INTO accounting_outbox (card_id, target_status)
+        VALUES (?, ?)
+      `).run(card.id, targetLane.targetStatus);
     }
   })();
   audit(request.portalUser.email, 'maintenance.move', 'maintenance-card', card.id, {
@@ -875,6 +948,132 @@ app.post('/api/internal/accounting/ack', {
     }
   })();
   return { ok: true, accepted };
+});
+
+app.get('/api/admin/workflows', { preHandler: requireAdmin }, async () => ({
+  boards: maintenanceModules.map(workflowAdminPayload),
+  users: statements.listUsers.all().map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    enabled: Boolean(row.enabled),
+    primaryAdmin: row.email.toLowerCase() === config.bootstrapAdminEmail
+  }))
+}));
+
+app.patch('/api/admin/workflows/:module', {
+  preHandler: [requireAdmin, guardWrite],
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const module = String(request.params.module || '');
+  const current = maintenanceDefinition(module);
+  if (!current) return reply.code(404).send({ error: 'Дошку не знайдено' });
+  const body = parseOrReply(workflowSettingsSchema, request.body, reply);
+  if (!body) return;
+
+  const existingLanes = statements.listWorkflowLanes.all(module);
+  const incomingKeys = new Set(body.lanes.map((lane) => lane.key));
+  const missingSystemLane = existingLanes.find((lane) => lane.is_system && !incomingKeys.has(lane.lane_key));
+  if (missingSystemLane) {
+    return reply.code(409).send({ error: `Системну колонку «${missingSystemLane.title}» не можна видалити` });
+  }
+  const removedCustomLanes = existingLanes.filter((lane) => !lane.is_system && !incomingKeys.has(lane.lane_key));
+  for (const lane of removedCustomLanes) {
+    const cards = db.prepare(`
+      SELECT COUNT(*) AS count FROM maintenance_cards
+      WHERE module = ? AND lane = ? AND removed_at IS NULL
+    `).get(module, lane.lane_key).count;
+    if (cards > 0) {
+      return reply.code(409).send({
+        error: `Спочатку перенесіть картки з колонки «${lane.title}»`
+      });
+    }
+  }
+
+  const normalizedStatuses = body.sourceStatuses.map(normalizedStatus);
+  const conflictingStatus = normalizedStatuses.find((status) => {
+    const assigned = statements.workflowModuleByStatus.get(status);
+    return assigned && assigned.module !== module;
+  });
+  if (conflictingStatus) {
+    const other = maintenanceDefinition(statements.workflowModuleByStatus.get(conflictingStatus).module);
+    return reply.code(409).send({
+      error: `Статус «${conflictingStatus}» уже використовується дошкою «${other?.title || 'Інша дошка'}»`
+    });
+  }
+
+  const users = statements.listUsers.all();
+  const userIds = new Set(users.map((user) => user.id));
+  if (!body.access.every((grant) => userIds.has(grant.userId))) {
+    return reply.code(400).send({ error: 'Один із користувачів більше не існує' });
+  }
+  const bootstrapAdmin = users.find((user) => user.email.toLowerCase() === config.bootstrapAdminEmail);
+
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE workflow_boards
+      SET title = ?, description = ?, entry_lane_key = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE module = ?
+    `).run(body.title, body.description, body.entryLaneKey, module);
+
+    const upsertLane = db.prepare(`
+      INSERT INTO workflow_lanes
+        (module, lane_key, title, color, sort_order, target_status, is_system)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
+      ON CONFLICT(module, lane_key) DO UPDATE SET
+        title = excluded.title,
+        color = excluded.color,
+        sort_order = excluded.sort_order,
+        target_status = excluded.target_status,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    body.lanes.forEach((lane, index) => upsertLane.run(
+      module,
+      lane.key,
+      lane.title,
+      lane.color.toLowerCase(),
+      (index + 1) * 10,
+      lane.targetStatus ? normalizedStatus(lane.targetStatus) : null
+    ));
+    const deleteLane = db.prepare('DELETE FROM workflow_lanes WHERE module = ? AND lane_key = ? AND is_system = 0');
+    removedCustomLanes.forEach((lane) => deleteLane.run(module, lane.lane_key));
+
+    db.prepare('DELETE FROM workflow_source_statuses WHERE module = ?').run(module);
+    const insertStatus = db.prepare(`
+      INSERT INTO workflow_source_statuses (normalized_status, display_status, module)
+      VALUES (?, ?, ?)
+    `);
+    normalizedStatuses.forEach((status) => insertStatus.run(status, status, module));
+
+    if (bootstrapAdmin) {
+      db.prepare('DELETE FROM user_module_access WHERE module = ? AND user_id != ?')
+        .run(module, bootstrapAdmin.id);
+    } else {
+      db.prepare('DELETE FROM user_module_access WHERE module = ?').run(module);
+    }
+    const insertAccess = db.prepare(`
+      INSERT INTO user_module_access (user_id, module, access_level)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, module) DO UPDATE SET access_level = excluded.access_level
+    `);
+    for (const grant of body.access) {
+      if (grant.userId !== bootstrapAdmin?.id && grant.level !== 'none') {
+        insertAccess.run(grant.userId, module, grant.level);
+      }
+    }
+    if (bootstrapAdmin) insertAccess.run(bootstrapAdmin.id, module, 'admin');
+
+    reconcileWorkflowOutbox(module);
+  })();
+
+  audit(request.portalUser.email, 'workflow.update', 'workflow-board', module, {
+    title: body.title,
+    entryLaneKey: body.entryLaneKey,
+    laneKeys: body.lanes.map((lane) => lane.key),
+    sourceStatuses: normalizedStatuses,
+    accessCount: body.access.filter((grant) => grant.level !== 'none').length
+  });
+  return workflowAdminPayload(module);
 });
 
 app.get('/api/admin/devices', { preHandler: requireAdmin }, async () =>

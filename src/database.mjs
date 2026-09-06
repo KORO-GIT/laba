@@ -10,6 +10,37 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
 
+const defaultWorkflows = [
+  {
+    module: 'workshop',
+    title: 'Майстерня',
+    description: 'Огляд, ремонт і підготовка бортів до обльоту.',
+    entryLaneKey: 'new',
+    sourceStatuses: ['ПОТРЕБУЄ ОГЛЯДУ', 'ТЕХНІЧНІ ПРОБЛЕМИ'],
+    lanes: [
+      ['new', 'Нові', '#f26430', 10, null],
+      ['inspection', 'На огляді', '#f4b942', 20, null],
+      ['repair', 'У ремонті', '#4f9de8', 30, null],
+      ['postponed', 'Відкладено', '#9b9c93', 40, null],
+      ['ready', 'Готово', '#b6ee73', 50, 'НА ОБЛІТ']
+    ]
+  },
+  {
+    module: 'service',
+    title: 'Сервіс',
+    description: 'Підготовка документів і відправлення на гарантійний сервіс.',
+    entryLaneKey: 'new',
+    sourceStatuses: ['ПОТРЕБУЄ СЕРВІСУ'],
+    lanes: [
+      ['new', 'Нові', '#f26430', 10, null],
+      ['documents_preparing', 'Готуються документи', '#f4b942', 20, null],
+      ['documents_submitted', 'Документи подано', '#4f9de8', 30, null],
+      ['awaiting_shipment', 'Очікує відправлення', '#bb86fc', 40, null],
+      ['shipped', 'Відправлено', '#b6ee73', 50, null]
+    ]
+  }
+];
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +86,35 @@ db.exec(`
     module TEXT NOT NULL CHECK (module IN ('workshop', 'service', 'devices')),
     access_level TEXT NOT NULL CHECK (access_level IN ('viewer', 'operator', 'admin')),
     PRIMARY KEY (user_id, module)
+  );
+
+  CREATE TABLE IF NOT EXISTS workflow_boards (
+    module TEXT PRIMARY KEY CHECK (module IN ('workshop', 'service')),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    entry_lane_key TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS workflow_lanes (
+    module TEXT NOT NULL REFERENCES workflow_boards(module) ON DELETE CASCADE,
+    lane_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#f26430',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    target_status TEXT,
+    is_system INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (module, lane_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS workflow_source_statuses (
+    normalized_status TEXT PRIMARY KEY,
+    display_status TEXT NOT NULL,
+    module TEXT NOT NULL REFERENCES workflow_boards(module) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS maintenance_cards (
@@ -115,12 +175,36 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_devices_enabled ON devices(enabled, sort_order);
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_module_access_user ON user_module_access(user_id, module);
+  CREATE INDEX IF NOT EXISTS idx_workflow_lanes_order ON workflow_lanes(module, sort_order, lane_key);
+  CREATE INDEX IF NOT EXISTS idx_workflow_status_module ON workflow_source_statuses(module, normalized_status);
   CREATE INDEX IF NOT EXISTS idx_maintenance_board ON maintenance_cards(module, removed_at, lane, sort_order, id);
   CREATE INDEX IF NOT EXISTS idx_maintenance_source ON maintenance_cards(source_spreadsheet_id, source_sheet_id, source_row_number);
   CREATE INDEX IF NOT EXISTS idx_maintenance_events_card ON maintenance_events(card_id, id DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_accounting_outbox_pending
     ON accounting_outbox(card_id, target_status) WHERE state = 'pending';
 `);
+
+db.transaction(() => {
+  const insertBoard = db.prepare(`
+    INSERT OR IGNORE INTO workflow_boards (module, title, description, entry_lane_key)
+    VALUES (?, ?, ?, ?)
+  `);
+  const insertLane = db.prepare(`
+    INSERT OR IGNORE INTO workflow_lanes
+      (module, lane_key, title, color, sort_order, target_status, is_system)
+    VALUES (?, ?, ?, ?, ?, ?, 1)
+  `);
+  const insertStatus = db.prepare(`
+    INSERT OR IGNORE INTO workflow_source_statuses (normalized_status, display_status, module)
+    VALUES (?, ?, ?)
+  `);
+  for (const workflow of defaultWorkflows) {
+    const created = insertBoard.run(workflow.module, workflow.title, workflow.description, workflow.entryLaneKey);
+    if (!created.changes) continue;
+    for (const lane of workflow.lanes) insertLane.run(workflow.module, ...lane);
+    for (const status of workflow.sourceStatuses) insertStatus.run(status, status, workflow.module);
+  }
+})();
 
 const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => column.name));
 if (!deviceColumns.has('stream_name')) {
@@ -214,6 +298,21 @@ export const statements = {
   `),
   moduleAccessForUserAndModule: db.prepare(`
     SELECT access_level FROM user_module_access WHERE user_id = ? AND module = ?
+  `),
+  workflowBoardByModule: db.prepare('SELECT * FROM workflow_boards WHERE module = ?'),
+  listWorkflowBoards: db.prepare('SELECT * FROM workflow_boards ORDER BY CASE module WHEN \'workshop\' THEN 0 ELSE 1 END'),
+  listWorkflowLanes: db.prepare(`
+    SELECT * FROM workflow_lanes WHERE module = ? ORDER BY sort_order, lane_key
+  `),
+  listWorkflowStatuses: db.prepare(`
+    SELECT normalized_status, display_status FROM workflow_source_statuses
+    WHERE module = ? ORDER BY display_status COLLATE NOCASE
+  `),
+  workflowModuleByStatus: db.prepare(`
+    SELECT module FROM workflow_source_statuses WHERE normalized_status = ?
+  `),
+  listModuleAccess: db.prepare(`
+    SELECT user_id, access_level FROM user_module_access WHERE module = ? ORDER BY user_id
   `),
   maintenanceCardById: db.prepare('SELECT * FROM maintenance_cards WHERE id = ?'),
   listMaintenanceCards: db.prepare(`

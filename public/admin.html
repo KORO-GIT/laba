@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.14.1">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.15.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -25,11 +25,12 @@
     <section class="admin-heading">
       <p class="eyebrow">ПАНЕЛЬ КЕРУВАННЯ</p>
       <h1>Керування лабораторією</h1>
-      <p>Додавайте пристрої, призначайте користувачам права та перевіряйте журнал змін.</p>
+      <p>Налаштовуйте дошки, пристрої, права користувачів і перевіряйте журнал змін.</p>
     </section>
 
     <nav class="admin-tabs" aria-label="Розділи адміністрування">
       <button class="admin-tab active" data-panel="devices" type="button">Пристрої</button>
+      <button class="admin-tab" data-panel="workflows" type="button">Дошки</button>
       <button class="admin-tab" data-panel="audio" type="button">Аудіо</button>
       <button class="admin-tab" data-panel="starlink" type="button">Starlink</button>
       <button class="admin-tab" data-panel="desktop" type="button">Робочий стіл</button>
@@ -67,6 +68,46 @@
           <p id="rtsp-hint" class="form-hint hidden">RTSP перевіряється лише через TCP. Для захищеного перегляду в браузері виберіть інтеграцію go2rtc.</p>
           <p id="go2rtc-hint" class="form-hint hidden">LABA відкриє лише конкретний потік через MSE/HLS/MJPEG. API та конфігурація go2rtc залишаться недоступними користувачеві. У полі секрету зберігається Basic Auth самого шлюзу; облікові дані камери мають залишатися на Raspberry Pi.</p>
           <div class="form-actions"><button id="test-device" class="button button-ghost hidden" type="button">Перевірити зв’язок</button><button class="button button-primary" type="submit">Зберегти</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-workflows" class="admin-panel">
+      <div class="panel-toolbar">
+        <div><h2>Канбан-дошки</h2><p>Назви, колонки, зв’язок зі статусами Обліку та окремі права доступу.</p></div>
+      </div>
+      <div class="admin-layout workflow-admin-layout">
+        <div id="workflow-board-list" class="record-list"></div>
+        <form id="workflow-form" class="editor-card hidden">
+          <div class="editor-heading">
+            <div><p class="eyebrow">НАЛАШТУВАННЯ ДОШКИ</p><h3 id="workflow-form-title">Дошка</h3></div>
+            <button class="icon-button" data-close-editor type="button" aria-label="Закрити">×</button>
+          </div>
+          <input id="workflow-module" type="hidden">
+          <div class="form-grid">
+            <label class="field"><span>Назва дошки</span><input id="workflow-title" required maxlength="80"></label>
+            <label class="field"><span>Вхідна колонка</span><select id="workflow-entry-lane"></select></label>
+            <label class="field span-2"><span>Короткий опис</span><textarea id="workflow-description" rows="2" maxlength="240"></textarea></label>
+          </div>
+
+          <div class="access-heading"><h4>Статуси з Обліку</h4><p>Рядки з цими статусами автоматично створюють картки на цій дошці.</p></div>
+          <div id="workflow-status-list" class="workflow-status-list"></div>
+          <div class="workflow-add-row">
+            <input id="workflow-status-input" maxlength="120" placeholder="Наприклад: ПОТРЕБУЄ ДІАГНОСТИКИ">
+            <button id="add-workflow-status" class="button button-ghost" type="button">Додати статус</button>
+          </div>
+
+          <div class="access-heading workflow-lanes-heading">
+            <div><h4>Колонки</h4><p>Порядок відображення, колір і статус для запису назад в Облік.</p></div>
+            <button id="add-workflow-lane" class="button button-ghost" type="button">＋ Додати колонку</button>
+          </div>
+          <div class="workflow-lane-labels" aria-hidden="true"><span>Порядок</span><span>Колір</span><span>Назва</span><span>Статус після завершення</span><span></span></div>
+          <div id="workflow-lane-list" class="workflow-lane-list"></div>
+
+          <div class="access-heading"><h4>Доступ до дошки</h4><p>Права призначаються незалежно від інших розділів LABA.</p></div>
+          <div id="workflow-access-list" class="access-list"></div>
+
+          <div class="form-actions"><button id="save-workflow" class="button button-primary" type="submit">Зберегти дошку</button></div>
         </form>
       </div>
     </section>
@@ -353,6 +394,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.14.1"></script>
+  <script type="module" src="/assets/admin.js?v=0.15.0"></script>
 </body>
 </html>

@@ -103,9 +103,10 @@ function renderBoard() {
   const lanes = state.data.lanes.map((lane) => {
     const laneNode = el('section', 'maintenance-lane');
     laneNode.dataset.lane = lane.key;
+    laneNode.style.setProperty('--lane-color', lane.color || '#f26430');
     const laneCards = cards.filter((card) => card.lane === lane.key);
     const heading = el('header', 'maintenance-lane-heading');
-    heading.append(el('h2', '', lane.title), el('span', 'lane-count', String(laneCards.length)));
+    heading.append(el('span', 'lane-color-mark'), el('h2', '', lane.title), el('span', 'lane-count', String(laneCards.length)));
     const list = el('div', 'maintenance-list');
     list.append(...laneCards.map(cardNode));
     if (!laneCards.length) list.append(el('p', 'lane-empty', 'Немає бортів'));
