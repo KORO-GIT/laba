@@ -262,6 +262,10 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-search-clear:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 1px; }
 .maintenance-search-clear svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
 .maintenance-toolbar select { width: 210px; }
+.maintenance-label-legend { min-width: 0; max-width: min(38vw, 560px); display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.maintenance-label-legend::-webkit-scrollbar { display: none; }
+.maintenance-label-legend-item { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: rgba(255,255,255,.02); font-size: 9px; font-weight: 740; white-space: nowrap; }
+.maintenance-label-swatch { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 2px; background: var(--card-status-color); }
 .sync-state { margin-left: auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
 .sync-state.pending { color: var(--accent-light); }
 .sync-state.error { color: var(--red); }
@@ -278,6 +282,8 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-card:hover, .maintenance-card:focus-visible { border-color: var(--line-strong); transform: translateY(-1px); }
 .card-accent { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); }
 .card-accent.status-service { background: var(--lime); }
+.maintenance-card-label-bars { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 11px; }
+.maintenance-card-label-bar { width: 38px; height: 4px; flex: 0 0 auto; border-radius: 99px; background: var(--card-status-color); }
 .maintenance-card-asset { color: var(--muted); font-size: 10px; font-weight: 760; }
 .maintenance-card h3 { margin: 12px 0 16px; overflow-wrap: anywhere; font-size: 18px; line-height: 1.15; }
 .maintenance-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: auto; }
@@ -309,6 +315,7 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-card-status-option:has(input:checked) { border-color: color-mix(in srgb, var(--card-status-color) 58%, transparent); color: var(--ink); background: color-mix(in srgb, var(--card-status-color) 11%, transparent); }
 .maintenance-card-status-option input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .maintenance-card-status-mark { width: 9px; height: 9px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--card-status-color) 72%, white); border-radius: 50%; background: transparent; transition: background .16s ease, box-shadow .16s ease; }
+.maintenance-card-label-mark { border-radius: 2px; }
 .maintenance-card-status-option input:checked + .maintenance-card-status-mark { background: var(--card-status-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--card-status-color) 12%, transparent); }
 .maintenance-card-status-option:has(input:focus-visible) { outline: 2px solid var(--card-status-color); outline-offset: 2px; }
 .maintenance-card-statuses:disabled .maintenance-card-status-option { cursor: default; opacity: .78; transform: none; }
@@ -647,6 +654,7 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
 @keyframes pulse { 50% { opacity: .45; } }
 
 @media (max-width: 850px) {
+  .maintenance-label-legend { display: none; }
   .module-grid { grid-template-columns: 1fr; }
   .module-card { min-height: 210px; }
   .device-row { grid-template-columns: 1fr; }

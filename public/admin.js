@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.16.0';
+import { initDesktop } from './desktop.js?v=0.17.0';
 
 const state = {
   me: null,
@@ -672,7 +672,7 @@ function renderWorkflowBoards(selectedModule = state.editingWorkflow?.key) {
   list.replaceChildren(...state.workflows.map((workflow) => recordButton({
     symbol: 'KB',
     title: workflow.title,
-    subtitle: `${ukrainianCount(workflow.sourceStatuses.length, 'статус', 'статуси', 'статусів')} Обліку · ${ukrainianCount(workflow.cardStatuses.length, 'позначка', 'позначки', 'позначок')}`,
+    subtitle: `${ukrainianCount(workflow.sourceStatuses.length, 'статус', 'статуси', 'статусів')} Обліку · ${ukrainianCount(workflow.cardStatuses.length, 'стан', 'стани', 'станів')} · ${ukrainianCount((workflow.cardLabels || []).length, 'мітка', 'мітки', 'міток')}`,
     enabled: true,
     statusText: `${workflow.lanes.length} КОЛ.`,
     selected: workflow.key === selectedModule,
@@ -762,6 +762,53 @@ function addWorkflowCardStatus() {
   renderWorkflowCardStatuses();
   renderWorkflowBoards(state.editingWorkflow.key);
   document.querySelector('#workflow-card-status-list .workflow-card-status-row:last-child input[aria-label="Назва статусу картки"]')?.select();
+}
+
+function renderWorkflowCardLabels() {
+  const workflow = state.editingWorkflow;
+  const rows = (workflow.cardLabels || []).map((label, index) => {
+    const row = el('div', 'workflow-card-status-row');
+    const labelName = label.name || 'Нова мітка';
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'workflow-color';
+    color.value = label.color;
+    color.title = `Колір мітки «${labelName}»`;
+    color.setAttribute('aria-label', color.title);
+    color.addEventListener('input', () => { label.color = color.value; });
+    const name = document.createElement('input');
+    name.value = label.name;
+    name.maxLength = 80;
+    name.required = true;
+    name.placeholder = 'Назва мітки';
+    name.setAttribute('aria-label', 'Назва мітки картки');
+    name.addEventListener('input', () => { label.name = name.value; });
+    const remove = workflowIconButton('×', `Видалити мітку «${labelName}»`, false, () => {
+      if (!window.confirm(`Видалити мітку «${labelName}»? Вона зникне з усіх карток цієї дошки.`)) return;
+      workflow.cardLabels.splice(index, 1);
+      renderWorkflowCardLabels();
+      renderWorkflowBoards(workflow.key);
+    });
+    remove.classList.add('workflow-remove-lane');
+    row.append(color, name, remove);
+    return row;
+  });
+  document.querySelector('#workflow-card-label-list').replaceChildren(
+    ...(rows.length ? rows : [el('p', 'workflow-card-status-empty', 'Міток ще немає')])
+  );
+}
+
+function addWorkflowCardLabel() {
+  const palette = ['#b6ee73', '#f4b942', '#f26430', '#4f9de8', '#bb86fc'];
+  state.editingWorkflow.cardLabels ||= [];
+  state.editingWorkflow.cardLabels.push({
+    id: null,
+    name: '',
+    color: palette[state.editingWorkflow.cardLabels.length % palette.length]
+  });
+  renderWorkflowCardLabels();
+  renderWorkflowBoards(state.editingWorkflow.key);
+  document.querySelector('#workflow-card-label-list .workflow-card-status-row:last-child input[aria-label="Назва мітки картки"]')?.select();
 }
 
 function renderWorkflowEntryLane() {
@@ -898,6 +945,7 @@ function editWorkflow(module) {
   document.querySelector('#workflow-form-title').textContent = source.title;
   renderWorkflowStatuses();
   renderWorkflowCardStatuses();
+  renderWorkflowCardLabels();
   renderWorkflowLanes();
   renderWorkflowAccess();
   renderWorkflowBoards(source.key);
@@ -915,6 +963,7 @@ function workflowPayload() {
     entryLaneKey: workflow.entryLaneKey,
     sourceStatuses: workflow.sourceStatuses,
     cardStatuses: workflow.cardStatuses.map(({ id, name, color }) => ({ id, name, color })),
+    cardLabels: (workflow.cardLabels || []).map(({ id, name, color }) => ({ id, name, color })),
     lanes: workflow.lanes.map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
     access: state.workflowUsers.map((user) => ({
       userId: user.id,
@@ -1160,6 +1209,7 @@ document.querySelector('#workflow-status-input').addEventListener('keydown', (ev
   addWorkflowStatus();
 });
 document.querySelector('#add-workflow-card-status').addEventListener('click', addWorkflowCardStatus);
+document.querySelector('#add-workflow-card-label').addEventListener('click', addWorkflowCardLabel);
 document.querySelector('#add-workflow-lane').addEventListener('click', addWorkflowLane);
 document.querySelector('#workflow-entry-lane').addEventListener('change', (event) => {
   if (state.editingWorkflow) state.editingWorkflow.entryLaneKey = event.currentTarget.value;

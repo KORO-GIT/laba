@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.16.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.17.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -98,10 +98,16 @@
           </div>
 
           <div class="access-heading workflow-card-statuses-heading">
-            <div><h4>Статуси карток</h4><p>Кольорові позначки, які можна одночасно додавати до картки.</p></div>
+            <div><h4>Статуси карток</h4><p>Стани роботи, які можна одночасно додавати до картки.</p></div>
             <button id="add-workflow-card-status" class="button button-ghost" type="button">＋ Додати статус</button>
           </div>
           <div id="workflow-card-status-list" class="workflow-card-status-list"></div>
+
+          <div class="access-heading workflow-card-statuses-heading">
+            <div><h4>Мітки карток</h4><p>Кольорові позначки рівня складності або типу ремонту.</p></div>
+            <button id="add-workflow-card-label" class="button button-ghost" type="button">＋ Додати мітку</button>
+          </div>
+          <div id="workflow-card-label-list" class="workflow-card-status-list"></div>
 
           <div class="access-heading workflow-lanes-heading">
             <div><h4>Колонки</h4><p>Порядок відображення, колір і статус для запису назад в Облік.</p></div>
@@ -400,6 +406,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.16.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.17.0"></script>
 </body>
 </html>

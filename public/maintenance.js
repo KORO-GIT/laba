@@ -61,7 +61,14 @@ function filteredCards() {
   return state.data.cards.filter((card) => {
     if (assetFilter.value && card.asset !== assetFilter.value) return false;
     if (!query) return true;
-    return [card.asset, card.boardIdentifier, card.sourceStatus, ...card.identifiers, ...(card.cardStatuses || []).map((status) => status.name)]
+    return [
+      card.asset,
+      card.boardIdentifier,
+      card.sourceStatus,
+      ...card.identifiers,
+      ...(card.cardStatuses || []).map((status) => status.name),
+      ...(card.cardLabels || []).map((label) => label.name)
+    ]
       .some((value) => String(value).toLocaleLowerCase('uk-UA').includes(query));
   });
 }
@@ -81,12 +88,34 @@ function renderAssetFilter() {
   assetFilter.value = assets.includes(selected) ? selected : '';
 }
 
+function renderLabelLegend() {
+  const legend = document.querySelector('#card-label-legend');
+  const labels = state.data.cardLabels || [];
+  const items = labels.map((label) => {
+    const item = el('span', 'maintenance-label-legend-item');
+    item.style.setProperty('--card-status-color', label.color);
+    item.append(el('span', 'maintenance-label-swatch'), el('span', '', label.name));
+    return item;
+  });
+  legend.replaceChildren(...items);
+  legend.classList.toggle('hidden', items.length === 0);
+}
+
 function cardNode(card) {
   const article = el('article', 'maintenance-card');
   article.dataset.cardId = String(card.id);
   article.tabIndex = 0;
   if (state.data.canEdit) article.classList.add('draggable');
   const accent = el('span', `card-accent status-${card.sourceStatus === 'ПОТРЕБУЄ СЕРВІСУ' ? 'service' : 'repair'}`);
+  const labels = card.cardLabels || [];
+  const labelBars = el('div', 'maintenance-card-label-bars');
+  labelBars.setAttribute('aria-label', `Мітки: ${labels.map((label) => label.name).join(', ')}`);
+  labels.forEach((label) => {
+    const bar = el('span', 'maintenance-card-label-bar');
+    bar.style.setProperty('--card-status-color', label.color);
+    bar.title = label.name;
+    labelBars.append(bar);
+  });
   const asset = el('span', 'maintenance-card-asset', card.asset);
   const title = el('h3', '', card.boardIdentifier);
   const status = el('span', 'source-status', card.sourceStatus);
@@ -100,7 +129,9 @@ function cardNode(card) {
     meta.append(chip);
   });
   if (card.notes) meta.append(el('span', 'notes-indicator', 'Примітка'));
-  article.append(accent, asset, title, meta);
+  article.append(accent);
+  if (labels.length) article.append(labelBars);
+  article.append(asset, title, meta);
   article.addEventListener('click', () => {
     if (!state.dragging?.moved) openCard(card.id);
   });
@@ -176,6 +207,31 @@ function renderCardStatusOptions(card) {
   container.replaceChildren(...options);
 }
 
+function renderCardLabelOptions(card) {
+  const fieldset = document.querySelector('#card-label-fieldset');
+  const container = document.querySelector('#card-label-list');
+  const availableLabels = state.data.cardLabels || [];
+  const selectedIds = new Set((card.cardLabels || []).map((label) => label.id));
+  const visibleLabels = state.data.canEdit
+    ? availableLabels
+    : availableLabels.filter((label) => selectedIds.has(label.id));
+  fieldset.classList.toggle('hidden', visibleLabels.length === 0);
+  fieldset.disabled = !state.data.canEdit;
+  if (state.cardDirty) return;
+  const options = visibleLabels.map((cardLabel) => {
+    const label = el('label', 'maintenance-card-status-option');
+    label.style.setProperty('--card-status-color', cardLabel.color);
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = String(cardLabel.id);
+    input.checked = selectedIds.has(cardLabel.id);
+    const mark = el('span', 'maintenance-card-status-mark maintenance-card-label-mark');
+    label.append(input, mark, el('span', '', cardLabel.name));
+    return label;
+  });
+  container.replaceChildren(...options);
+}
+
 function syncCardDirty() {
   const card = state.data?.cards.find((item) => item.id === state.selectedId);
   if (!card) return;
@@ -183,9 +239,15 @@ function syncCardDirty() {
   const selectedStatusIds = [...document.querySelectorAll('#card-status-list input:checked')]
     .map((input) => Number(input.value))
     .sort((left, right) => left - right);
+  const savedLabelIds = (card.cardLabels || []).map((label) => label.id).sort((left, right) => left - right);
+  const selectedLabelIds = [...document.querySelectorAll('#card-label-list input:checked')]
+    .map((input) => Number(input.value))
+    .sort((left, right) => left - right);
   state.cardDirty = document.querySelector('#card-notes').value !== card.notes
     || savedStatusIds.length !== selectedStatusIds.length
-    || savedStatusIds.some((statusId, index) => statusId !== selectedStatusIds[index]);
+    || savedStatusIds.some((statusId, index) => statusId !== selectedStatusIds[index])
+    || savedLabelIds.length !== selectedLabelIds.length
+    || savedLabelIds.some((labelId, index) => labelId !== selectedLabelIds[index]);
   document.querySelector('#save-card').classList.toggle('unsaved', state.cardDirty);
 }
 
@@ -205,6 +267,7 @@ function renderOpenCard() {
   if (!state.cardDirty) notes.value = card.notes;
   notes.disabled = !state.data.canEdit;
   renderCardStatusOptions(card);
+  renderCardLabelOptions(card);
   const saveButton = document.querySelector('#save-card');
   saveButton.classList.toggle('hidden', !state.data.canEdit);
   saveButton.classList.toggle('unsaved', state.cardDirty);
@@ -247,6 +310,8 @@ async function saveCard() {
       body: JSON.stringify({
         notes: document.querySelector('#card-notes').value,
         cardStatusIds: [...document.querySelectorAll('#card-status-list input:checked')]
+          .map((input) => Number(input.value)),
+        cardLabelIds: [...document.querySelectorAll('#card-label-list input:checked')]
           .map((input) => Number(input.value))
       })
     });
@@ -388,6 +453,7 @@ async function loadBoard({ quiet = false } = {}) {
     document.title = `LABA — ${data.title}`;
     document.querySelector('#page-title').textContent = data.title;
     renderAssetFilter();
+    renderLabelLegend();
     renderBoard();
     renderSyncState();
     if (state.selectedId) renderOpenCard();
@@ -420,6 +486,9 @@ document.querySelector('#card-notes').addEventListener('input', () => {
   syncCardDirty();
 });
 document.querySelector('#card-status-list').addEventListener('change', () => {
+  syncCardDirty();
+});
+document.querySelector('#card-label-list').addEventListener('change', () => {
   syncCardDirty();
 });
 document.querySelector('#save-card').addEventListener('click', saveCard);
