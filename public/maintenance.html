@@ -6,12 +6,14 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.22.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.23.2">
 </head>
 <body class="maintenance-page">
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar maintenance-topbar">
-    <a class="module-back" href="/" aria-label="До розділів">←</a>
+    <a class="module-back" href="/" aria-label="До розділів" title="До розділів">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"></path><path d="m11 18-6-6 6-6"></path></svg>
+    </a>
     <div class="maintenance-title">
       <p class="eyebrow">LABA</p>
       <h1 id="page-title">Завантаження…</h1>
@@ -55,7 +57,9 @@
     <article class="maintenance-drawer">
       <header class="drawer-heading">
         <div><p id="card-status" class="eyebrow"></p><h2 id="card-title"></h2></div>
-        <button class="icon-button" type="button" data-close-dialog aria-label="Закрити">×</button>
+        <button class="icon-button" type="button" data-close-dialog aria-label="Закрити" title="Закрити">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+        </button>
       </header>
       <dl id="card-details" class="maintenance-details"></dl>
       <label id="card-report-field" class="field maintenance-report hidden"><span>Номер рапорта</span><input id="card-report-number" maxlength="120" autocomplete="off" placeholder="Вкажіть номер документа"></label>
@@ -74,6 +78,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/maintenance.js?v=0.22.0"></script>
+  <script type="module" src="/assets/maintenance.js?v=0.23.2"></script>
 </body>
 </html>

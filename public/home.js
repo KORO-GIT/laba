@@ -1,3 +1,5 @@
+import { iconElement } from './icons.js?v=0.23.2';
+
 const moduleGrid = document.querySelector('#module-grid');
 const emptyState = document.querySelector('#module-empty');
 const toast = document.querySelector('#toast');
@@ -37,9 +39,7 @@ function moduleCard(module) {
   const action = document.createElement('span');
   action.className = 'module-action';
   action.textContent = meta.action;
-  const arrow = document.createElement('b');
-  arrow.setAttribute('aria-hidden', 'true');
-  arrow.textContent = '→';
+  const arrow = iconElement('arrow-right', 'module-action-icon');
   action.append(arrow);
   link.append(number, content, action);
   return link;

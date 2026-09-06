@@ -1,3 +1,5 @@
+import { iconElement } from './icons.js?v=0.23.2';
+
 const grid = document.querySelector('#device-grid');
 const emptyState = document.querySelector('#empty-state');
 const refreshButton = document.querySelector('#refresh');
@@ -92,7 +94,7 @@ function deviceCard(device) {
   if (device.canOpen) {
     const open = document.createElement('span');
     open.className = 'open-device';
-    open.textContent = 'Відкрити  →';
+    open.append('Відкрити', iconElement('arrow-right'));
     bottom.append(note, open);
   } else {
     const locked = document.createElement('span');

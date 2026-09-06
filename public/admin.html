@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.22.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.23.2">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -41,12 +41,12 @@
     <section id="panel-devices" class="admin-panel active">
       <div class="panel-toolbar">
         <div><h2>Пристрої</h2><p>Принтери, камери та їхні адреси в домашній мережі.</p></div>
-        <button id="new-device" class="button button-primary" type="button">＋ Додати пристрій</button>
+        <button id="new-device" class="button button-primary" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати пристрій</button>
       </div>
       <div class="admin-layout">
         <div id="device-list" class="record-list"></div>
         <form id="device-form" class="editor-card hidden">
-          <div class="editor-heading"><div><p class="eyebrow">ПРИСТРІЙ</p><h3 id="device-form-title">Новий пристрій</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрити">×</button></div>
+          <div class="editor-heading"><div><p class="eyebrow">ПРИСТРІЙ</p><h3 id="device-form-title">Новий пристрій</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрити" title="Закрити"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
           <input id="device-id" type="hidden">
           <div class="form-grid">
             <label class="field span-2"><span>Назва</span><input id="device-name" required maxlength="80" placeholder="Creality K1 SE"></label>
@@ -81,7 +81,7 @@
         <form id="workflow-form" class="editor-card hidden">
           <div class="editor-heading">
             <div><p class="eyebrow">НАЛАШТУВАННЯ ДОШКИ</p><h3 id="workflow-form-title">Дошка</h3></div>
-            <button class="icon-button" data-close-editor type="button" aria-label="Закрити">×</button>
+            <button class="icon-button" data-close-editor type="button" aria-label="Закрити" title="Закрити"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
           </div>
           <input id="workflow-module" type="hidden">
           <div class="form-grid">
@@ -94,24 +94,24 @@
           <div id="workflow-status-list" class="workflow-status-list"></div>
           <div class="workflow-add-row">
             <input id="workflow-status-input" maxlength="120" placeholder="Наприклад: ПОТРЕБУЄ ДІАГНОСТИКИ">
-            <button id="add-workflow-status" class="button button-ghost" type="button">Додати статус</button>
+            <button id="add-workflow-status" class="button button-ghost" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати статус</button>
           </div>
 
           <div class="access-heading workflow-card-statuses-heading">
             <div><h4>Статуси карток</h4><p>Стани роботи, які можна одночасно додавати до картки.</p></div>
-            <button id="add-workflow-card-status" class="button button-ghost" type="button">＋ Додати статус</button>
+            <button id="add-workflow-card-status" class="button button-ghost" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати статус</button>
           </div>
           <div id="workflow-card-status-list" class="workflow-card-status-list"></div>
 
           <div class="access-heading workflow-card-statuses-heading">
             <div><h4>Мітки карток</h4><p>Кольорові позначки рівня складності або типу ремонту.</p></div>
-            <button id="add-workflow-card-label" class="button button-ghost" type="button">＋ Додати мітку</button>
+            <button id="add-workflow-card-label" class="button button-ghost" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати мітку</button>
           </div>
           <div id="workflow-card-label-list" class="workflow-card-status-list"></div>
 
           <div class="access-heading workflow-lanes-heading">
             <div><h4>Колонки</h4><p>Порядок відображення, колір і статус для запису назад в Облік.</p></div>
-            <button id="add-workflow-lane" class="button button-ghost" type="button">＋ Додати колонку</button>
+            <button id="add-workflow-lane" class="button button-ghost" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати колонку</button>
           </div>
           <div class="workflow-lane-labels" aria-hidden="true"><span>Порядок</span><span>Колір</span><span>Назва</span><span>Статус після завершення</span><span></span></div>
           <div id="workflow-lane-list" class="workflow-lane-list"></div>
@@ -166,10 +166,10 @@
           <div class="player-card">
             <div><p class="eyebrow">ПРОГРАВАЧ</p><h4 id="player-title">Нічого не відтворюється</h4><p id="player-meta">Сумісний MPRIS-програвач не знайдено.</p></div>
             <div class="player-controls" aria-label="Керування програвачем">
-              <button class="icon-button" data-player-action="previous" type="button" aria-label="Попередній трек">‹</button>
-              <button class="button button-primary" data-player-action="play-pause" type="button">Play / Pause</button>
-              <button class="icon-button" data-player-action="next" type="button" aria-label="Наступний трек">›</button>
-              <button class="icon-button" data-player-action="stop" type="button" aria-label="Зупинити">■</button>
+              <button class="icon-button" data-player-action="previous" type="button" aria-label="Попередній трек" title="Попередній трек"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
+              <button class="button button-primary" data-player-action="play-pause" type="button">Відтворити / пауза</button>
+              <button class="icon-button" data-player-action="next" type="button" aria-label="Наступний трек" title="Наступний трек"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
+              <button class="icon-button" data-player-action="stop" type="button" aria-label="Зупинити" title="Зупинити"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg></button>
             </div>
           </div>
         </article>
@@ -378,12 +378,12 @@
     <section id="panel-users" class="admin-panel">
       <div class="panel-toolbar">
         <div><h2>Користувачі</h2><p>Доступ надається за e-mail, підтвердженим Cloudflare Access.</p></div>
-        <button id="new-user" class="button button-primary" type="button">＋ Додати користувача</button>
+        <button id="new-user" class="button button-primary" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Додати користувача</button>
       </div>
       <div class="admin-layout">
         <div id="user-list" class="record-list"></div>
         <form id="user-form" class="editor-card hidden">
-          <div class="editor-heading"><div><p class="eyebrow">КОРИСТУВАЧ</p><h3 id="user-form-title">Новий користувач</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрити">×</button></div>
+          <div class="editor-heading"><div><p class="eyebrow">КОРИСТУВАЧ</p><h3 id="user-form-title">Новий користувач</h3></div><button class="icon-button" data-close-editor type="button" aria-label="Закрити" title="Закрити"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
           <input id="user-id" type="hidden">
           <div class="form-grid">
             <label class="field span-2"><span>E-mail</span><input id="user-email" required type="email" placeholder="name@example.com"></label>
@@ -406,6 +406,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.22.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.23.2"></script>
 </body>
 </html>

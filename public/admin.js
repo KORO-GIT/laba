@@ -1,4 +1,5 @@
-import { initDesktop } from './desktop.js?v=0.22.0';
+import { initDesktop } from './desktop.js?v=0.23.2';
+import { iconElement } from './icons.js?v=0.23.2';
 
 const state = {
   me: null,
@@ -687,10 +688,11 @@ function renderWorkflowStatuses() {
   const chips = workflow.sourceStatuses.map((status) => {
     const chip = el('span', 'workflow-status-chip');
     chip.append(el('span', '', status));
-    const remove = el('button', '', '×');
+    const remove = el('button');
     remove.type = 'button';
     remove.title = `Видалити статус «${status}»`;
     remove.setAttribute('aria-label', remove.title);
+    remove.append(iconElement('close'));
     remove.addEventListener('click', () => {
       if (workflow.sourceStatuses.length === 1) {
         showToast('Дошка повинна мати щонайменше один вхідний статус', true);
@@ -738,7 +740,7 @@ function renderWorkflowCardStatuses() {
     name.placeholder = 'Назва статусу';
     name.setAttribute('aria-label', 'Назва статусу картки');
     name.addEventListener('input', () => { status.name = name.value; });
-    const remove = workflowIconButton('×', `Видалити статус «${statusLabel}»`, false, () => {
+    const remove = workflowIconButton('close', `Видалити статус «${statusLabel}»`, false, () => {
       if (!window.confirm(`Видалити статус «${statusLabel}»? Він зникне з усіх карток цієї дошки.`)) return;
       workflow.cardStatuses.splice(index, 1);
       renderWorkflowCardStatuses();
@@ -784,7 +786,7 @@ function renderWorkflowCardLabels() {
     name.placeholder = 'Назва мітки';
     name.setAttribute('aria-label', 'Назва мітки картки');
     name.addEventListener('input', () => { label.name = name.value; });
-    const remove = workflowIconButton('×', `Видалити мітку «${labelName}»`, false, () => {
+    const remove = workflowIconButton('close', `Видалити мітку «${labelName}»`, false, () => {
       if (!window.confirm(`Видалити мітку «${labelName}»? Вона зникне з усіх карток цієї дошки.`)) return;
       workflow.cardLabels.splice(index, 1);
       renderWorkflowCardLabels();
@@ -827,11 +829,12 @@ function renderWorkflowEntryLane() {
   select.value = workflow.entryLaneKey;
 }
 
-function workflowIconButton(symbol, title, disabled, onClick) {
-  const button = el('button', 'icon-button workflow-icon-button', symbol);
+function workflowIconButton(iconName, title, disabled, onClick) {
+  const button = el('button', 'icon-button workflow-icon-button');
   button.type = 'button';
   button.title = title;
   button.setAttribute('aria-label', title);
+  button.append(iconElement(iconName));
   button.disabled = disabled;
   button.addEventListener('click', onClick);
   return button;
@@ -843,8 +846,8 @@ function renderWorkflowLanes() {
     const row = el('div', 'workflow-lane-row');
     const order = el('div', 'workflow-order-buttons');
     order.append(
-      workflowIconButton('↑', 'Перемістити колонку ліворуч', index === 0, () => moveWorkflowLane(index, -1)),
-      workflowIconButton('↓', 'Перемістити колонку праворуч', index === workflow.lanes.length - 1, () => moveWorkflowLane(index, 1))
+      workflowIconButton('arrow-left', 'Перемістити колонку ліворуч', index === 0, () => moveWorkflowLane(index, -1)),
+      workflowIconButton('arrow-right', 'Перемістити колонку праворуч', index === workflow.lanes.length - 1, () => moveWorkflowLane(index, 1))
     );
     const color = document.createElement('input');
     color.type = 'color';
@@ -872,7 +875,7 @@ function renderWorkflowLanes() {
       : 'Статус для запису в Облік');
     target.disabled = fixedServiceLocations;
     target.addEventListener('input', () => { lane.targetStatus = target.value; });
-    const remove = workflowIconButton('×', lane.system ? 'Системну колонку не можна видалити' : 'Видалити колонку', lane.system, () => {
+    const remove = workflowIconButton('close', lane.system ? 'Системну колонку не можна видалити' : 'Видалити колонку', lane.system, () => {
       if (!window.confirm(`Видалити колонку «${lane.title}»?`)) return;
       workflow.lanes.splice(index, 1);
       renderWorkflowLanes();
