@@ -5,6 +5,7 @@ const toast = document.querySelector('#toast');
 const search = document.querySelector('#search');
 const clearSearch = document.querySelector('#clear-search');
 const assetFilter = document.querySelector('#asset-filter');
+const taraAssetFilter = document.querySelector('#tara-asset-filter');
 const state = {
   me: null,
   data: null,
@@ -62,9 +63,11 @@ function filteredCards() {
   const query = search.value.trim().toLocaleLowerCase('uk-UA');
   return state.data.cards.filter((card) => {
     if (assetFilter.value && card.asset !== assetFilter.value) return false;
+    if (assetFilter.value === 'ТАРА' && taraAssetFilter.value && card.sourceName !== taraAssetFilter.value) return false;
     if (!query) return true;
     return [
       card.asset,
+      card.sourceName,
       card.boardIdentifier,
       card.sourceStatus,
       card.reportNumber,
@@ -89,6 +92,28 @@ function renderAssetFilter() {
   });
   assetFilter.replaceChildren(all, ...options);
   assetFilter.value = assets.includes(selected) ? selected : '';
+  renderTaraAssetFilter();
+}
+
+function renderTaraAssetFilter() {
+  const active = assetFilter.value === 'ТАРА';
+  const selected = taraAssetFilter.value;
+  const assets = [...new Set(state.data.cards
+    .filter((card) => card.asset === 'ТАРА')
+    .map((card) => card.sourceName)
+    .filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'uk-UA'));
+  const all = el('option', '', 'Усі засоби ТАРИ');
+  all.value = '';
+  const options = assets.map((asset) => {
+    const option = el('option', '', asset);
+    option.value = asset;
+    return option;
+  });
+  taraAssetFilter.replaceChildren(all, ...options);
+  taraAssetFilter.value = active && assets.includes(selected) ? selected : '';
+  taraAssetFilter.classList.toggle('hidden', !active);
+  document.querySelector('.maintenance-toolbar').classList.toggle('tara-filter-active', active);
 }
 
 function renderLabelLegend() {
@@ -119,7 +144,10 @@ function cardNode(card) {
     bar.title = label.name;
     labelBars.append(bar);
   });
-  const asset = el('span', 'maintenance-card-asset', card.asset);
+  const assetLabel = card.asset === 'ТАРА' && card.sourceName
+    ? `${card.asset} · ${card.sourceName}`
+    : card.asset;
+  const asset = el('span', 'maintenance-card-asset', assetLabel);
   const title = el('h3', '', card.boardIdentifier);
   const meta = el('div', 'maintenance-card-meta');
   (card.cardStatuses || []).forEach((cardStatus) => {
@@ -260,10 +288,16 @@ function renderOpenCard() {
   const card = state.data.cards.find((item) => item.id === state.selectedId);
   if (!card) return closeCard(true);
   document.querySelector('#card-status').textContent = laneTitle(card.lane).toLocaleUpperCase('uk-UA');
-  document.querySelector('#card-title').textContent = `${card.asset} · ${card.boardIdentifier}`;
+  const assetLabel = card.asset === 'ТАРА' && card.sourceName
+    ? `${card.asset} · ${card.sourceName}`
+    : card.asset;
+  document.querySelector('#card-title').textContent = `${assetLabel} · ${card.boardIdentifier}`;
+  const assetDetails = card.asset === 'ТАРА'
+    ? [detailRow('Тип запису', 'ТАРА'), detailRow('Засіб', card.sourceName)]
+    : [detailRow('Засіб', card.asset)];
   document.querySelector('#card-details').replaceChildren(
     detailRow('Статус в Обліку', card.sourceStatus),
-    detailRow('Засіб', card.asset),
+    ...assetDetails,
     detailRow('Номер борту', card.boardIdentifier),
     detailRow('Ідентифікатори', card.identifiers.join(' · ')),
     detailRow('Коментар з Обліку', card.sourceComment, 'maintenance-source-comment')
@@ -560,7 +594,11 @@ search.addEventListener('keydown', (event) => {
   }
 });
 clearSearch.addEventListener('click', clearSearchValue);
-assetFilter.addEventListener('change', renderBoard);
+assetFilter.addEventListener('change', () => {
+  renderTaraAssetFilter();
+  renderBoard();
+});
+taraAssetFilter.addEventListener('change', renderBoard);
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.classList.contains('hidden')) closeCard(); });
 document.addEventListener('visibilitychange', refreshVisibleBoard);
 window.addEventListener('focus', refreshVisibleBoard);
@@ -570,6 +608,10 @@ async function start() {
     syncSearchClearButton();
     state.me = await api('/api/me');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
+    const settingsLink = document.querySelector('#board-settings-link');
+    const canManageBoard = state.me.role === 'admin' || state.me.modules?.[module] === 'admin';
+    settingsLink.href = `/admin?board=${encodeURIComponent(module)}`;
+    settingsLink.classList.toggle('hidden', !canManageBoard);
     await loadBoard();
     scheduleBoardRefresh();
   } catch (error) { showToast(error.message, true); }

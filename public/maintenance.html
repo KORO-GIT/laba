@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.20.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.22.0">
 </head>
 <body class="maintenance-page">
   <div class="noise" aria-hidden="true"></div>
@@ -16,6 +16,13 @@
       <p class="eyebrow">LABA</p>
       <h1 id="page-title">Завантаження…</h1>
     </div>
+    <a id="board-settings-link" class="button button-ghost maintenance-settings hidden" href="/admin" aria-label="Налаштування дошки" title="Налаштування дошки">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.95 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1H3v-4h.08A1.7 1.7 0 0 0 4.6 8.95a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.08V3h4v.08a1.7 1.7 0 0 0 1.05 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 8.97 1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"></path>
+      </svg>
+      <span>Налаштування</span>
+    </a>
     <div class="identity">
       <span class="live-dot" aria-hidden="true"></span>
       <span id="identity-name"></span>
@@ -35,6 +42,7 @@
         </button>
       </div>
       <select id="asset-filter" aria-label="Фільтр за засобом"><option value="">Усі засоби</option></select>
+      <select id="tara-asset-filter" class="hidden" aria-label="Фільтр ТАРИ за засобом"><option value="">Усі засоби ТАРИ</option></select>
       <div id="card-label-legend" class="maintenance-label-legend hidden" aria-label="Легенда міток"></div>
       <span id="sync-state" class="sync-state">Синхронізація…</span>
     </section>
@@ -66,6 +74,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/maintenance.js?v=0.20.0"></script>
+  <script type="module" src="/assets/maintenance.js?v=0.22.0"></script>
 </body>
 </html>

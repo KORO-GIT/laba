@@ -235,6 +235,8 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-title { min-width: 0; flex: 1; }
 .maintenance-title .eyebrow { margin: 0 0 4px; }
 .maintenance-title h1 { margin: 0; overflow: hidden; font-size: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.maintenance-settings { flex: 0 0 auto; }
+.maintenance-settings svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .maintenance-toolbar { min-height: 66px; display: flex; align-items: center; gap: 10px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
 .maintenance-search {
   width: min(420px, 44vw);
@@ -365,6 +367,10 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .admin-tab { flex: 1; }
 .admin-panel { display: none; padding-top: 26px; }
 .admin-panel.active { display: block; }
+.board-admin-mode .admin-tabs { display: none; }
+.board-admin-mode .admin-heading { padding-bottom: 28px; }
+.board-admin-mode .admin-heading h1 { font-size: clamp(34px, 4vw, 52px); }
+.board-admin-mode #panel-workflows { padding-top: 0; }
 .panel-toolbar { padding: 0 0 22px; border: 0; }
 .panel-toolbar h2 { margin-bottom: 4px; font-size: 24px; }
 .panel-toolbar p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -721,10 +727,14 @@ td:last-child { max-width: 340px; color: var(--muted); white-space: normal; word
   .maintenance-topbar { min-height: 74px; padding: 0 12px; }
   .maintenance-topbar .identity { display: none; }
   .maintenance-title h1 { font-size: 21px; }
+  .maintenance-settings { width: 40px; min-height: 40px; padding: 0; }
+  .maintenance-settings span { display: none; }
   .maintenance-toolbar { align-items: stretch; flex-wrap: wrap; padding: 10px 12px; }
   .maintenance-search { width: 100%; }
   .maintenance-toolbar select { width: calc(55% - 5px); }
   .sync-state { width: calc(45% - 5px); display: flex; align-items: center; justify-content: flex-end; overflow: hidden; text-align: right; text-overflow: ellipsis; }
+  .maintenance-toolbar.tara-filter-active select { width: calc(50% - 5px); }
+  .maintenance-toolbar.tara-filter-active .sync-state { width: 100%; justify-content: flex-start; text-align: left; }
   .maintenance-board { min-height: calc(100vh - 166px); grid-auto-columns: min(84vw, 330px); padding: 10px 12px 26px; scroll-snap-type: x proximity; }
   .maintenance-lane { scroll-snap-align: start; }
   .maintenance-drawer { padding: 20px 16px 36px; border-left: 0; }

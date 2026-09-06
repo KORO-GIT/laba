@@ -6,26 +6,26 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.20.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.22.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar shell">
     <a class="brand" href="/">
       <span class="brand-mark">L</span>
-      <span><strong>LABA</strong><small>ПАНЕЛЬ АДМІНІСТРАТОРА</small></span>
+      <span><strong>LABA</strong><small id="admin-brand-subtitle">ПАНЕЛЬ АДМІНІСТРАТОРА</small></span>
     </a>
     <div class="identity">
       <span id="identity-name">Адміністратор</span>
-      <a class="button button-ghost" href="/">До розділів</a>
+      <a id="admin-back-link" class="button button-ghost" href="/">До розділів</a>
     </div>
   </header>
 
   <main class="shell admin-shell">
     <section class="admin-heading">
-      <p class="eyebrow">ПАНЕЛЬ КЕРУВАННЯ</p>
-      <h1>Керування лабораторією</h1>
-      <p>Налаштовуйте дошки, пристрої, права користувачів і перевіряйте журнал змін.</p>
+      <p id="admin-heading-eyebrow" class="eyebrow">ПАНЕЛЬ КЕРУВАННЯ</p>
+      <h1 id="admin-heading-title">Керування лабораторією</h1>
+      <p id="admin-heading-description">Налаштовуйте дошки, пристрої, права користувачів і перевіряйте журнал змін.</p>
     </section>
 
     <nav class="admin-tabs" aria-label="Розділи адміністрування">
@@ -406,6 +406,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.20.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.22.0"></script>
 </body>
 </html>

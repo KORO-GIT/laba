@@ -308,6 +308,33 @@ function requireAdmin(request, reply, done) {
   done();
 }
 
+function canManageWorkflow(user, module) {
+  return user?.role === 'admin'
+    || (maintenanceModules.includes(module) && moduleAccess(user, module) === 'admin');
+}
+
+function canManageAnyWorkflow(user) {
+  return user?.role === 'admin'
+    || maintenanceModules.some((module) => moduleAccess(user, module) === 'admin');
+}
+
+function requireAnyWorkflowAdmin(request, reply, done) {
+  if (!canManageAnyWorkflow(request.portalUser)) {
+    reply.code(403).send({ error: 'Потрібні права адміністратора дошки' });
+    return;
+  }
+  done();
+}
+
+function requireWorkflowAdmin(request, reply, done) {
+  const module = String(request.params.module || '');
+  if (!canManageWorkflow(request.portalUser, module)) {
+    reply.code(403).send({ error: 'Потрібні права адміністратора цієї дошки' });
+    return;
+  }
+  done();
+}
+
 function guardWrite(request, reply, done) {
   try {
     requireSameOrigin(request);
@@ -891,7 +918,9 @@ for (const module of ['workshop', 'service']) {
 }
 
 app.get('/admin', async (request, reply) => {
-  if (request.portalUser.role !== 'admin') return reply.code(403).send({ error: 'Доступ заборонено' });
+  if (!canManageAnyWorkflow(request.portalUser)) {
+    return reply.code(403).send({ error: 'Доступ заборонено' });
+  }
   return reply.sendFile('admin.html');
 });
 
@@ -1171,8 +1200,10 @@ app.post('/api/internal/accounting/ack', {
   return { ok: true, accepted };
 });
 
-app.get('/api/admin/workflows', { preHandler: requireAdmin }, async () => ({
-  boards: maintenanceModules.map(workflowAdminPayload),
+app.get('/api/admin/workflows', { preHandler: requireAnyWorkflowAdmin }, async (request) => ({
+  boards: maintenanceModules
+    .filter((module) => canManageWorkflow(request.portalUser, module))
+    .map(workflowAdminPayload),
   users: statements.listUsers.all().map((row) => ({
     id: row.id,
     email: row.email,
@@ -1183,7 +1214,7 @@ app.get('/api/admin/workflows', { preHandler: requireAdmin }, async () => ({
 }));
 
 app.patch('/api/admin/workflows/:module', {
-  preHandler: [requireAdmin, guardWrite],
+  preHandler: [requireWorkflowAdmin, guardWrite],
   config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
 }, async (request, reply) => {
   const module = String(request.params.module || '');

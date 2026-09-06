@@ -228,6 +228,16 @@ test('development server serves portal API and protected admin writes', async (c
   });
   assert.equal(viewerCreated.status, 201);
   const viewerHeaders = { 'X-Dev-User-Email': 'viewer@test.local' };
+  const boardAdminCreated = await fetch(`${root}/api/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({
+      email: 'workshop-admin@test.local', displayName: 'Workshop Admin', role: 'viewer', enabled: true, access: [],
+      moduleAccess: { workshop: 'admin', service: 'none', devices: 'none' }
+    })
+  });
+  assert.equal(boardAdminCreated.status, 201);
+  const boardAdminHeaders = { 'X-Dev-User-Email': 'workshop-admin@test.local' };
   const viewerWorkshop = await fetch(`${root}/api/maintenance/workshop`, { headers: viewerHeaders });
   assert.equal(viewerWorkshop.status, 200);
   const viewerService = await fetch(`${root}/api/maintenance/service`, { headers: viewerHeaders });
@@ -240,6 +250,21 @@ test('development server serves portal API and protected admin writes', async (c
     { 'X-Dev-User-Email': 'viewer@test.local' }
   );
   assert.match(viewerDesktop, /^HTTP\/1\.1 403 /);
+  const viewerAdminPage = await fetch(`${root}/admin`, { headers: viewerHeaders });
+  assert.equal(viewerAdminPage.status, 403);
+  const boardAdminPage = await fetch(`${root}/admin?board=workshop`, { headers: boardAdminHeaders });
+  assert.equal(boardAdminPage.status, 200);
+  assert.match(await boardAdminPage.text(), /id="workflow-form"/);
+  const boardAdminWorkshopPage = await fetch(`${root}/workshop`, { headers: boardAdminHeaders });
+  assert.equal(boardAdminWorkshopPage.status, 200);
+  const boardAdminWorkshopHtml = await boardAdminWorkshopPage.text();
+  assert.match(boardAdminWorkshopHtml, /id="board-settings-link"/);
+  assert.match(boardAdminWorkshopHtml, /id="tara-asset-filter"/);
+  const boardAdminUserList = await fetch(`${root}/api/admin/users`, { headers: boardAdminHeaders });
+  assert.equal(boardAdminUserList.status, 403);
+  const boardAdminMe = await fetch(`${root}/api/me`, { headers: boardAdminHeaders }).then((response) => response.json());
+  assert.equal(boardAdminMe.role, 'viewer');
+  assert.equal(boardAdminMe.modules.workshop, 'admin');
 
   const audio = await fetch(`${root}/api/admin/audio`).then((response) => response.json());
   assert.equal(audio.adapter.powered, true);
@@ -368,7 +393,7 @@ test('development server serves portal API and protected admin writes', async (c
     spreadsheetId: 'sheet-test', sheetId: 17, rowNumber: 4,
     sourceName: 'Nemesis', sheetName: 'Облік', asset: 'Nemesis',
     boardIdentifier: '014', identifiers: ['014', 'KIT-UA-NM-014'], status: 'ТЕХНІЧНІ ПРОБЛЕМИ',
-    sourceComment: 'Коментар пілота • 06.09.2026\nПошкоджено верхню кришку.'
+    sourceComment: 'Пошкоджено верхню кришку.'
   };
   const syncedRepair = await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [repairRecord] })
@@ -382,7 +407,7 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(workshop.cards[0].lane, 'new');
   assert.equal(workshop.cards[0].sourceComment, repairRecord.sourceComment);
 
-  const updatedSourceComment = `${repairRecord.sourceComment}\n\nКоментар пілота • 07.09.2026\nПотрібна повторна перевірка.`;
+  const updatedSourceComment = 'Потрібна повторна перевірка кріплення.';
   await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders,
     body: JSON.stringify({ records: [{ ...repairRecord, sourceComment: updatedSourceComment }] })
@@ -431,6 +456,43 @@ test('development server serves portal API and protected admin writes', async (c
   assert.deepEqual(workflowAdmin.boards[0].cardLabels, []);
   assert.equal(workflowAdmin.boards[0].lanes.find((lane) => lane.key === 'ready').targetStatus, 'НА ОБЛІТ');
   assert.deepEqual(workflowAdmin.boards[1].sourceStatuses, ['ВТРАЧЕНИЙ', 'ПОТРЕБУЄ СЕРВІСУ']);
+
+  const boardAdminWorkflowsResponse = await fetch(`${root}/api/admin/workflows`, { headers: boardAdminHeaders });
+  assert.equal(boardAdminWorkflowsResponse.status, 200);
+  const boardAdminWorkflows = await boardAdminWorkflowsResponse.json();
+  assert.deepEqual(boardAdminWorkflows.boards.map((board) => board.key), ['workshop']);
+  const ownWorkshop = boardAdminWorkflows.boards[0];
+  const ownWorkshopUpdate = await fetch(`${root}/api/admin/workflows/workshop`, {
+    method: 'PATCH',
+    headers: {
+      ...boardAdminHeaders,
+      'Content-Type': 'application/json',
+      'X-Portal-Request': '1',
+      Origin: root
+    },
+    body: JSON.stringify({
+      title: ownWorkshop.title,
+      description: ownWorkshop.description,
+      entryLaneKey: ownWorkshop.entryLaneKey,
+      sourceStatuses: ownWorkshop.sourceStatuses,
+      cardStatuses: ownWorkshop.cardStatuses,
+      cardLabels: ownWorkshop.cardLabels,
+      lanes: ownWorkshop.lanes.map(({ key, title, color, targetStatus }) => ({ key, title, color, targetStatus })),
+      access: ownWorkshop.access
+    })
+  });
+  assert.equal(ownWorkshopUpdate.status, 200);
+  const foreignWorkflowUpdate = await fetch(`${root}/api/admin/workflows/service`, {
+    method: 'PATCH',
+    headers: {
+      ...boardAdminHeaders,
+      'Content-Type': 'application/json',
+      'X-Portal-Request': '1',
+      Origin: root
+    },
+    body: '{}'
+  });
+  assert.equal(foreignWorkflowUpdate.status, 403);
 
   const lostRecordAlreadyInKyiv = {
     ...repairRecord,

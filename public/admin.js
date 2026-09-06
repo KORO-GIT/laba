@@ -1,7 +1,8 @@
-import { initDesktop } from './desktop.js?v=0.20.0';
+import { initDesktop } from './desktop.js?v=0.22.0';
 
 const state = {
   me: null,
+  globalAdmin: false,
   devices: [],
   users: [],
   workflows: [],
@@ -991,7 +992,7 @@ async function saveWorkflow(event) {
     const index = state.workflows.findIndex((item) => item.key === updated.key);
     state.workflows[index] = updated;
     editWorkflow(updated.key);
-    await loadUsers();
+    if (state.globalAdmin) await loadUsers();
     showToast('Налаштування дошки збережено');
   } catch (error) { showToast(error.message, true); }
   finally { button.disabled = false; }
@@ -1002,7 +1003,8 @@ async function loadWorkflows() {
   state.workflows = payload.boards;
   state.workflowUsers = payload.users;
   renderWorkflowBoards();
-  const selected = state.editingWorkflow?.key;
+  const requested = new URLSearchParams(window.location.search).get('board');
+  const selected = state.editingWorkflow?.key || requested;
   editWorkflow(state.workflows.some((workflow) => workflow.key === selected) ? selected : state.workflows[0]?.key);
 }
 
@@ -1188,16 +1190,26 @@ async function loadAudit() {
   }
 }
 
+function selectAdminPanel(panel) {
+  document.querySelectorAll('.admin-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.panel === panel);
+  });
+  document.querySelectorAll('.admin-panel').forEach((node) => {
+    node.classList.toggle('active', node.id === `panel-${panel}`);
+  });
+}
+
+async function activateAdminPanel(panel) {
+  selectAdminPanel(panel);
+  if (panel === 'workflows') await loadWorkflows();
+  if (panel === 'audio') await loadAudio();
+  if (panel === 'starlink') await loadStarlink({ includeMap: true });
+  if (panel === 'audit') await loadAudit();
+}
+
 document.querySelectorAll('.admin-tab').forEach((button) => {
-  button.addEventListener('click', async () => {
-    document.querySelectorAll('.admin-tab').forEach((tab) => tab.classList.remove('active'));
-    document.querySelectorAll('.admin-panel').forEach((panel) => panel.classList.remove('active'));
-    button.classList.add('active');
-    document.querySelector(`#panel-${button.dataset.panel}`).classList.add('active');
-    if (button.dataset.panel === 'workflows') await loadWorkflows().catch((error) => showToast(error.message, true));
-    if (button.dataset.panel === 'audio') await loadAudio();
-    if (button.dataset.panel === 'starlink') await loadStarlink({ includeMap: true });
-    if (button.dataset.panel === 'audit') await loadAudit().catch((error) => showToast(error.message, true));
+  button.addEventListener('click', () => {
+    activateAdminPanel(button.dataset.panel).catch((error) => showToast(error.message, true));
   });
 });
 
@@ -1351,12 +1363,36 @@ document.querySelectorAll('[data-close-editor]').forEach((button) => button.addE
 async function start() {
   try {
     state.me = await api('/api/me');
-    if (state.me.role !== 'admin') throw new Error('Потрібні права адміністратора');
+    state.globalAdmin = state.me.role === 'admin';
+    const managedBoards = ['workshop', 'service']
+      .filter((module) => state.me.modules?.[module] === 'admin');
+    if (!state.globalAdmin && managedBoards.length === 0) {
+      throw new Error('Потрібні права адміністратора дошки');
+    }
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
+    const requestedBoard = new URLSearchParams(window.location.search).get('board');
+    const canOpenRequestedBoard = ['workshop', 'service'].includes(requestedBoard)
+      && (state.globalAdmin || managedBoards.includes(requestedBoard));
+    if (canOpenRequestedBoard) {
+      const backLink = document.querySelector('#admin-back-link');
+      backLink.href = `/${requestedBoard}`;
+      backLink.textContent = 'До дошки';
+    }
+    if (!state.globalAdmin) {
+      document.body.classList.add('board-admin-mode');
+      document.querySelector('#admin-brand-subtitle').textContent = 'НАЛАШТУВАННЯ ДОШКИ';
+      document.querySelector('#admin-heading-eyebrow').textContent = 'КЕРУВАННЯ ДОШКОЮ';
+      document.querySelector('#admin-heading-title').textContent = 'Налаштування дошки';
+      document.querySelector('#admin-heading-description').textContent = 'Колонки, статуси, мітки та доступ учасників цієї дошки.';
+      await activateAdminPanel('workflows');
+      return;
+    }
     initDesktop({ showToast });
     await Promise.all([loadDevices(), loadUsers()]);
     startAudioPolling();
     startStarlinkPolling();
+    if (canOpenRequestedBoard) await activateAdminPanel('workflows');
+    else selectAdminPanel('devices');
   } catch (error) { showToast(error.message, true); }
 }
 
