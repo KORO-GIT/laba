@@ -65,6 +65,7 @@ function filteredCards() {
       card.asset,
       card.boardIdentifier,
       card.sourceStatus,
+      card.reportNumber,
       ...card.identifiers,
       ...(card.cardStatuses || []).map((status) => status.name),
       ...(card.cardLabels || []).map((label) => label.name)
@@ -128,6 +129,7 @@ function cardNode(card) {
     chip.append(el('span', 'card-custom-status-label', cardStatus.name));
     meta.append(chip);
   });
+  if (card.reportNumber) meta.append(el('span', 'report-indicator', `Рапорт № ${card.reportNumber}`));
   if (card.notes) meta.append(el('span', 'notes-indicator', 'Примітка'));
   article.append(accent);
   if (labels.length) article.append(labelBars);
@@ -244,6 +246,7 @@ function syncCardDirty() {
     .map((input) => Number(input.value))
     .sort((left, right) => left - right);
   state.cardDirty = document.querySelector('#card-notes').value !== card.notes
+    || (module === 'service' && document.querySelector('#card-report-number').value !== card.reportNumber)
     || savedStatusIds.length !== selectedStatusIds.length
     || savedStatusIds.some((statusId, index) => statusId !== selectedStatusIds[index])
     || savedLabelIds.length !== selectedLabelIds.length
@@ -266,6 +269,11 @@ function renderOpenCard() {
   const notes = document.querySelector('#card-notes');
   if (!state.cardDirty) notes.value = card.notes;
   notes.disabled = !state.data.canEdit;
+  const reportField = document.querySelector('#card-report-field');
+  const reportNumber = document.querySelector('#card-report-number');
+  reportField.classList.toggle('hidden', module !== 'service');
+  if (!state.cardDirty) reportNumber.value = card.reportNumber || '';
+  reportNumber.disabled = !state.data.canEdit || module !== 'service';
   renderCardStatusOptions(card);
   renderCardLabelOptions(card);
   const saveButton = document.querySelector('#save-card');
@@ -309,6 +317,7 @@ async function saveCard() {
       method: 'PATCH',
       body: JSON.stringify({
         notes: document.querySelector('#card-notes').value,
+        ...(module === 'service' ? { reportNumber: document.querySelector('#card-report-number').value } : {}),
         cardStatusIds: [...document.querySelectorAll('#card-status-list input:checked')]
           .map((input) => Number(input.value)),
         cardLabelIds: [...document.querySelectorAll('#card-label-list input:checked')]
@@ -483,6 +492,9 @@ async function refreshVisibleBoard() {
 
 document.querySelectorAll('[data-close-dialog]').forEach((node) => node.addEventListener('click', () => closeCard()));
 document.querySelector('#card-notes').addEventListener('input', () => {
+  syncCardDirty();
+});
+document.querySelector('#card-report-number').addEventListener('input', () => {
   syncCardDirty();
 });
 document.querySelector('#card-status-list').addEventListener('change', () => {

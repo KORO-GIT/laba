@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.17.0';
+import { initDesktop } from './desktop.js?v=0.18.0';
 
 const state = {
   me: null,

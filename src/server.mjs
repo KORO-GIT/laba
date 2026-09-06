@@ -440,6 +440,7 @@ const maintenanceMoveSchema = z.object({
 }).strict();
 const maintenanceEditSchema = z.object({
   notes: z.string().trim().max(4000),
+  reportNumber: z.string().trim().max(120).optional(),
   cardStatusIds: z.array(z.coerce.number().int().positive()).max(30).optional(),
   cardLabelIds: z.array(z.coerce.number().int().positive()).max(30).optional()
 }).strict().superRefine((card, context) => {
@@ -694,8 +695,10 @@ function synchronizeAccountingRecords(records) {
   const normalized = records.map((record) => {
     const status = normalizedStatus(record.status);
     const module = statements.workflowModuleByStatus.get(status)?.module ?? null;
+    const lostContainer = module === 'service' && status === 'ВТРАЧЕНИЙ';
     return {
       ...record,
+      asset: lostContainer ? 'ТАРА' : record.asset,
       status,
       module,
       entryLaneKey: module ? statements.workflowBoardByModule.get(module)?.entry_lane_key : null,
@@ -954,6 +957,9 @@ app.patch('/api/maintenance/:module/cards/:id', {
   }
   const body = parseOrReply(maintenanceEditSchema, request.body, reply);
   if (!body) return;
+  if (module !== 'service' && body.reportNumber !== undefined) {
+    return reply.code(400).send({ error: 'Номер рапорта доступний лише в Сервісі' });
+  }
   const previousStatusIds = statements.listMaintenanceCardStatuses.all(card.id).map((status) => status.id);
   const nextStatusIds = body.cardStatusIds ?? previousStatusIds;
   const allowedStatusIds = new Set(definition.cardStatuses.map((status) => status.id));
@@ -967,14 +973,18 @@ app.patch('/api/maintenance/:module/cards/:id', {
     return reply.code(400).send({ error: 'Одна з міток не належить цій дошці' });
   }
   const notesChanged = body.notes !== card.notes;
+  const nextReportNumber = module === 'service' ? body.reportNumber ?? card.report_number : card.report_number;
+  const reportNumberChanged = nextReportNumber !== card.report_number;
   const statusesChanged = previousStatusIds.length !== nextStatusIds.length
     || previousStatusIds.some((statusId) => !nextStatusIds.includes(statusId));
   const labelsChanged = previousLabelIds.length !== nextLabelIds.length
     || previousLabelIds.some((labelId) => !nextLabelIds.includes(labelId));
   db.transaction(() => {
     db.prepare(`
-      UPDATE maintenance_cards SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(body.notes, card.id);
+      UPDATE maintenance_cards
+      SET notes = ?, report_number = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(body.notes, nextReportNumber, card.id);
     if (statusesChanged) {
       db.prepare('DELETE FROM maintenance_card_status_assignments WHERE card_id = ?').run(card.id);
       const assign = db.prepare(`
@@ -994,10 +1004,16 @@ app.patch('/api/maintenance/:module/cards/:id', {
         INSERT INTO maintenance_events (card_id, actor_email, action) VALUES (?, ?, 'notes.update')
       `).run(card.id, request.portalUser.email);
     }
+    if (reportNumberChanged) {
+      db.prepare(`
+        INSERT INTO maintenance_events (card_id, actor_email, action) VALUES (?, ?, 'report-number.update')
+      `).run(card.id, request.portalUser.email);
+    }
   })();
   audit(request.portalUser.email, 'maintenance.update', 'maintenance-card', card.id, {
     module,
     notesChanged,
+    reportNumberChanged,
     cardStatusIds: nextStatusIds,
     cardLabelIds: nextLabelIds
   });

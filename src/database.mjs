@@ -30,7 +30,7 @@ const defaultWorkflows = [
     title: 'Сервіс',
     description: 'Підготовка документів і відправлення на гарантійний сервіс.',
     entryLaneKey: 'new',
-    sourceStatuses: ['ПОТРЕБУЄ СЕРВІСУ'],
+    sourceStatuses: ['ПОТРЕБУЄ СЕРВІСУ', 'ВТРАЧЕНИЙ'],
     lanes: [
       ['new', 'Нові', '#f26430', 10, null],
       ['documents_preparing', 'Готуються документи', '#f4b942', 20, null],
@@ -157,6 +157,7 @@ db.exec(`
     lane TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
+    report_number TEXT NOT NULL DEFAULT '',
     last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     removed_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -210,6 +211,11 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    name TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_devices_enabled ON devices(enabled, sort_order);
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_module_access_user ON user_module_access(user_id, module);
@@ -246,6 +252,20 @@ db.transaction(() => {
   }
 })();
 
+const serviceLostMigration = 'service-lost-containers-v1';
+if (!db.prepare('SELECT 1 FROM schema_migrations WHERE name = ?').get(serviceLostMigration)) {
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO workflow_source_statuses (normalized_status, display_status, module)
+      VALUES ('ВТРАЧЕНИЙ', 'ВТРАЧЕНИЙ', 'service')
+      ON CONFLICT(normalized_status) DO UPDATE SET
+        display_status = excluded.display_status,
+        module = excluded.module
+    `).run();
+    db.prepare('INSERT INTO schema_migrations (name) VALUES (?)').run(serviceLostMigration);
+  })();
+}
+
 const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => column.name));
 if (!deviceColumns.has('stream_name')) {
   db.exec('ALTER TABLE devices ADD COLUMN stream_name TEXT');
@@ -257,6 +277,11 @@ if (!deviceColumns.has('parent_device_id')) {
   db.exec('ALTER TABLE devices ADD COLUMN parent_device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices(parent_device_id, sort_order)');
+
+const maintenanceCardColumns = new Set(db.pragma('table_info(maintenance_cards)').map((column) => column.name));
+if (!maintenanceCardColumns.has('report_number')) {
+  db.exec("ALTER TABLE maintenance_cards ADD COLUMN report_number TEXT NOT NULL DEFAULT ''");
+}
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_status ON maintenance_card_status_assignments(status_id, card_id)');
 db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_label ON maintenance_card_label_assignments(label_id, card_id)');
@@ -463,6 +488,7 @@ export function serializeMaintenanceCard(row, events = [], cardStatuses = [], ca
     cardLabels,
     sortOrder: row.sort_order,
     notes: row.notes,
+    reportNumber: row.report_number || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     events

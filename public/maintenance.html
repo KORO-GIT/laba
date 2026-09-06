@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.17.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.18.0">
 </head>
 <body class="maintenance-page">
   <div class="noise" aria-hidden="true"></div>
@@ -50,6 +50,7 @@
         <button class="icon-button" type="button" data-close-dialog aria-label="Закрити">×</button>
       </header>
       <dl id="card-details" class="maintenance-details"></dl>
+      <label id="card-report-field" class="field maintenance-report hidden"><span>Номер рапорта</span><input id="card-report-number" maxlength="120" autocomplete="off" placeholder="Вкажіть номер документа"></label>
       <fieldset id="card-status-fieldset" class="maintenance-card-statuses hidden">
         <legend>Статуси роботи</legend>
         <div id="card-status-list" class="maintenance-card-status-list"></div>
@@ -65,6 +66,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/maintenance.js?v=0.17.0"></script>
+  <script type="module" src="/assets/maintenance.js?v=0.18.0"></script>
 </body>
 </html>

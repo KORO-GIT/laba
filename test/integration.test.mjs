@@ -419,6 +419,40 @@ test('development server serves portal API and protected admin writes', async (c
   assert.deepEqual(workflowAdmin.boards[0].cardStatuses, []);
   assert.deepEqual(workflowAdmin.boards[0].cardLabels, []);
   assert.equal(workflowAdmin.boards[0].lanes.find((lane) => lane.key === 'ready').targetStatus, 'НА ОБЛІТ');
+  assert.deepEqual(workflowAdmin.boards[1].sourceStatuses, ['ВТРАЧЕНИЙ', 'ПОТРЕБУЄ СЕРВІСУ']);
+
+  const lostRecord = {
+    ...repairRecord,
+    rowNumber: 6,
+    boardIdentifier: '020',
+    identifiers: ['020', 'KIT-UA-NM-020'],
+    status: 'ВТРАЧЕНИЙ'
+  };
+  const syncedLost = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [lostRecord] })
+  });
+  assert.equal(syncedLost.status, 200);
+  let service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 1);
+  assert.equal(service.cards[0].asset, 'ТАРА');
+  assert.equal(service.cards[0].boardIdentifier, '020');
+  assert.equal(service.cards[0].sourceName, repairRecord.sourceName);
+  assert.equal(service.cards[0].reportNumber, '');
+
+  const reportResponse = await fetch(`${root}/api/maintenance/service/cards/${service.cards[0].id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ notes: 'Готуємо документи.', reportNumber: 'РП-2026-020' })
+  });
+  assert.equal(reportResponse.status, 200);
+  assert.equal((await reportResponse.json()).reportNumber, 'РП-2026-020');
+
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [{ ...lostRecord, status: 'НА ОБЛІТ' }] })
+  });
+  service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
+  assert.equal(service.cards.length, 0);
 
   const workshopSettings = workflowAdmin.boards[0];
   const updatedWorkflowResponse = await fetch(`${root}/api/admin/workflows/workshop`, {
