@@ -121,9 +121,7 @@ function cardNode(card) {
   });
   const asset = el('span', 'maintenance-card-asset', card.asset);
   const title = el('h3', '', card.boardIdentifier);
-  const status = el('span', 'source-status', card.sourceStatus);
   const meta = el('div', 'maintenance-card-meta');
-  meta.append(status);
   (card.cardStatuses || []).forEach((cardStatus) => {
     const chip = el('span', 'card-custom-status');
     chip.style.setProperty('--card-status-color', cardStatus.color);
@@ -135,7 +133,8 @@ function cardNode(card) {
   if (card.notes) meta.append(el('span', 'notes-indicator', 'Примітка'));
   article.append(accent);
   if (labels.length) article.append(labelBars);
-  article.append(asset, title, meta);
+  article.append(asset, title);
+  if (meta.childElementCount) article.append(meta);
   article.addEventListener('click', () => {
     if (!state.dragging?.moved) openCard(card.id);
   });

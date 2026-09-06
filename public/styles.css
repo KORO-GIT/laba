@@ -287,10 +287,10 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-card-asset { color: var(--muted); font-size: 10px; font-weight: 760; }
 .maintenance-card h3 { margin: 12px 0 16px; overflow-wrap: anywhere; font-size: 18px; line-height: 1.15; }
 .maintenance-card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: auto; }
-.source-status, .notes-indicator, .report-indicator, .card-custom-status { max-width: 100%; overflow: hidden; padding: 5px 7px; border-radius: 6px; color: var(--accent-light); background: rgba(242,100,48,.1); font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.notes-indicator, .report-indicator, .card-custom-status { max-width: 100%; overflow: hidden; padding: 5px 7px; border-radius: 6px; color: var(--accent-light); background: rgba(242,100,48,.1); font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .notes-indicator { color: var(--muted); background: rgba(255,255,255,.055); }
 .report-indicator { color: var(--lime); background: rgba(182,238,115,.09); }
-.card-custom-status { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--card-status-color) 36%, transparent); color: var(--ink); background: color-mix(in srgb, var(--card-status-color) 12%, transparent); }
+.card-custom-status { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--card-status-color) 36%, transparent); color: var(--ink); background: color-mix(in srgb, var(--card-status-color) 12%, transparent); font-size: 10px; }
 .card-custom-status::before { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--card-status-color); content: ''; }
 .card-custom-status-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lane-empty { margin: 0; padding: 28px 10px; color: var(--faint); text-align: center; font-size: 10px; }
