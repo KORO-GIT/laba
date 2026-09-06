@@ -5,7 +5,7 @@
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.19.0`.
+- Поточна версія застосунку: `0.20.0`.
 - Останній підтверджений production-код: commit `798dea81004a33b0fa7fbb9494544d995e140378`; `laba-portal.service` активний, `/healthz` відповідає, `PRAGMA quick_check` повертає `ok`.
 - Production VPS: `62.238.31.125`, Ubuntu 26.04 LTS.
 - Каталог: `/opt/laba`.

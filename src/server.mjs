@@ -520,7 +520,8 @@ const accountingRecordSchema = z.object({
   asset: z.string().trim().min(1).max(120),
   boardIdentifier: z.string().trim().min(1).max(160),
   identifiers: z.array(z.string().trim().min(1).max(240)).max(20).default([]),
-  status: z.string().trim().min(1).max(120)
+  status: z.string().trim().min(1).max(120),
+  sourceComment: z.string().trim().max(45000).optional().default('')
 }).strict();
 const accountingSyncSchema = z.object({
   records: z.array(accountingRecordSchema).max(10000)
@@ -712,8 +713,8 @@ function synchronizeAccountingRecords(records) {
     INSERT INTO maintenance_cards (
       module, source_key, source_spreadsheet_id, source_sheet_id, source_row_number,
       source_name, source_sheet_name, asset, board_identifier, identifiers_json,
-      source_status, lane, sort_order, last_seen_at, removed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
+      source_status, source_comment, lane, sort_order, last_seen_at, removed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
     ON CONFLICT(module, source_key) DO UPDATE SET
       source_spreadsheet_id = excluded.source_spreadsheet_id,
       source_sheet_id = excluded.source_sheet_id,
@@ -724,6 +725,7 @@ function synchronizeAccountingRecords(records) {
       board_identifier = excluded.board_identifier,
       identifiers_json = excluded.identifiers_json,
       source_status = excluded.source_status,
+      source_comment = excluded.source_comment,
       lane = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.lane ELSE maintenance_cards.lane END,
       sort_order = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.sort_order ELSE maintenance_cards.sort_order END,
       last_seen_at = CURRENT_TIMESTAMP,
@@ -751,6 +753,7 @@ function synchronizeAccountingRecords(records) {
             record.boardIdentifier,
             JSON.stringify([...new Set(record.identifiers)]),
             record.status,
+            record.sourceComment,
             record.entryLaneKey,
             (index + 1) * 100
           );

@@ -154,6 +154,7 @@ db.exec(`
     board_identifier TEXT NOT NULL,
     identifiers_json TEXT NOT NULL DEFAULT '[]',
     source_status TEXT NOT NULL,
+    source_comment TEXT NOT NULL DEFAULT '',
     lane TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
@@ -281,6 +282,9 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices(parent_device_
 const maintenanceCardColumns = new Set(db.pragma('table_info(maintenance_cards)').map((column) => column.name));
 if (!maintenanceCardColumns.has('report_number')) {
   db.exec("ALTER TABLE maintenance_cards ADD COLUMN report_number TEXT NOT NULL DEFAULT ''");
+}
+if (!maintenanceCardColumns.has('source_comment')) {
+  db.exec("ALTER TABLE maintenance_cards ADD COLUMN source_comment TEXT NOT NULL DEFAULT ''");
 }
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_maintenance_card_status ON maintenance_card_status_assignments(status_id, card_id)');
@@ -483,6 +487,7 @@ export function serializeMaintenanceCard(row, events = [], cardStatuses = [], ca
     sourceSheetName: row.source_sheet_name,
     sourceRowNumber: row.source_row_number,
     sourceStatus: row.source_status,
+    sourceComment: row.source_comment || '',
     lane: row.lane,
     cardStatuses,
     cardLabels,

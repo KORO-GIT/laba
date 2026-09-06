@@ -180,8 +180,9 @@ function renderSyncState() {
   node.classList.toggle('pending', sync.pending > 0 && !sync.failed);
 }
 
-function detailRow(term, value) {
+function detailRow(term, value, className = '') {
   const row = document.createElement('div');
+  if (className) row.className = className;
   row.append(el('dt', '', term), el('dd', '', value || '—'));
   return row;
 }
@@ -266,7 +267,7 @@ function renderOpenCard() {
     detailRow('Засіб', card.asset),
     detailRow('Номер борту', card.boardIdentifier),
     detailRow('Ідентифікатори', card.identifiers.join(' · ')),
-    detailRow('Джерело', `${card.sourceName} / ${card.sourceSheetName}, рядок ${card.sourceRowNumber}`)
+    detailRow('Коментар з Обліку', card.sourceComment, 'maintenance-source-comment')
   );
   const notes = document.querySelector('#card-notes');
   if (!state.cardDirty) notes.value = card.notes;

@@ -367,7 +367,8 @@ test('development server serves portal API and protected admin writes', async (c
   const repairRecord = {
     spreadsheetId: 'sheet-test', sheetId: 17, rowNumber: 4,
     sourceName: 'Nemesis', sheetName: 'Облік', asset: 'Nemesis',
-    boardIdentifier: '014', identifiers: ['014', 'KIT-UA-NM-014'], status: 'ТЕХНІЧНІ ПРОБЛЕМИ'
+    boardIdentifier: '014', identifiers: ['014', 'KIT-UA-NM-014'], status: 'ТЕХНІЧНІ ПРОБЛЕМИ',
+    sourceComment: 'Коментар пілота • 06.09.2026\nПошкоджено верхню кришку.'
   };
   const syncedRepair = await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [repairRecord] })
@@ -379,6 +380,16 @@ test('development server serves portal API and protected admin writes', async (c
   assert.equal(workshop.cards.length, 1);
   assert.equal(workshop.cards[0].boardIdentifier, '014');
   assert.equal(workshop.cards[0].lane, 'new');
+  assert.equal(workshop.cards[0].sourceComment, repairRecord.sourceComment);
+
+  const updatedSourceComment = `${repairRecord.sourceComment}\n\nКоментар пілота • 07.09.2026\nПотрібна повторна перевірка.`;
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [{ ...repairRecord, sourceComment: updatedSourceComment }] })
+  });
+  workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.equal(workshop.cards[0].sourceComment, updatedSourceComment);
+  assert.equal(workshop.cards[0].notes, '');
 
   const movedReady = await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}/move`, {
     method: 'POST',
