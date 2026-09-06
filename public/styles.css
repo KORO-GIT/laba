@@ -236,9 +236,31 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-title .eyebrow { margin: 0 0 4px; }
 .maintenance-title h1 { margin: 0; overflow: hidden; font-size: 24px; text-overflow: ellipsis; white-space: nowrap; }
 .maintenance-toolbar { min-height: 66px; display: flex; align-items: center; gap: 10px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
-.maintenance-search { width: min(420px, 44vw); display: flex; align-items: center; gap: 9px; padding-left: 12px; border: 1px solid var(--line); border-radius: 10px; background: #111310; }
-.maintenance-search > span { color: var(--muted); font-size: 20px; }
-.maintenance-search input { border: 0; padding-left: 0; box-shadow: none; }
+.maintenance-search {
+  width: min(420px, 44vw);
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 5px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #111310;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.maintenance-search:hover { border-color: var(--line-strong); }
+.maintenance-search:focus-within { border-color: rgba(242,100,48,.68); box-shadow: 0 0 0 3px rgba(242,100,48,.09); background: #141612; }
+.maintenance-search-icon { width: 17px; height: 17px; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.maintenance-search input { min-width: 0; height: 40px; border: 0; border-radius: 0; padding: 0; box-shadow: none; background: transparent; appearance: none; }
+.maintenance-search input:focus { border: 0; box-shadow: none; }
+.maintenance-search input::-webkit-search-cancel-button { display: none; }
+.maintenance-search-clear { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; padding: 0; color: var(--muted); background: transparent; cursor: pointer; transition: color .16s ease, background .16s ease, transform .16s ease; }
+.maintenance-search-clear[hidden] { display: none; }
+.maintenance-search-clear:hover { color: var(--ink); background: rgba(255,255,255,.07); }
+.maintenance-search-clear:active { transform: scale(.92); }
+.maintenance-search-clear:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 1px; }
+.maintenance-search-clear svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
 .maintenance-toolbar select { width: 210px; }
 .sync-state { margin-left: auto; color: var(--faint); font-size: 10px; white-space: nowrap; }
 .sync-state.pending { color: var(--accent-light); }

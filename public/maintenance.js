@@ -3,6 +3,7 @@ const board = document.querySelector('#maintenance-board');
 const dialog = document.querySelector('#card-dialog');
 const toast = document.querySelector('#toast');
 const search = document.querySelector('#search');
+const clearSearch = document.querySelector('#clear-search');
 const assetFilter = document.querySelector('#asset-filter');
 const state = { me: null, data: null, selectedId: null, notesDirty: false, dragging: null };
 
@@ -338,12 +339,36 @@ document.querySelector('#card-notes').addEventListener('input', () => {
   document.querySelector('#save-card').classList.add('unsaved');
 });
 document.querySelector('#save-card').addEventListener('click', saveCard);
-search.addEventListener('input', renderBoard);
+function syncSearchClearButton() {
+  clearSearch.hidden = search.value.length === 0;
+}
+
+function clearSearchValue() {
+  if (!search.value) return;
+  search.value = '';
+  syncSearchClearButton();
+  renderBoard();
+  search.focus();
+}
+
+search.addEventListener('input', () => {
+  syncSearchClearButton();
+  renderBoard();
+});
+search.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && search.value) {
+    event.preventDefault();
+    event.stopPropagation();
+    clearSearchValue();
+  }
+});
+clearSearch.addEventListener('click', clearSearchValue);
 assetFilter.addEventListener('change', renderBoard);
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !dialog.classList.contains('hidden')) closeCard(); });
 
 async function start() {
   try {
+    syncSearchClearButton();
     state.me = await api('/api/me');
     document.querySelector('#identity-name').textContent = state.me.displayName || state.me.email;
     await loadBoard();

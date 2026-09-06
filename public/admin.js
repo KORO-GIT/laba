@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.14.0';
+import { initDesktop } from './desktop.js?v=0.14.1';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');

@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.14.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.14.1">
 </head>
 <body class="maintenance-page">
   <div class="noise" aria-hidden="true"></div>
@@ -24,10 +24,16 @@
 
   <main>
     <section class="maintenance-toolbar">
-      <label class="maintenance-search">
-        <span aria-hidden="true">⌕</span>
-        <input id="search" type="search" autocomplete="off" placeholder="Пошук за засобом або номером борту">
-      </label>
+      <div class="maintenance-search" role="search">
+        <svg class="maintenance-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-4-4"></path>
+        </svg>
+        <input id="search" type="search" autocomplete="off" aria-label="Пошук за засобом або номером борту" placeholder="Пошук за засобом або номером борту">
+        <button id="clear-search" class="maintenance-search-clear" type="button" aria-label="Очистити пошук" title="Очистити пошук" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"></path></svg>
+        </button>
+      </div>
       <select id="asset-filter" aria-label="Фільтр за засобом"><option value="">Усі засоби</option></select>
       <span id="sync-state" class="sync-state">Синхронізація…</span>
     </section>
@@ -50,6 +56,6 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/maintenance.js?v=0.14.0"></script>
+  <script type="module" src="/assets/maintenance.js?v=0.14.1"></script>
 </body>
 </html>
