@@ -50,6 +50,58 @@ db.exec(`
     PRIMARY KEY (user_id, device_id)
   );
 
+  CREATE TABLE IF NOT EXISTS user_module_access (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    module TEXT NOT NULL CHECK (module IN ('workshop', 'service', 'devices')),
+    access_level TEXT NOT NULL CHECK (access_level IN ('viewer', 'operator', 'admin')),
+    PRIMARY KEY (user_id, module)
+  );
+
+  CREATE TABLE IF NOT EXISTS maintenance_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module TEXT NOT NULL CHECK (module IN ('workshop', 'service')),
+    source_key TEXT NOT NULL,
+    source_spreadsheet_id TEXT NOT NULL,
+    source_sheet_id INTEGER NOT NULL,
+    source_row_number INTEGER NOT NULL,
+    source_name TEXT NOT NULL,
+    source_sheet_name TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    board_identifier TEXT NOT NULL,
+    identifiers_json TEXT NOT NULL DEFAULT '[]',
+    source_status TEXT NOT NULL,
+    lane TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '',
+    last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    removed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (module, source_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS maintenance_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES maintenance_cards(id) ON DELETE CASCADE,
+    actor_email TEXT NOT NULL,
+    action TEXT NOT NULL,
+    from_lane TEXT,
+    to_lane TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS accounting_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL REFERENCES maintenance_cards(id) ON DELETE CASCADE,
+    target_status TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'applied', 'failed', 'cancelled')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    applied_at TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     actor_email TEXT NOT NULL,
@@ -62,6 +114,12 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_devices_enabled ON devices(enabled, sort_order);
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_module_access_user ON user_module_access(user_id, module);
+  CREATE INDEX IF NOT EXISTS idx_maintenance_board ON maintenance_cards(module, removed_at, lane, sort_order, id);
+  CREATE INDEX IF NOT EXISTS idx_maintenance_source ON maintenance_cards(source_spreadsheet_id, source_sheet_id, source_row_number);
+  CREATE INDEX IF NOT EXISTS idx_maintenance_events_card ON maintenance_events(card_id, id DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_accounting_outbox_pending
+    ON accounting_outbox(card_id, target_status) WHERE state = 'pending';
 `);
 
 const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => column.name));
@@ -90,6 +148,19 @@ db.prepare(`
   WHERE email = ? COLLATE NOCASE AND display_name = 'Владелец'
 `).run(config.bootstrapAdminEmail);
 
+db.prepare(`
+  INSERT OR IGNORE INTO user_module_access (user_id, module, access_level)
+  SELECT id, 'devices', role FROM users
+`).run();
+
+for (const module of ['workshop', 'service', 'devices']) {
+  db.prepare(`
+    INSERT INTO user_module_access (user_id, module, access_level)
+    SELECT id, ?, 'admin' FROM users WHERE email = ? COLLATE NOCASE
+    ON CONFLICT(user_id, module) DO UPDATE SET access_level = 'admin'
+  `).run(module, config.bootstrapAdminEmail);
+}
+
 const deviceCount = db.prepare('SELECT COUNT(*) AS count FROM devices').get().count;
 if (deviceCount === 0) {
   db.prepare(`
@@ -110,7 +181,12 @@ export const statements = {
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   touchUserLogin: db.prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?"),
   listUsers: db.prepare(`
-    SELECT u.*, COALESCE(GROUP_CONCAT(a.device_id || ':' || a.access_level), '') AS access_map
+    SELECT u.*, COALESCE(GROUP_CONCAT(a.device_id || ':' || a.access_level), '') AS access_map,
+      COALESCE((
+        SELECT GROUP_CONCAT(m.module || ':' || m.access_level)
+        FROM user_module_access m
+        WHERE m.user_id = u.id
+      ), '') AS module_access_map
     FROM users u
     LEFT JOIN user_device_access a ON a.user_id = u.id
     GROUP BY u.id
@@ -132,6 +208,32 @@ export const statements = {
   `),
   accessForUserAndDevice: db.prepare(`
     SELECT access_level FROM user_device_access WHERE user_id = ? AND device_id = ?
+  `),
+  moduleAccessForUser: db.prepare(`
+    SELECT module, access_level FROM user_module_access WHERE user_id = ?
+  `),
+  moduleAccessForUserAndModule: db.prepare(`
+    SELECT access_level FROM user_module_access WHERE user_id = ? AND module = ?
+  `),
+  maintenanceCardById: db.prepare('SELECT * FROM maintenance_cards WHERE id = ?'),
+  listMaintenanceCards: db.prepare(`
+    SELECT * FROM maintenance_cards
+    WHERE module = ? AND removed_at IS NULL
+    ORDER BY lane, sort_order, id
+  `),
+  listMaintenanceEvents: db.prepare(`
+    SELECT id, actor_email, action, from_lane, to_lane, created_at
+    FROM maintenance_events WHERE card_id = ? ORDER BY id DESC LIMIT ?
+  `),
+  pendingAccountingActions: db.prepare(`
+    SELECT o.id, o.card_id, o.target_status, o.attempts,
+      c.source_spreadsheet_id, c.source_sheet_id, c.source_row_number,
+      c.board_identifier, c.source_status
+    FROM accounting_outbox o
+    JOIN maintenance_cards c ON c.id = o.card_id
+    WHERE o.state = 'pending'
+    ORDER BY o.id
+    LIMIT ?
   `),
   listAudit: db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?'),
   insertAudit: db.prepare(`
@@ -159,6 +261,13 @@ export function serializeUser(row) {
       return { deviceId: Number(deviceId), level };
     });
 
+  const moduleAccess = Object.fromEntries(
+    String(row.module_access_map ?? '')
+      .split(',')
+      .filter(Boolean)
+      .map((entry) => entry.split(':'))
+  );
+
   return {
     id: row.id,
     email: row.email,
@@ -167,7 +276,30 @@ export function serializeUser(row) {
     enabled: Boolean(row.enabled),
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
-    access
+    access,
+    moduleAccess
+  };
+}
+
+export function serializeMaintenanceCard(row, events = []) {
+  let identifiers = [];
+  try { identifiers = JSON.parse(row.identifiers_json || '[]'); } catch {}
+  return {
+    id: row.id,
+    module: row.module,
+    asset: row.asset,
+    boardIdentifier: row.board_identifier,
+    identifiers,
+    sourceName: row.source_name,
+    sourceSheetName: row.source_sheet_name,
+    sourceRowNumber: row.source_row_number,
+    sourceStatus: row.source_status,
+    lane: row.lane,
+    sortOrder: row.sort_order,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    events
   };
 }
 

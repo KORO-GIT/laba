@@ -166,6 +166,7 @@ test('development server serves portal API and protected admin writes', async (c
       AUDIO_AGENT_TOKEN: 'test-audio-agent-token-with-at-least-32-characters',
       STARLINK_AGENT_URL: `http://127.0.0.1:${upstreamPort}`,
       STARLINK_AGENT_TOKEN: 'test-starlink-agent-token-with-at-least-32-characters',
+      ACCOUNTING_SYNC_TOKEN: 'test-accounting-sync-token-with-at-least-32-characters',
       DESKTOP_GATEWAY_URL: `http://127.0.0.1:${upstreamPort}`
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -191,6 +192,7 @@ test('development server serves portal API and protected admin writes', async (c
   const me = await fetch(`${root}/api/me`).then((response) => response.json());
   assert.equal(me.role, 'admin');
   assert.equal(me.displayName, 'Власник');
+  assert.deepEqual(me.modules, { workshop: 'admin', service: 'admin', devices: 'admin' });
 
   const novncModule = await fetch(`${root}/novnc/core/rfb.js?v=1.7.0`);
   assert.equal(novncModule.status, 200);
@@ -220,10 +222,16 @@ test('development server serves portal API and protected admin writes', async (c
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
     body: JSON.stringify({
-      email: 'viewer@test.local', displayName: 'Viewer', role: 'viewer', enabled: true, access: []
+      email: 'viewer@test.local', displayName: 'Viewer', role: 'viewer', enabled: true, access: [],
+      moduleAccess: { workshop: 'viewer', service: 'none', devices: 'none' }
     })
   });
   assert.equal(viewerCreated.status, 201);
+  const viewerHeaders = { 'X-Dev-User-Email': 'viewer@test.local' };
+  const viewerWorkshop = await fetch(`${root}/api/maintenance/workshop`, { headers: viewerHeaders });
+  assert.equal(viewerWorkshop.status, 200);
+  const viewerService = await fetch(`${root}/api/maintenance/service`, { headers: viewerHeaders });
+  assert.equal(viewerService.status, 403);
   const viewerDesktop = await websocketHandshake(
     port,
     `127.0.0.1:${port}`,
@@ -338,8 +346,66 @@ test('development server serves portal API and protected admin writes', async (c
   });
 
   const homepage = await fetch(root).then((response) => response.text());
-  assert.match(homepage, /Фільтри пристроїв/);
-  assert.doesNotMatch(homepage, /Уся лабораторія/);
+  assert.match(homepage, /id="module-grid"/);
+  assert.match(homepage, /Лабораторія/);
+
+  const devicePage = await fetch(`${root}/devices`).then((response) => response.text());
+  assert.match(devicePage, /Фільтри пристроїв/);
+
+  const modules = await fetch(`${root}/api/modules`).then((response) => response.json());
+  assert.deepEqual(modules.modules.map((module) => module.key), ['workshop', 'service', 'devices']);
+
+  const rejectedAccountingSync = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ records: [] })
+  });
+  assert.equal(rejectedAccountingSync.status, 403);
+
+  const accountingHeaders = {
+    'Content-Type': 'application/json',
+    'X-Laba-Sync-Token': 'test-accounting-sync-token-with-at-least-32-characters'
+  };
+  const repairRecord = {
+    spreadsheetId: 'sheet-test', sheetId: 17, rowNumber: 4,
+    sourceName: 'Nemesis', sheetName: 'Облік', asset: 'Nemesis',
+    boardIdentifier: '014', identifiers: ['014', 'KIT-UA-NM-014'], status: 'ТЕХНІЧНІ ПРОБЛЕМИ'
+  };
+  const syncedRepair = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [repairRecord] })
+  });
+  assert.equal(syncedRepair.status, 200);
+  assert.deepEqual((await syncedRepair.json()).actions, []);
+
+  let workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.equal(workshop.cards.length, 1);
+  assert.equal(workshop.cards[0].boardIdentifier, '014');
+  assert.equal(workshop.cards[0].lane, 'new');
+
+  const movedReady = await fetch(`${root}/api/maintenance/workshop/cards/${workshop.cards[0].id}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
+    body: JSON.stringify({ lane: 'ready', beforeCardId: null })
+  });
+  assert.equal(movedReady.status, 200);
+  assert.equal((await movedReady.json()).lane, 'ready');
+
+  const syncWithAction = await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [repairRecord] })
+  }).then((response) => response.json());
+  assert.equal(syncWithAction.actions.length, 1);
+  assert.equal(syncWithAction.actions[0].targetStatus, 'НА ОБЛІТ');
+
+  const ack = await fetch(`${root}/api/internal/accounting/ack`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ results: [{ id: syncWithAction.actions[0].id, success: true }] })
+  });
+  assert.equal(ack.status, 200);
+
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [{ ...repairRecord, status: 'НА ОБЛІТ' }] })
+  });
+  workshop = await fetch(`${root}/api/maintenance/workshop`).then((response) => response.json());
+  assert.equal(workshop.cards.length, 0);
 
   const devices = await fetch(`${root}/api/devices`).then((response) => response.json());
   assert.equal(devices.length, 1);

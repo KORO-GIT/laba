@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
   <title>LABA — адміністрування</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.13.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.14.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -17,7 +17,7 @@
     </a>
     <div class="identity">
       <span id="identity-name">Адміністратор</span>
-      <a class="button button-ghost" href="/">До пристроїв</a>
+      <a class="button button-ghost" href="/">До розділів</a>
     </div>
   </header>
 
@@ -335,9 +335,11 @@
           <div class="form-grid">
             <label class="field span-2"><span>E-mail</span><input id="user-email" required type="email" placeholder="name@example.com"></label>
             <label class="field"><span>Ім’я</span><input id="user-name" maxlength="80" placeholder="Олексій"></label>
-            <label class="field"><span>Роль</span><select id="user-role"><option value="viewer">Спостерігач</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option></select></label>
+            <label class="field"><span>Системна роль</span><select id="user-role"><option value="viewer">Спостерігач</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option></select></label>
             <label class="switch-row span-2"><input id="user-enabled" type="checkbox" checked><span class="switch"></span><span>Обліковий запис активний</span></label>
           </div>
+          <div class="access-heading"><h4>Доступ до розділів</h4><p>Рівень призначається окремо для кожного сервісу.</p></div>
+          <div id="user-module-access" class="access-list"></div>
           <div class="access-heading"><h4>Доступ до пристроїв</h4><p>Адміністратор завжди має повний доступ.</p></div>
           <div id="user-access" class="access-list"></div>
           <div class="form-actions"><button class="button button-primary" type="submit">Зберегти</button></div>
@@ -351,6 +353,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/admin.js?v=0.13.0"></script>
+  <script type="module" src="/assets/admin.js?v=0.14.0"></script>
 </body>
 </html>

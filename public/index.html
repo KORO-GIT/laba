@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
-  <title>LABA — центр пристроїв</title>
+  <title>LABA</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=0.7.0">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.14.0">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
   <header class="topbar shell">
     <a class="brand" href="/" aria-label="LABA — головна">
       <span class="brand-mark">L</span>
-      <span><strong>LABA</strong><small>КЕРУВАННЯ ПРИСТРОЯМИ</small></span>
+      <span><strong>LABA</strong><small>РОБОЧИЙ ПРОСТІР</small></span>
     </a>
     <div class="identity">
       <span class="live-dot" aria-hidden="true"></span>
@@ -22,35 +22,22 @@
     </div>
   </header>
 
-  <main class="shell">
-    <section class="toolbar" aria-label="Фільтри пристроїв">
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-filter="all" type="button">Усі</button>
-        <button class="tab" data-filter="printer" type="button">Принтери</button>
-        <button class="tab" data-filter="camera" type="button">Камери</button>
-      </div>
-      <button id="refresh" class="button button-ghost" type="button">Оновити</button>
+  <main class="shell module-home">
+    <section class="module-heading">
+      <p class="eyebrow">ОБЕРІТЬ РОЗДІЛ</p>
+      <h1>Лабораторія</h1>
     </section>
-
-    <section id="device-grid" class="device-catalog" aria-live="polite">
-      <div class="device-row">
-        <article class="device-card skeleton"></article>
-        <article class="device-card skeleton"></article>
-      </div>
+    <section id="module-grid" class="module-grid" aria-live="polite">
+      <article class="module-card skeleton"></article>
+      <article class="module-card skeleton"></article>
+      <article class="module-card skeleton"></article>
     </section>
-
-    <section id="empty-state" class="empty-state hidden">
-      <span class="empty-glyph">＋</span>
-      <h2>Тут поки порожньо</h2>
-      <p>Адміністратор може додати принтер або камеру в розділі керування.</p>
+    <section id="module-empty" class="empty-state hidden">
+      <h2>Немає доступних розділів</h2>
+      <p>Зверніться до головного адміністратора.</p>
     </section>
   </main>
-
-  <footer class="shell footer">
-    <span>LABA / ПРИВАТНА МЕРЕЖА</span>
-    <span>Захищено Cloudflare Access + Tailscale</span>
-  </footer>
   <div id="toast" class="toast" role="status"></div>
-  <script type="module" src="/assets/dashboard.js?v=0.7.0"></script>
+  <script type="module" src="/assets/home.js?v=0.14.0"></script>
 </body>
 </html>

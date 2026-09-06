@@ -24,6 +24,7 @@ export const config = {
   audioAgentToken: process.env.AUDIO_AGENT_TOKEN ?? '',
   starlinkAgentUrl: (process.env.STARLINK_AGENT_URL ?? '').replace(/\/$/, ''),
   starlinkAgentToken: process.env.STARLINK_AGENT_TOKEN ?? '',
+  accountingSyncToken: process.env.ACCOUNTING_SYNC_TOKEN ?? '',
   allowedSubnets: (process.env.ALLOWED_DEVICE_SUBNETS ?? '192.168.0.0/24')
     .split(',')
     .map((value) => value.trim())
@@ -60,6 +61,7 @@ export function validateConfig() {
     if (config.audioAgentToken.length < 32) missing.push('AUDIO_AGENT_TOKEN');
     if (!config.starlinkAgentUrl) missing.push('STARLINK_AGENT_URL');
     if (config.starlinkAgentToken.length < 32) missing.push('STARLINK_AGENT_TOKEN');
+    if (config.accountingSyncToken.length < 32) missing.push('ACCOUNTING_SYNC_TOKEN');
     if (missing.length) throw new Error(`Missing production settings: ${missing.join(', ')}`);
     const decoded = Buffer.from(config.deviceSecretKey, 'base64');
     if (decoded.length !== 32) throw new Error('DEVICE_SECRET_KEY must decode to exactly 32 bytes');

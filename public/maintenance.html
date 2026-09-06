@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+  <title>LABA</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css?v=0.14.0">
+</head>
+<body class="maintenance-page">
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar maintenance-topbar">
+    <a class="module-back" href="/" aria-label="До розділів">←</a>
+    <div class="maintenance-title">
+      <p class="eyebrow">LABA</p>
+      <h1 id="page-title">Завантаження…</h1>
+    </div>
+    <div class="identity">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="identity-name"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="maintenance-toolbar">
+      <label class="maintenance-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="search" type="search" autocomplete="off" placeholder="Пошук за засобом або номером борту">
+      </label>
+      <select id="asset-filter" aria-label="Фільтр за засобом"><option value="">Усі засоби</option></select>
+      <span id="sync-state" class="sync-state">Синхронізація…</span>
+    </section>
+
+    <section id="maintenance-board" class="maintenance-board" aria-live="polite"></section>
+  </main>
+
+  <div id="card-dialog" class="maintenance-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="card-title">
+    <div class="maintenance-dialog-backdrop" data-close-dialog></div>
+    <article class="maintenance-drawer">
+      <header class="drawer-heading">
+        <div><p id="card-status" class="eyebrow"></p><h2 id="card-title"></h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="Закрити">×</button>
+      </header>
+      <dl id="card-details" class="maintenance-details"></dl>
+      <label class="field maintenance-notes"><span>Примітки до роботи</span><textarea id="card-notes" rows="6" maxlength="4000" placeholder="Що перевірено, що потрібно зробити"></textarea></label>
+      <button id="save-card" class="button button-primary" type="button">Зберегти примітки</button>
+      <section class="maintenance-history"><h3>Історія картки</h3><div id="card-history"></div></section>
+    </article>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/assets/maintenance.js?v=0.14.0"></script>
+</body>
+</html>

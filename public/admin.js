@@ -1,4 +1,4 @@
-import { initDesktop } from './desktop.js?v=0.13.0';
+import { initDesktop } from './desktop.js?v=0.14.0';
 
 const state = { me: null, devices: [], users: [], audit: [], audio: null, starlink: null, starlinkMap: null };
 const toast = document.querySelector('#toast');
@@ -689,8 +689,38 @@ function renderAccess(user = null) {
   toggleAdminAccess();
 }
 
+function renderModuleAccess(user = null) {
+  const definitions = [
+    ['workshop', 'Майстерня', 'Огляд і ремонт бортів'],
+    ['service', 'Сервіс', 'Документи та гарантійне відправлення'],
+    ['devices', 'Пристрої', 'Принтери, камери й обладнання']
+  ];
+  const rows = definitions.map(([key, title, subtitle]) => {
+    const row = el('label', 'access-item');
+    const description = el('span');
+    description.append(el('strong', '', title), el('small', '', subtitle));
+    const select = el('select');
+    select.dataset.module = key;
+    [
+      ['none', 'Немає доступу'],
+      ['viewer', 'Перегляд'],
+      ['operator', 'Виконавець'],
+      ['admin', 'Адміністратор']
+    ].forEach(([value, label]) => {
+      const option = el('option', '', label);
+      option.value = value;
+      select.append(option);
+    });
+    select.value = user?.moduleAccess?.[key] || 'none';
+    select.disabled = Boolean(user?.primaryAdmin);
+    row.append(description, select);
+    return row;
+  });
+  document.querySelector('#user-module-access').replaceChildren(...rows);
+}
+
 function toggleAdminAccess() {
-  const isAdmin = document.querySelector('#user-role').value === 'admin';
+  const isAdmin = document.querySelector('#user-module-access select[data-module="devices"]')?.value === 'admin';
   document.querySelectorAll('#user-access select').forEach((select) => { select.disabled = isAdmin; });
 }
 
@@ -703,7 +733,11 @@ function editUser(user = null) {
   formValue('user-name', user?.displayName);
   formValue('user-role', user?.role || 'viewer');
   formValue('user-enabled', user ? user.enabled : true);
+  renderModuleAccess(user);
   renderAccess(user);
+  for (const id of ['user-email', 'user-role', 'user-enabled']) {
+    document.querySelector(`#${id}`).disabled = Boolean(user?.primaryAdmin);
+  }
   renderUsers(user?.id || 0);
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -712,12 +746,17 @@ function userPayload() {
   const access = [...document.querySelectorAll('#user-access select')]
     .filter((select) => select.value !== 'none')
     .map((select) => ({ deviceId: Number(select.dataset.deviceId), level: select.value }));
+  const moduleAccess = Object.fromEntries(
+    [...document.querySelectorAll('#user-module-access select')]
+      .map((select) => [select.dataset.module, select.value])
+  );
   return {
     email: document.querySelector('#user-email').value,
     displayName: document.querySelector('#user-name').value,
     role: document.querySelector('#user-role').value,
     enabled: document.querySelector('#user-enabled').checked,
-    access
+    access,
+    moduleAccess
   };
 }
 
@@ -802,6 +841,7 @@ document.querySelector('#test-device').addEventListener('click', testDevice);
 document.querySelector('#device-driver').addEventListener('change', () => toggleDeviceIntegration(true));
 document.querySelector('#device-kind').addEventListener('change', () => toggleDeviceIntegration(false));
 document.querySelector('#user-role').addEventListener('change', toggleAdminAccess);
+document.querySelector('#user-module-access').addEventListener('change', toggleAdminAccess);
 document.querySelector('#refresh-audit').addEventListener('click', () => loadAudit().then(() => showToast('Журнал оновлено')).catch((error) => showToast(error.message, true)));
 document.querySelector('#refresh-audio').addEventListener('click', () => loadAudio().then(() => showToast('Аудіостан оновлено')));
 document.querySelector('#bluetooth-power').addEventListener('change', async (event) => {

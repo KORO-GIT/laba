@@ -71,9 +71,12 @@ curl --fail --silent http://127.0.0.1:3020/healthz
 ```bash
 openssl rand -base64 48
 openssl rand -base64 32
+openssl rand -hex 32
 ```
 
-Перше значення — `SESSION_SECRET`, друге — `DEVICE_SECRET_KEY`. `BOOTSTRAP_ADMIN_EMAIL` має точно збігатися з e-mail Cloudflare Access.
+Перше значення — `SESSION_SECRET`, друге — `DEVICE_SECRET_KEY`, третє — `ACCOUNTING_SYNC_TOKEN`. `BOOTSTRAP_ADMIN_EMAIL` має точно збігатися з e-mail Cloudflare Access. Значення `ACCOUNTING_SYNC_TOKEN` записується також у root-only `labaWorkflowSync.token` конфігурації SignalSynch; його не передають браузеру, не виводять у лог і не комітять.
+
+SignalSynch звертається до `http://127.0.0.1:3020/api/internal/accounting`: під час оновлення кешу він надсилає поточні рядки `Обліку`, а потім забирає та підтверджує outbox-дії. Інтеграцію вмикають тільки після запуску оновленої LABA. Публічний маршрут у Caddy для неї не потрібний.
 
 Після запуску нові користувачі додаються лише через `/admin`: e-mail, роль і призначення пристроїв зберігаються в локальній базі. Access policy для кожного користувача змінювати не потрібно. One-time PIN підтверджує володіння e-mail, а локальний allowlist LABA залишається авторитетним рішенням щодо доступу.
 
@@ -92,6 +95,8 @@ systemctl is-active --quiet caddy
 ```
 
 ## Оновлення
+
+Версія `0.14.0` додає таблиці прав модулів, ремонтних карток, історії та accounting outbox. Перед першим запуском backup SQLite обов'язковий. Міграція виконується idempotent під час старту й не змінює наявні пристрої або їхні дозволи.
 
 Перед заміною коду:
 

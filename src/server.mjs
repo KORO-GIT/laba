@@ -1,4 +1,5 @@
 import httpProxy from 'http-proxy';
+import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
@@ -7,7 +8,14 @@ import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
 import { audioAgentRequest } from './audio-agent.mjs';
 import { config, validateConfig } from './config.mjs';
-import { audit, db, serializeDevice, serializeUser, statements } from './database.mjs';
+import {
+  audit,
+  db,
+  serializeDevice,
+  serializeMaintenanceCard,
+  serializeUser,
+  statements
+} from './database.mjs';
 import { clearProbeCache, probeDevice } from './probes.mjs';
 import {
   accessRank,
@@ -26,7 +34,7 @@ validateConfig();
 const app = Fastify({
   logger: { level: config.nodeEnv === 'production' ? 'info' : 'warn' },
   trustProxy: true,
-  bodyLimit: 128 * 1024
+  bodyLimit: 2 * 1024 * 1024
 });
 
 await app.register(cookie);
@@ -138,6 +146,95 @@ const printerCameraHlsPaths = new Map([
   ['/laba-camera/api/hls/segment.m4s', '/api/hls/segment.m4s']
 ]);
 
+const moduleDefinitions = {
+  workshop: {
+    title: 'Майстерня',
+    description: 'Огляд, ремонт і підготовка бортів до обльоту.',
+    lanes: [
+      { key: 'new', title: 'Нові' },
+      { key: 'inspection', title: 'На огляді' },
+      { key: 'repair', title: 'У ремонті' },
+      { key: 'postponed', title: 'Відкладено' },
+      { key: 'ready', title: 'Готово' }
+    ]
+  },
+  service: {
+    title: 'Сервіс',
+    description: 'Підготовка документів і відправлення на гарантійний сервіс.',
+    lanes: [
+      { key: 'new', title: 'Нові' },
+      { key: 'documents_preparing', title: 'Готуються документи' },
+      { key: 'documents_submitted', title: 'Документи подано' },
+      { key: 'awaiting_shipment', title: 'Очікує відправлення' },
+      { key: 'shipped', title: 'Відправлено' }
+    ]
+  },
+  devices: {
+    title: 'Пристрої',
+    description: 'Принтери, камери та обладнання лабораторії.'
+  }
+};
+
+const moduleKeys = Object.keys(moduleDefinitions);
+const moduleAccessLevels = ['viewer', 'operator', 'admin'];
+const workflowStatuses = new Map([
+  ['ПОТРЕБУЄ ОГЛЯДУ', 'workshop'],
+  ['ТЕХНІЧНІ ПРОБЛЕМИ', 'workshop'],
+  ['ПОТРЕБУЄ СЕРВІСУ', 'service']
+]);
+
+function normalizedStatus(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleUpperCase('uk-UA');
+}
+
+function moduleAccess(user, module) {
+  if (!moduleKeys.includes(module)) return 'none';
+  if (user.email.toLowerCase() === config.bootstrapAdminEmail) return 'admin';
+  return statements.moduleAccessForUserAndModule.get(user.id, module)?.access_level ?? 'none';
+}
+
+function moduleAccessMap(user) {
+  return Object.fromEntries(moduleKeys.map((module) => [module, moduleAccess(user, module)]));
+}
+
+function requireModule(module, minimum = 'viewer') {
+  return (request, reply, done) => {
+    if (accessRank(moduleAccess(request.portalUser, module)) < accessRank(minimum)) {
+      reply.code(403).send({ error: 'Немає доступу до цього розділу' });
+      return;
+    }
+    done();
+  };
+}
+
+function isInternalAccountingRequest(request) {
+  return requestUrl(request.url).pathname.startsWith('/api/internal/accounting/');
+}
+
+function isLoopbackAddress(value) {
+  const address = String(value ?? '').replace(/^::ffff:/, '');
+  return address === '127.0.0.1' || address === '::1';
+}
+
+function safeTokenEquals(actual, expected) {
+  const left = Buffer.from(String(actual ?? ''));
+  const right = Buffer.from(String(expected ?? ''));
+  return left.length > 0 && left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function requireAccountingSync(request, reply, done) {
+  const token = Array.isArray(request.headers['x-laba-sync-token'])
+    ? request.headers['x-laba-sync-token'][0]
+    : request.headers['x-laba-sync-token'];
+  if (!isLoopbackAddress(request.raw.socket.remoteAddress)
+    || config.accountingSyncToken.length < 32
+    || !safeTokenEquals(token, config.accountingSyncToken)) {
+    reply.code(403).send({ error: 'Доступ заборонено' });
+    return;
+  }
+  done();
+}
+
 function hlsSessionUpstreamUrl(url, upstreamPath) {
   const sessionIds = url.searchParams.getAll('id');
   if (sessionIds.length !== 1 || !/^[a-zA-Z0-9_-]{6,128}$/.test(sessionIds[0])) return null;
@@ -158,20 +255,21 @@ function requestUrl(value) {
 }
 
 function userAccessMap(user) {
-  if (user.role === 'admin') return null;
+  if (moduleAccess(user, 'devices') === 'admin') return null;
   return new Map(
     statements.accessForUser.all(user.id).map((row) => [row.device_id, row.access_level])
   );
 }
 
 function effectiveAccess(user, deviceId) {
-  if (user.role === 'admin') return 'admin';
+  const moduleLevel = moduleAccess(user, 'devices');
+  if (moduleLevel === 'admin') return 'admin';
   const device = statements.deviceById.get(deviceId);
   let grant = statements.accessForUserAndDevice.get(user.id, deviceId)?.access_level ?? 'none';
   if (grant === 'none' && device?.kind === 'camera' && device.parent_device_id) {
     grant = statements.accessForUserAndDevice.get(user.id, device.parent_device_id)?.access_level ?? 'none';
   }
-  const roleCap = user.role === 'operator' ? 'operator' : 'viewer';
+  const roleCap = moduleLevel;
   return accessRank(grant) < accessRank(roleCap) ? grant : roleCap;
 }
 
@@ -195,6 +293,15 @@ async function resolveUser(headers) {
 
 app.addHook('onRequest', async (request, reply) => {
   if (request.url === '/healthz' && isPortalHost(request.headers)) return;
+  if (isInternalAccountingRequest(request)) {
+    const token = Array.isArray(request.headers['x-laba-sync-token'])
+      ? request.headers['x-laba-sync-token'][0]
+      : request.headers['x-laba-sync-token'];
+    if (isLoopbackAddress(request.raw.socket.remoteAddress)
+      && config.accountingSyncToken.length >= 32
+      && safeTokenEquals(token, config.accountingSyncToken)) return;
+    return reply.code(403).send({ error: 'Доступ заборонено' });
+  }
   try {
     request.portalUser = await resolveUser(request.headers);
   } catch (error) {
@@ -314,7 +421,12 @@ const userSchema = z.object({
   access: z.array(z.object({
     deviceId: z.coerce.number().int().positive(),
     level: z.enum(['viewer', 'operator'])
-  })).optional().default([])
+  })).optional().default([]),
+  moduleAccess: z.object({
+    workshop: z.enum(['none', ...moduleAccessLevels]).optional().default('none'),
+    service: z.enum(['none', ...moduleAccessLevels]).optional().default('none'),
+    devices: z.enum(['none', ...moduleAccessLevels]).optional().default('none')
+  }).optional().default({ workshop: 'none', service: 'none', devices: 'none' })
 }).superRefine((user, context) => {
   const ids = user.access.map((grant) => grant.deviceId);
   if (new Set(ids).size !== ids.length) {
@@ -348,6 +460,35 @@ const starlinkPowerSaveSchema = z.object({
   durationMinutes: z.coerce.number().int().min(1).max(1440)
 }).strict();
 
+const maintenanceMoveSchema = z.object({
+  lane: z.string().trim().min(1).max(64),
+  beforeCardId: z.union([z.coerce.number().int().positive(), z.literal(null)]).optional().default(null)
+}).strict();
+const maintenanceEditSchema = z.object({
+  notes: z.string().trim().max(4000)
+}).strict();
+const accountingRecordSchema = z.object({
+  spreadsheetId: z.string().trim().min(1).max(160),
+  sheetId: z.coerce.number().int().min(0),
+  rowNumber: z.coerce.number().int().min(2).max(100000),
+  sourceName: z.string().trim().min(1).max(120),
+  sheetName: z.string().trim().min(1).max(120),
+  asset: z.string().trim().min(1).max(120),
+  boardIdentifier: z.string().trim().min(1).max(160),
+  identifiers: z.array(z.string().trim().min(1).max(240)).max(20).default([]),
+  status: z.string().trim().min(1).max(120)
+}).strict();
+const accountingSyncSchema = z.object({
+  records: z.array(accountingRecordSchema).max(10000)
+}).strict();
+const accountingAckSchema = z.object({
+  results: z.array(z.object({
+    id: z.coerce.number().int().positive(),
+    success: z.boolean(),
+    error: z.string().trim().max(500).optional().default('')
+  }).strict()).max(200)
+}).strict();
+
 function secretPayload(raw) {
   if (!raw) return null;
   try {
@@ -366,6 +507,17 @@ function replaceUserAccess(userId, access) {
   for (const grant of access) insert.run(userId, grant.deviceId, grant.level);
 }
 
+function replaceUserModuleAccess(userId, modulePermissions) {
+  db.prepare('DELETE FROM user_module_access WHERE user_id = ?').run(userId);
+  const insert = db.prepare(`
+    INSERT INTO user_module_access (user_id, module, access_level) VALUES (?, ?, ?)
+  `);
+  for (const module of moduleKeys) {
+    const level = modulePermissions[module] ?? 'none';
+    if (level !== 'none') insert.run(userId, module, level);
+  }
+}
+
 function accessDevicesExist(access) {
   const existingIds = new Set(statements.listDevices.all().map((device) => device.id));
   return access.every((grant) => existingIds.has(grant.deviceId));
@@ -375,12 +527,142 @@ function enabledAdminCount() {
   return db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND enabled = 1").get().count;
 }
 
+function adminUserPayload(row) {
+  return {
+    ...serializeUser(row),
+    primaryAdmin: row.email.toLowerCase() === config.bootstrapAdminEmail
+  };
+}
+
+function maintenanceDefinition(module) {
+  return ['workshop', 'service'].includes(module) ? moduleDefinitions[module] : null;
+}
+
+function maintenanceCardPayload(row) {
+  const events = statements.listMaintenanceEvents.all(row.id, 12).map((event) => ({
+    id: event.id,
+    actorEmail: event.actor_email,
+    action: event.action,
+    fromLane: event.from_lane,
+    toLane: event.to_lane,
+    createdAt: event.created_at
+  }));
+  return serializeMaintenanceCard(row, events);
+}
+
+function reorderMaintenanceLane(module, cardId, lane, beforeCardId) {
+  const rows = db.prepare(`
+    SELECT id FROM maintenance_cards
+    WHERE module = ? AND lane = ? AND removed_at IS NULL AND id != ?
+    ORDER BY sort_order, id
+  `).all(module, lane, cardId);
+  let targetIndex = rows.length;
+  if (beforeCardId) {
+    const index = rows.findIndex((row) => row.id === beforeCardId);
+    if (index >= 0) targetIndex = index;
+  }
+  rows.splice(targetIndex, 0, { id: cardId });
+  const update = db.prepare(`
+    UPDATE maintenance_cards SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `);
+  rows.forEach((row, index) => update.run((index + 1) * 100, row.id));
+}
+
+function synchronizeAccountingRecords(records) {
+  const normalized = records.map((record) => ({
+    ...record,
+    status: normalizedStatus(record.status),
+    module: workflowStatuses.get(normalizedStatus(record.status)) ?? null,
+    sourceKey: `${record.spreadsheetId}:${record.sheetId}:${record.rowNumber}`
+  }));
+  const uniqueKeys = new Set(normalized.map((record) => record.sourceKey));
+  if (uniqueKeys.size !== normalized.length) throw new Error('Синхронізація містить дублікати рядків');
+
+  const insert = db.prepare(`
+    INSERT INTO maintenance_cards (
+      module, source_key, source_spreadsheet_id, source_sheet_id, source_row_number,
+      source_name, source_sheet_name, asset, board_identifier, identifiers_json,
+      source_status, lane, sort_order, last_seen_at, removed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, CURRENT_TIMESTAMP, NULL)
+    ON CONFLICT(module, source_key) DO UPDATE SET
+      source_spreadsheet_id = excluded.source_spreadsheet_id,
+      source_sheet_id = excluded.source_sheet_id,
+      source_row_number = excluded.source_row_number,
+      source_name = excluded.source_name,
+      source_sheet_name = excluded.source_sheet_name,
+      asset = excluded.asset,
+      board_identifier = excluded.board_identifier,
+      identifiers_json = excluded.identifiers_json,
+      source_status = excluded.source_status,
+      lane = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN 'new' ELSE maintenance_cards.lane END,
+      sort_order = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.sort_order ELSE maintenance_cards.sort_order END,
+      last_seen_at = CURRENT_TIMESTAMP,
+      removed_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+  const retire = db.prepare(`
+    UPDATE maintenance_cards SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE source_key = ? AND module = ? AND removed_at IS NULL
+  `);
+
+  db.transaction(() => {
+    normalized.forEach((record, index) => {
+      for (const module of ['workshop', 'service']) {
+        if (record.module === module) {
+          insert.run(
+            module,
+            record.sourceKey,
+            record.spreadsheetId,
+            record.sheetId,
+            record.rowNumber,
+            record.sourceName,
+            record.sheetName,
+            record.asset,
+            record.boardIdentifier,
+            JSON.stringify([...new Set(record.identifiers)]),
+            record.status,
+            (index + 1) * 100
+          );
+        } else {
+          retire.run(record.sourceKey, module);
+        }
+      }
+    });
+  })();
+
+  return statements.pendingAccountingActions.all(200).map((row) => ({
+    id: row.id,
+    cardId: row.card_id,
+    targetStatus: row.target_status,
+    attempts: row.attempts,
+    source: {
+      spreadsheetId: row.source_spreadsheet_id,
+      sheetId: row.source_sheet_id,
+      rowNumber: row.source_row_number,
+      boardIdentifier: row.board_identifier,
+      currentStatus: row.source_status
+    }
+  }));
+}
+
 app.get('/healthz', async () => ({ ok: true, service: 'laba-portal' }));
 
 app.get('/', async (request, reply) => {
   if (!isPortalHost(request.headers)) return proxyHttp(request, reply);
   return reply.sendFile('index.html');
 });
+
+app.get('/devices', { preHandler: requireModule('devices') }, async (request, reply) => {
+  if (!isPortalHost(request.headers)) return proxyHttp(request, reply);
+  return reply.sendFile('devices.html');
+});
+
+for (const module of ['workshop', 'service']) {
+  app.get(`/${module}`, { preHandler: requireModule(module) }, async (request, reply) => {
+    if (!isPortalHost(request.headers)) return proxyHttp(request, reply);
+    return reply.sendFile('maintenance.html');
+  });
+}
 
 app.get('/admin', async (request, reply) => {
   if (request.portalUser.role !== 'admin') return reply.code(403).send({ error: 'Доступ заборонено' });
@@ -403,14 +685,21 @@ app.get('/api/me', async (request) => {
     email: request.portalUser.email,
     displayName: request.portalUser.display_name,
     role: request.portalUser.role,
+    modules: moduleAccessMap(request.portalUser),
     baseDomain: config.baseDomain
   };
 });
 
-app.get('/api/devices', async (request) => {
+app.get('/api/modules', async (request) => ({
+  modules: moduleKeys
+    .map((key) => ({ key, ...moduleDefinitions[key], access: moduleAccess(request.portalUser, key) }))
+    .filter((module) => module.access !== 'none')
+}));
+
+app.get('/api/devices', { preHandler: requireModule('devices') }, async (request) => {
   const rows = statements.listDevices.all().filter((device) => device.enabled);
   const grants = userAccessMap(request.portalUser);
-  const visible = request.portalUser.role === 'admin'
+  const visible = moduleAccess(request.portalUser, 'devices') === 'admin'
     ? rows
     : rows.filter((device) => grants.has(device.id)
       || (device.kind === 'camera' && device.parent_device_id && grants.has(device.parent_device_id)));
@@ -425,6 +714,167 @@ app.get('/api/devices', async (request) => {
       status: await probeDevice(device)
     };
   }));
+});
+
+app.get('/api/maintenance/:module', async (request, reply) => {
+  const module = String(request.params.module || '');
+  const definition = maintenanceDefinition(module);
+  if (!definition) return reply.code(404).send({ error: 'Розділ не знайдено' });
+  const access = moduleAccess(request.portalUser, module);
+  if (accessRank(access) < accessRank('viewer')) {
+    return reply.code(403).send({ error: 'Немає доступу до цього розділу' });
+  }
+  const cards = statements.listMaintenanceCards.all(module).map(maintenanceCardPayload);
+  const sync = db.prepare(`
+    SELECT MAX(last_seen_at) AS last_sync_at FROM maintenance_cards WHERE module = ?
+  `).get(module);
+  const outbox = db.prepare(`
+    SELECT
+      SUM(CASE WHEN state = 'pending' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN state = 'failed' THEN 1 ELSE 0 END) AS failed
+    FROM accounting_outbox o
+    JOIN maintenance_cards c ON c.id = o.card_id
+    WHERE c.module = ?
+  `).get(module);
+  return {
+    module,
+    title: definition.title,
+    description: definition.description,
+    lanes: definition.lanes,
+    access,
+    canEdit: accessRank(access) >= accessRank('operator'),
+    cards,
+    sync: {
+      lastAt: sync.last_sync_at,
+      pending: Number(outbox.pending || 0),
+      failed: Number(outbox.failed || 0)
+    }
+  };
+});
+
+app.post('/api/maintenance/:module/cards/:id/move', {
+  preHandler: guardWrite,
+  config: { rateLimit: { max: 120, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const module = String(request.params.module || '');
+  const definition = maintenanceDefinition(module);
+  if (!definition) return reply.code(404).send({ error: 'Розділ не знайдено' });
+  if (accessRank(moduleAccess(request.portalUser, module)) < accessRank('operator')) {
+    return reply.code(403).send({ error: 'Потрібні права виконавця' });
+  }
+  const card = statements.maintenanceCardById.get(Number(request.params.id));
+  if (!card || card.module !== module || card.removed_at) {
+    return reply.code(404).send({ error: 'Картку не знайдено' });
+  }
+  const body = parseOrReply(maintenanceMoveSchema, request.body, reply);
+  if (!body) return;
+  const laneKeys = new Set(definition.lanes.map((lane) => lane.key));
+  if (!laneKeys.has(body.lane)) return reply.code(400).send({ error: 'Невідома колонка' });
+  if (body.beforeCardId) {
+    const before = statements.maintenanceCardById.get(body.beforeCardId);
+    if (!before || before.module !== module || before.lane !== body.lane || before.removed_at) {
+      return reply.code(400).send({ error: 'Некоректне місце картки' });
+    }
+  }
+
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE maintenance_cards SET lane = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(body.lane, card.id);
+    reorderMaintenanceLane(module, card.id, body.lane, body.beforeCardId);
+    if (card.lane !== body.lane) {
+      db.prepare(`
+        INSERT INTO maintenance_events (card_id, actor_email, action, from_lane, to_lane)
+        VALUES (?, ?, 'lane.change', ?, ?)
+      `).run(card.id, request.portalUser.email, card.lane, body.lane);
+    }
+    if (module === 'workshop' && body.lane === 'ready') {
+      db.prepare(`
+        INSERT OR IGNORE INTO accounting_outbox (card_id, target_status)
+        VALUES (?, 'НА ОБЛІТ')
+      `).run(card.id);
+    }
+    if (module === 'workshop' && card.lane === 'ready' && body.lane !== 'ready') {
+      db.prepare(`
+        UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
+        WHERE card_id = ? AND target_status = 'НА ОБЛІТ' AND state = 'pending'
+      `).run(card.id);
+    }
+  })();
+  audit(request.portalUser.email, 'maintenance.move', 'maintenance-card', card.id, {
+    module, from: card.lane, to: body.lane
+  });
+  return maintenanceCardPayload(statements.maintenanceCardById.get(card.id));
+});
+
+app.patch('/api/maintenance/:module/cards/:id', {
+  preHandler: guardWrite,
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const module = String(request.params.module || '');
+  if (!maintenanceDefinition(module)) return reply.code(404).send({ error: 'Розділ не знайдено' });
+  if (accessRank(moduleAccess(request.portalUser, module)) < accessRank('operator')) {
+    return reply.code(403).send({ error: 'Потрібні права виконавця' });
+  }
+  const card = statements.maintenanceCardById.get(Number(request.params.id));
+  if (!card || card.module !== module || card.removed_at) {
+    return reply.code(404).send({ error: 'Картку не знайдено' });
+  }
+  const body = parseOrReply(maintenanceEditSchema, request.body, reply);
+  if (!body) return;
+  db.prepare(`
+    UPDATE maintenance_cards SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(body.notes, card.id);
+  db.prepare(`
+    INSERT INTO maintenance_events (card_id, actor_email, action) VALUES (?, ?, 'notes.update')
+  `).run(card.id, request.portalUser.email);
+  audit(request.portalUser.email, 'maintenance.update', 'maintenance-card', card.id, { module });
+  return maintenanceCardPayload(statements.maintenanceCardById.get(card.id));
+});
+
+app.post('/api/internal/accounting/sync', {
+  preHandler: requireAccountingSync,
+  config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(accountingSyncSchema, request.body, reply);
+  if (!body) return;
+  try {
+    const actions = synchronizeAccountingRecords(body.records);
+    return { ok: true, received: body.records.length, actions };
+  } catch (error) {
+    return reply.code(400).send({ error: error.message });
+  }
+});
+
+app.post('/api/internal/accounting/ack', {
+  preHandler: requireAccountingSync,
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+}, async (request, reply) => {
+  const body = parseOrReply(accountingAckSchema, request.body, reply);
+  if (!body) return;
+  const find = db.prepare("SELECT * FROM accounting_outbox WHERE id = ? AND state = 'pending'");
+  const applied = db.prepare(`
+    UPDATE accounting_outbox
+    SET state = 'applied', attempts = attempts + 1, last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP, applied_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND state = 'pending'
+  `);
+  const failed = db.prepare(`
+    UPDATE accounting_outbox
+    SET state = CASE WHEN attempts + 1 >= 10 THEN 'failed' ELSE 'pending' END,
+      attempts = attempts + 1, last_error = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND state = 'pending'
+  `);
+  let accepted = 0;
+  db.transaction(() => {
+    for (const result of body.results) {
+      if (!find.get(result.id)) continue;
+      if (result.success) applied.run(result.id);
+      else failed.run(result.error || 'Помилка синхронізації', result.id);
+      accepted += 1;
+    }
+  })();
+  return { ok: true, accepted };
 });
 
 app.get('/api/admin/devices', { preHandler: requireAdmin }, async () =>
@@ -500,7 +950,7 @@ app.post('/api/admin/devices/:id/test', {
 });
 
 app.get('/api/admin/users', { preHandler: requireAdmin }, async () =>
-  statements.listUsers.all().map(serializeUser)
+  statements.listUsers.all().map(adminUserPayload)
 );
 
 app.post('/api/admin/users', {
@@ -517,12 +967,13 @@ app.post('/api/admin/users', {
         INSERT INTO users (email, display_name, role, enabled) VALUES (?, ?, ?, ?)
       `).run(body.email, body.displayName, body.role, body.enabled ? 1 : 0);
       replaceUserAccess(Number(result.lastInsertRowid), body.access);
+      replaceUserModuleAccess(Number(result.lastInsertRowid), body.moduleAccess);
       audit(request.portalUser.email, 'user.create', 'user', result.lastInsertRowid, {
         email: body.email,
         role: body.role
       });
     })();
-    return reply.code(201).send(serializeUser(
+    return reply.code(201).send(adminUserPayload(
       statements.listUsers.all().find((row) => row.id === Number(result.lastInsertRowid))
     ));
   } catch (error) {
@@ -541,6 +992,15 @@ app.patch('/api/admin/users/:id', {
   const body = parseOrReply(userSchema, request.body, reply);
   if (!body) return;
   if (!accessDevicesExist(body.access)) return reply.code(400).send({ error: 'Один із пристроїв не існує' });
+  const isBootstrapAdmin = existing.email.toLowerCase() === config.bootstrapAdminEmail;
+  if (isBootstrapAdmin && (
+    body.email !== config.bootstrapAdminEmail
+    || body.role !== 'admin'
+    || !body.enabled
+    || moduleKeys.some((module) => body.moduleAccess[module] !== 'admin')
+  )) {
+    return reply.code(409).send({ error: 'Головний адміністратор повинен мати повний доступ до всіх розділів' });
+  }
   const removesAdmin = existing.role === 'admin' && existing.enabled && (body.role !== 'admin' || !body.enabled);
   if (removesAdmin && enabledAdminCount() <= 1) {
     return reply.code(409).send({ error: 'Не можна вимкнути останнього адміністратора' });
@@ -555,13 +1015,14 @@ app.patch('/api/admin/users/:id', {
         WHERE id = ?
       `).run(body.email, body.displayName, body.role, body.enabled ? 1 : 0, userId);
       replaceUserAccess(userId, body.access);
+      replaceUserModuleAccess(userId, body.moduleAccess);
     })();
   } catch (error) {
     if (String(error.message).includes('UNIQUE')) return reply.code(409).send({ error: 'Користувач із таким e-mail уже існує' });
     throw error;
   }
   audit(request.portalUser.email, 'user.update', 'user', userId, { email: body.email, role: body.role });
-  return serializeUser(statements.listUsers.all().find((row) => row.id === userId));
+  return adminUserPayload(statements.listUsers.all().find((row) => row.id === userId));
 });
 
 app.get('/api/admin/audit', { preHandler: requireAdmin }, async (request) => {
