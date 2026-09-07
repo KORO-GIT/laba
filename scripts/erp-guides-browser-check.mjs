@@ -36,6 +36,8 @@ try{
   await page.getByLabel('Що зробити',{exact:true}).fill(stepText);
   await page.getByRole('button',{name:'Зберегти чернетку',exact:true}).click();
   await page.getByText('Чернетку збережено. Тепер можна додавати фото.',{exact:true}).waitFor();
+  // The save message precedes refreshing the list; wait for finally() to unlock the form.
+  await page.waitForFunction(()=>document.querySelector('input[type=file]')?.disabled===false);
   assert.equal(await page.locator('input[type=file]').isDisabled(),false);
   const created=(await api('guides?scope=draft')).items[0];assert.ok(created);
   assert.equal((await api('guides',undefined,'worker@example.test')).count,0);

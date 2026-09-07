@@ -2,6 +2,8 @@
 
 ## Новіше уточнення: UI spacing hotfix вже production
 
+Після cherry-pick73983c3: clean npm ci/check,7guideAPI tests та повний guide browser regression пройшли. Browser test тепер чекає фактичного розблокування upload після refresh списку: повідомлення про save з'являється раніше за finally(), тому миттєва перевірка disabled давала race. Змінено лише очікування тесту, не поведінку форми. Інтеграція відступів не забрала draft/published/фото/ACL.
+
 2026-09-07 22:06:28UTC розгорнуто окремий hotfixc607018 (`0.26.2-spacing1`) — тільки4 статичні assets поверх backend8670895; не повний deployment0.27.0. Сервіс не перезапускався, дані/норми не змінені. Backup `/opt/laba/backups/portal-20260907-2206-before-spacing1.db` root600, originals4assets `/opt/laba/backups/ui-spacing-c607018/` root-only700. main=c607018+docs4ad79b0, push підтверджено. Матеріали browser:8empty/filled desktop/mobile dark/light alignment cases,150-unit workflow; notifications regression пройшли.
 
 Hotfix cherry-pick перенесений у цю гілку зі збереженням `createGuideUI` та всіхguideфайлів; HTMLmainJS tag `0.27.0-spacing1`, materialsCSS/importtag `0.26.2-spacing1`. Старий stageda481f5e застарів: наступний release зібрати з актуальної feature-гілки після інтеграції origin/main, не затерти чотири нові productionassets. Main і feature мають різну історію, тому перед майбутнім merge перевірити ancestry/конфлікти, безforce/reset. Нижчий checkpoint описує первісну заблоковану спробу0.27.0; актуальні productionфакти мають пріоритет. Бібліотека інструкцій ще НЕ production.
