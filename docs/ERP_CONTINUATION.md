@@ -1,5 +1,11 @@
 # Продовження ERP з іншого ПК
 
+## Новіше уточнення: UI spacing hotfix вже production
+
+2026-09-07 22:06:28UTC розгорнуто окремий hotfixc607018 (`0.26.2-spacing1`) — тільки4 статичні assets поверх backend8670895; не повний deployment0.27.0. Сервіс не перезапускався, дані/норми не змінені. Backup `/opt/laba/backups/portal-20260907-2206-before-spacing1.db` root600, originals4assets `/opt/laba/backups/ui-spacing-c607018/` root-only700. main=c607018+docs4ad79b0, push підтверджено. Матеріали browser:8empty/filled desktop/mobile dark/light alignment cases,150-unit workflow; notifications regression пройшли.
+
+Hotfix cherry-pick перенесений у цю гілку зі збереженням `createGuideUI` та всіхguideфайлів; HTMLmainJS tag `0.27.0-spacing1`, materialsCSS/importtag `0.26.2-spacing1`. Старий stageda481f5e застарів: наступний release зібрати з актуальної feature-гілки після інтеграції origin/main, не затерти чотири нові productionassets. Main і feature мають різну історію, тому перед майбутнім merge перевірити ancestry/конфлікти, безforce/reset. Нижчий checkpoint описує первісну заблоковану спробу0.27.0; актуальні productionфакти мають пріоритет. Бібліотека інструкцій ще НЕ production.
+
 ## Checkpoint0.27.0 · бібліотека інструкцій
 
 Гілка `codex/erp-instructions` від clean `origin/main=f55226b`. Запит власника: кнопка корисних матеріалів для майстрів, адміністратор додає інструкції з картинками. Реалізовано окрему бібліотеку `guides` з пошуком/24 на сторінку, кроками/фото, редактором та переглядом у dark/light/mobile. Draft окремий від published, архів без видалення, optimistic version409 зі збереженням введеного. Повний workflow, schema/upload boundaries, backup/rollback, обмеження та перевірки — `ERP_GUIDES.md`.
