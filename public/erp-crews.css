@@ -1,0 +1,23 @@
+.crew-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.crew-body { padding:22px; display:flex; flex-direction:column; gap:14px; }
+.crew-body .actions { margin-top:auto; }
+.crew-members { display:flex; flex-wrap:wrap; gap:8px; }
+.crew-chip { padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2); font-size:12px; }
+.crew-tag { display:flex; align-items:center; gap:8px; color:var(--accent); font-size:12px; margin:12px 0; }
+.crew-tag svg { width:18px; height:18px; flex-shrink:0; }
+.crew-contributors { display:grid; gap:10px; margin:16px 0; }
+.crew-contributors > div { padding:10px 12px; border:1px solid var(--line); border-radius:9px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:12px; }
+.crew-contributors small { width:100%; color:var(--muted); overflow-wrap:anywhere; }
+.crew-picker { border:1px solid var(--line); padding:12px; border-radius:10px; margin:0 0 20px; }
+.crew-picker legend { font-size:13px; padding:0 8px; }
+.crew-picker label { display:flex; align-items:center; gap:12px; min-height:46px; cursor:pointer; }
+.crew-picker input { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; }
+.task-bottom .actions { flex-wrap:wrap; }
+.task-bottom .task-timer { line-height:1.6; white-space:normal; }
+@media(max-width:900px) { .crew-grid { grid-template-columns:1fr; } }
+@media(max-width:760px) {
+  .crew-body { padding:18px; }
+  .crew-body .button { flex:1; }
+  body .task-bottom .button { flex:1 1 140px; white-space:normal; }
+  body .crew-picker label { min-height:48px; }
+}

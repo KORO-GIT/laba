@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { migrateCrews, createCrewFeatures } from './erp-crews.mjs';
 
 export function migrateErp(db) {
   db.transaction(() => {
@@ -114,6 +115,7 @@ export function migrateErp(db) {
     `);
     if (!db.pragma('table_info(erp_orders)').some(column=>column.name==='version')) db.exec('ALTER TABLE erp_orders ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
     db.prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)').run('erp_v1');
+    migrateCrews(db);
   }).immediate();
 }
 
@@ -144,8 +146,9 @@ export function createErp(db) {
   };
   const version = (row, expected) => { if (row.version !== expected) fail(409, 'Запис уже змінився. Оновіть дані та повторіть дію.'); };
   const activeShift = (userId) => get('SELECT * FROM erp_shifts WHERE user_id=? AND ended_at IS NULL', userId);
-  const canWorkUnit = (user, id) => manages(user) || Boolean(get('SELECT id FROM erp_tasks WHERE unit_id=? AND assigned_to=?', id, user.id));
+  const canWorkUnit = (user, id) => manages(user) || Boolean(get(`SELECT t.id FROM erp_tasks t WHERE t.unit_id=? AND ((t.crew_id IS NULL AND t.assigned_to=?) OR EXISTS(SELECT 1 FROM erp_crew_members m JOIN erp_crews c ON c.id=m.crew_id WHERE m.crew_id=t.crew_id AND m.user_id=? AND c.archived=0))`, id, user.id, user.id));
   const stopTimer = (taskId, time) => run('UPDATE erp_time_entries SET ended_at=MAX(started_at,MIN(?,(SELECT started_at+? FROM erp_shifts WHERE id=shift_id))) WHERE task_id=? AND ended_at IS NULL', time, MAX_SHIFT_MS, taskId);
+  const crews = createCrewFeatures({ db,get,all,run,insert,entity,version,role,requireRole,manages,event,fail,now,activeShift,maxShiftMs:MAX_SHIFT_MS });
 
   function command(user, requestId, path, body, work) {
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify([path, body])).digest('hex');
@@ -177,10 +180,10 @@ export function createErp(db) {
   }
 
   const taskSelect = `SELECT t.*, u.serial, u.state AS unit_state, u.order_id, o.title AS order_title, o.model, o.priority, o.due_date,
-    COALESCE(p.display_name,p.email,'Не призначено') AS assignee,
+    COALESCE(p.display_name,p.email,g.name,'Не призначено') AS assignee, g.name AS crew_name,
     COALESCE((SELECT SUM(MAX(0,COALESCE(e.ended_at,MIN(?,s.started_at+${MAX_SHIFT_MS}))-e.started_at)) FROM erp_time_entries e JOIN erp_shifts s ON s.id=e.shift_id WHERE e.task_id=t.id),0) AS elapsed_ms,
     (SELECT COUNT(*) FROM erp_tasks prev WHERE prev.unit_id=t.unit_id AND prev.sequence<t.sequence AND prev.state!='done') AS waiting_for
-    FROM erp_tasks t JOIN erp_units u ON u.id=t.unit_id JOIN erp_orders o ON o.id=u.order_id LEFT JOIN users p ON p.id=t.assigned_to`;
+    FROM erp_tasks t JOIN erp_units u ON u.id=t.unit_id JOIN erp_orders o ON o.id=u.order_id LEFT JOIN users p ON p.id=t.assigned_to LEFT JOIN erp_crews g ON g.id=t.crew_id`;
   const serializeTask = (t) => ({ ...t, unit_code: unitCode(t.unit_id), order_code: orderCode(t.order_id) });
 
   function orderDetail(user, id) {
@@ -190,7 +193,7 @@ export function createErp(db) {
     return {
       ...order, code: orderCode(id), steps: JSON.parse(order.steps_json),
       units: all('SELECT * FROM erp_units WHERE order_id=? ORDER BY id', id).map(u => ({ ...u, code: unitCode(u.id) })),
-      tasks: all(`${taskSelect} WHERE u.order_id=? ORDER BY u.id,t.sequence`, now(), id).map(serializeTask),
+      tasks: all(`${taskSelect} WHERE u.order_id=? ORDER BY u.id,t.sequence`, now(), id).map(t=>serializeTask(crews.decorateTask(t,user))),
       receipts: all('SELECT * FROM erp_receipts WHERE order_id=? ORDER BY id DESC', id),
       deliveries: all('SELECT d.*,COUNT(du.unit_id) AS quantity FROM erp_deliveries d JOIN erp_delivery_units du ON du.delivery_id=d.id WHERE d.order_id=? GROUP BY d.id ORDER BY d.id DESC', id),
       quality: all('SELECT q.*,u.display_name AS actor FROM erp_quality_checks q JOIN erp_units v ON v.id=q.unit_id JOIN users u ON u.id=q.actor_id WHERE v.order_id=? ORDER BY q.id DESC', id)
@@ -209,10 +212,11 @@ export function createErp(db) {
     return all(`SELECT u.id,u.display_name,u.email,u.enabled,COALESCE(m.role,'none') AS erp_role,u.role AS portal_role,
       (SELECT COUNT(*) FROM erp_tasks WHERE assigned_to=u.id AND state!='done') AS assigned,
       (SELECT COUNT(*) FROM erp_events WHERE actor_id=u.id AND action='task.complete') AS completed,
+      (SELECT COUNT(*) FROM erp_events WHERE actor_id=u.id AND action='task.finish_part') AS contributions,
       (SELECT COUNT(*) FROM erp_tasks WHERE assigned_to=u.id AND state='blocked') AS blocked
       FROM users u LEFT JOIN erp_members m ON m.user_id=u.id ORDER BY u.display_name,u.id`).map(u => {
         const shift = activeShift(u.id);
-        const current = get(`${taskSelect} WHERE t.assigned_to=? AND t.state='in_progress'`, now(), u.id);
+        const current = get(`${taskSelect} WHERE t.id=(SELECT e.task_id FROM erp_time_entries e WHERE e.user_id=? AND e.ended_at IS NULL)`, now(), u.id);
         const workMs = get(`SELECT COALESCE(SUM(MAX(0,COALESCE(e.ended_at,MIN(?,s.started_at+?))-e.started_at)),0) AS ms FROM erp_time_entries e JOIN erp_shifts s ON s.id=e.shift_id WHERE e.user_id=?`, now(), MAX_SHIFT_MS, u.id).ms;
         return { ...u, erp_role: u.portal_role === 'admin' ? 'admin' : u.erp_role, shift, current: current ? serializeTask(current) : null, work_ms: workMs };
       });
@@ -238,16 +242,18 @@ export function createErp(db) {
     const taskState=query.taskState||'all';
     const taskPage=query.page||0;
     const needle=(query.q||'').toLocaleLowerCase('uk-UA');
-    const where=`t.assigned_to=? AND (?='all' OR (?='open' AND t.state!='done') OR t.state=?)
+    const personal=`(t.assigned_to=? OR t.id IN (SELECT p.task_id FROM erp_task_participants p JOIN erp_tasks own ON own.id=p.task_id JOIN erp_crew_members m ON m.crew_id=own.crew_id JOIN erp_crews c ON c.id=own.crew_id WHERE p.user_id=? AND m.user_id=? AND own.work_mode='shared' AND p.work_round=own.work_round AND c.archived=0))`;
+    const where=`${personal} AND (?='all' OR (?='open' AND t.state!='done') OR t.state=?)
       AND instr(erp_casefold(COALESCE(u.serial,'')||' '||t.title||' '||o.title||' '||o.model||' LB-'||printf('%06d',u.id)),?)>0`;
-    const taskArgs=[user.id,taskState,taskState,taskState,needle];
+    const taskArgs=[user.id,user.id,user.id,taskState,taskState,taskState,needle];
     const taskCount=get(`SELECT COUNT(*) AS count FROM erp_tasks t JOIN erp_units u ON u.id=t.unit_id JOIN erp_orders o ON o.id=u.order_id WHERE ${where}`,...taskArgs).count;
     const result = {
       me: { id: user.id, name: user.display_name || user.email, role: access }, serverTime: now(),
       shifts: shifts(user.id),
+      crews: ['admin','manager','technician','observer'].includes(access) ? crews.listCrews(user) : [],
       myTaskCount:taskCount, myTaskPage:taskPage, myTaskPageSize:50,
-      myTaskCounts:get("SELECT COUNT(*) AS total,COALESCE(SUM(state!='done'),0) AS open,COALESCE(SUM(state='done'),0) AS done,COALESCE(SUM(state='blocked'),0) AS blocked FROM erp_tasks WHERE assigned_to=?",user.id),
-      myTasks: all(`${taskSelect} WHERE ${where} ORDER BY CASE t.state WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 WHEN 'paused' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END,CASE o.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,o.due_date IS NULL,o.due_date,t.id LIMIT 50 OFFSET ?`, now(),...taskArgs,taskPage*50).map(serializeTask)
+      myTaskCounts:get(`SELECT COUNT(*) AS total,COALESCE(SUM(state!='done'),0) AS open,COALESCE(SUM(state='done'),0) AS done,COALESCE(SUM(state='blocked'),0) AS blocked FROM erp_tasks t WHERE ${personal}`,user.id,user.id,user.id),
+      myTasks: all(`${taskSelect} WHERE ${where} ORDER BY CASE t.state WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 WHEN 'paused' THEN 2 WHEN 'pending' THEN 3 ELSE 4 END,CASE o.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,o.due_date IS NULL,o.due_date,t.id LIMIT 50 OFFSET ?`, now(),...taskArgs,taskPage*50).map(t=>serializeTask(crews.decorateTask(t,user)))
     };
     if (access !== 'technician') {
       result.orders = listOrders();
@@ -268,6 +274,18 @@ export function createErp(db) {
   function taskAction(user, id, body) {
     requireRole(user, ['admin','manager','technician']);
     const task = entity('erp_tasks', id);
+    if (task.crew_id && !crews.member(task.crew_id,user.id) && !(task.work_mode==='shared' && body.action==='complete' && manages(user))) fail(403,'Ви не входите до цієї робочої команди');
+    if (task.work_mode==='pool' && task.assigned_to===null && body.action==='start') {
+      version(task,body.version);
+      run('UPDATE erp_tasks SET assigned_to=? WHERE id=?',user.id,id);
+      task.assigned_to=user.id;
+    }
+    if (task.work_mode==='shared') {
+      version(task,body.version);
+      if (['ready','delivered'].includes(entity('erp_units',task.unit_id).state)) fail(409,'Виріб уже пройшов контроль або виданий');
+      return crews.sharedAction(user,task,body);
+    }
+    if (body.action==='finish_part') fail(400,'Дія доступна лише для спільної операції');
     if (task.assigned_to !== user.id) fail(403, 'Дія доступна лише призначеному майстру');
     version(task, body.version);
     const unit = entity('erp_units', task.unit_id);
@@ -277,11 +295,11 @@ export function createErp(db) {
       if (!['pending','paused','blocked'].includes(task.state)) fail(409, 'Роботу вже розпочато або завершено');
       const shift = activeShift(user.id);
       if (!shift || shift.state !== 'active' || time - shift.started_at >= MAX_SHIFT_MS) fail(409, 'Спочатку розпочніть активну зміну. Зміна понад 16 годин потребує закриття.');
-      if (get("SELECT id FROM erp_tasks WHERE assigned_to=? AND state='in_progress'", user.id)) fail(409, 'Спочатку призупиніть поточну роботу');
+      if (get('SELECT id FROM erp_time_entries WHERE user_id=? AND ended_at IS NULL', user.id)) fail(409, 'Спочатку призупиніть поточну роботу');
       if (get("SELECT id FROM erp_tasks WHERE unit_id=? AND sequence<? AND state!='done'", task.unit_id, task.sequence)) fail(409, 'Попередня операція ще не завершена');
       run("UPDATE erp_tasks SET state='in_progress',version=version+1 WHERE id=?", id);
       run("UPDATE erp_units SET state='working',version=version+1 WHERE id=?", task.unit_id);
-      insert('INSERT INTO erp_time_entries(task_id,user_id,shift_id,started_at) VALUES(?,?,?,?)', id, user.id, shift.id, time);
+      insert('INSERT INTO erp_time_entries(task_id,user_id,shift_id,started_at,crew_id,work_round) VALUES(?,?,?,?,?,?)', id, user.id, shift.id, time,task.crew_id,task.work_round);
     } else {
       if (body.action === 'block' && !body.note) fail(400, 'Вкажіть причину блокування');
       if (body.action !== 'block' && task.state !== 'in_progress') fail(409, 'Спочатку розпочніть роботу');
@@ -315,10 +333,7 @@ export function createErp(db) {
       insert('INSERT INTO erp_shift_intervals(shift_id,started_at) VALUES(?,?)', shift.id, time);
     } else {
       if (body.action === 'pause' && shift.state !== 'active') fail(409, 'Зміна вже на перерві');
-      for (const task of all("SELECT id FROM erp_tasks WHERE assigned_to=? AND state='in_progress'", user.id)) {
-        stopTimer(task.id, cutoff);
-        run("UPDATE erp_tasks SET state='paused',version=version+1 WHERE id=?", task.id);
-      }
+      crews.stopUserTasks(user.id,cutoff);
       run('UPDATE erp_shift_intervals SET ended_at=MAX(started_at,?) WHERE shift_id=? AND ended_at IS NULL', cutoff, shift.id);
       run('UPDATE erp_shifts SET state=?,ended_at=?,version=version+1 WHERE id=?', body.action === 'end' ? 'closed' : 'paused', body.action === 'end' ? cutoff : null, shift.id);
     }
@@ -341,7 +356,7 @@ export function createErp(db) {
       const task = get('SELECT * FROM erp_tasks WHERE unit_id=? AND id=?', id, body.taskId);
       if (!task) fail(400, 'Оберіть операцію для доопрацювання');
       // Repeat the chosen operation and downstream checks; previous time records remain intact.
-      run("UPDATE erp_tasks SET state='pending',completed_at=NULL,completed_by=NULL,note=?,version=version+1 WHERE unit_id=? AND sequence>=?", body.note, id, task.sequence);
+      run("UPDATE erp_tasks SET state='pending',completed_at=NULL,completed_by=NULL,note=?,work_round=work_round+1,version=version+1 WHERE unit_id=? AND sequence>=?", body.note, id, task.sequence);
       run("UPDATE erp_units SET state='working',version=version+1 WHERE id=?", id);
     }
     insert('INSERT INTO erp_quality_checks(unit_id,result,note,actor_id,created_at) VALUES(?,?,?,?,?)', id, body.result, body.note, user.id, now());
@@ -409,6 +424,18 @@ export function createErp(db) {
   }
 
   return { role, requireRole, command, snapshot, orderDetail, taskAction, shiftAction, quality, deliver, receiveStock, moveStock,
+    saveCrew:crews.saveCrew, assignCrew:crews.assignCrew, workHistory:crews.workHistory,
+    crewTasks(user,id,query) {
+      requireRole(user,['admin','manager','technician','observer']);
+      if (!manages(user) && role(user)!=='observer' && !crews.member(id,user.id)) fail(403,'Немає доступу до робіт цієї команди');
+      entity('erp_crews',id);
+      const needle=(query.q||'').toLocaleLowerCase('uk-UA');
+      const where=`t.crew_id=? AND (?='all' OR (?='open' AND t.state!='done') OR t.state=?) AND instr(erp_casefold(COALESCE(u.serial,'')||' '||t.title||' '||o.title||' LB-'||printf('%06d',u.id)),?)>0`;
+      const args=[id,query.taskState,query.taskState,query.taskState,needle];
+      const count=get(`SELECT COUNT(*) AS n FROM erp_tasks t JOIN erp_units u ON u.id=t.unit_id JOIN erp_orders o ON o.id=u.order_id WHERE ${where}`,...args).n;
+      const tasks=all(`${taskSelect} WHERE ${where} ORDER BY CASE t.state WHEN 'in_progress' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,t.id LIMIT 50 OFFSET ?`,now(),...args,query.page*50).map(t=>serializeTask(crews.decorateTask(t,user)));
+      return {tasks,count,page:query.page,pageSize:50};
+    },
     updateOrder(user,id,body) {
       requireRole(user,['admin','manager']);
       const order=entity('erp_orders',id);version(order,body.version);
@@ -426,9 +453,7 @@ export function createErp(db) {
       const latestWork=get('SELECT MAX(COALESCE(ended_at,started_at)) AS time FROM erp_time_entries WHERE shift_id=?',shift.id)?.time??shift.started_at;
       if(body.endedAt<Math.max(latest,latestWork))fail(400,'Не можна закрити зміну до вже зафіксованої операції');
       const cutoff=Math.min(body.endedAt,shift.started_at+MAX_SHIFT_MS);
-      for(const task of all("SELECT id FROM erp_tasks WHERE assigned_to=? AND state='in_progress'",id)) {
-        stopTimer(task.id,cutoff);run("UPDATE erp_tasks SET state='paused',version=version+1 WHERE id=?",task.id);
-      }
+      crews.stopUserTasks(id,cutoff);
       run('UPDATE erp_shift_intervals SET ended_at=MAX(started_at,?) WHERE shift_id=? AND ended_at IS NULL',cutoff,shift.id);
       run("UPDATE erp_shifts SET state='closed',ended_at=?,version=version+1 WHERE id=?",cutoff,shift.id);
       event(user,'shift.closed_by_manager','shift',shift.id,{userId:id,endedAt:cutoff,reason:body.reason});
@@ -473,7 +498,7 @@ export function createErp(db) {
         const task = entity('erp_tasks',selected.id);
         version(task,selected.version);
         if (['in_progress','done'].includes(task.state)) fail(409,'Активну або завершену роботу не можна перепризначити');
-        run('UPDATE erp_tasks SET assigned_to=?,version=version+1 WHERE id=?',body.userId,task.id);
+        run("UPDATE erp_tasks SET assigned_to=?,crew_id=NULL,work_mode='individual',work_round=work_round+1,version=version+1 WHERE id=?",body.userId,task.id);
       }
       event(user,'tasks.assigned','user',body.userId,{tasks:body.tasks.map(t=>t.id)});
       return {count:body.tasks.length};
@@ -482,7 +507,8 @@ export function createErp(db) {
       requireRole(user,['admin']);
       const member=entity('users',id);
       if (member.role==='admin') fail(409,'Глобальний адміністратор зберігає повний доступ');
-      if (activeShift(id) || get("SELECT id FROM erp_tasks WHERE assigned_to=? AND state='in_progress'",id)) fail(409,'Спочатку закрийте зміну та активну роботу користувача');
+      if (activeShift(id) || get('SELECT id FROM erp_time_entries WHERE user_id=? AND ended_at IS NULL',id)) fail(409,'Спочатку закрийте зміну та активну роботу користувача');
+      if (!['admin','manager','technician'].includes(body.role) && get('SELECT user_id FROM erp_crew_members m JOIN erp_crews c ON c.id=m.crew_id WHERE m.user_id=? AND c.archived=0',id)) fail(409,'Спочатку приберіть користувача з активних робочих команд');
       if (body.role==='none') run('DELETE FROM erp_members WHERE user_id=?',id);
       else run('INSERT INTO erp_members(user_id,role) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET role=excluded.role',id,body.role);
       event(user,'member.updated','user',id,{role:body.role});

@@ -10,13 +10,18 @@ const selected = z.array(z.object({ id, version: id }).strict()).min(1).max(500)
 const receipt = { reference: text(160), serials: z.array(text(120)).max(500), unnumbered: z.number().int().min(0).max(500).default(0) };
 const roles = ['admin','manager','warehouse','technician','inspector','observer'];
 const managers = ['admin','manager'];
+const taskQuery = z.object({taskState:z.enum(['all','open','pending','in_progress','paused','blocked','done']).default('all'),q:z.string().max(120).default(''),page:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
+const crewFields = {name:text(100),description:note,leadId:id,members:z.array(id).min(1).max(50).refine(values=>new Set(values).size===values.length,'Повторні учасники')};
 const schemas = {
   client: z.object({ name: text(160), contact: z.string().trim().max(200).default(''), notes: note }).strict(),
   template: z.object({ name: text(160), steps }).strict(),
   order: z.object({ clientId: id, title: text(160), model: text(120), kind: z.enum(['repair','upgrade','service']), priority: z.enum(['normal','high','urgent']), dueDate: z.iso.date().nullable().default(null), notes: note, templateId: id.nullable().default(null), steps, ...receipt }).strict(),
   receipt: z.object(receipt).strict(),
   assign: z.object({ userId: id, tasks: selected }).strict(),
-  task: z.object({ action: z.enum(['start','pause','block','complete']), version: id, note }).strict(),
+  task: z.object({ action: z.enum(['start','pause','block','complete','finish_part']), version: id, note }).strict(),
+  crew:z.object(crewFields).strict(),
+  crewUpdate:z.object({...crewFields,archived:z.boolean(),version:id}).strict(),
+  crewAssign:z.object({crewId:id,mode:z.enum(['pool','shared']),tasks:selected}).strict(),
   shift: z.object({ action: z.enum(['start','pause','resume','end']), version: id.optional() }).strict(),
   quality: z.object({ result: z.enum(['pass','rework']), version: id, note, taskId: id.optional() }).strict(),
   delivery: z.object({ reference: text(160), recipient: text(160), units: selected }).strict(),
@@ -44,6 +49,12 @@ export function registerErpRoutes(app, erp) {
   app.get('/api/erp/orders/:id', { preHandler: allowed(roles.filter(r => r !== 'technician')) }, async request => erp.orderDetail(request.portalUser, numericId(request)));
   app.get('/api/erp/stock/:id/history', { preHandler: allowed(['admin','manager','warehouse','observer']) }, async request => erp.stockHistory(request.portalUser, numericId(request)));
   app.get('/api/erp/members/:id/shifts', { preHandler: allowed(['admin','manager','observer']) }, async request => erp.memberShifts(request.portalUser,numericId(request)));
+  app.get('/api/erp/tasks/:id/work-history', { preHandler:allowed(roles.filter(r=>r!=='technician')) }, async request=>erp.workHistory(request.portalUser,numericId(request)));
+  app.get('/api/erp/crews/:id/tasks', { preHandler:allowed(['admin','manager','technician','observer']) }, async request=>{
+    const parsed=taskQuery.safeParse(request.query);
+    if(!parsed.success)fail(400,'Некоректні параметри пошуку');
+    return erp.crewTasks(request.portalUser,numericId(request),parsed.data);
+  });
 
   function write(path, schema, access, action) {
     app.post(`/api/erp/${path}`, {
@@ -71,6 +82,9 @@ export function registerErpRoutes(app, erp) {
   write('orders', schemas.order, managers, (u,b) => erp.createOrder(u,b));
   write('orders/:id/receive', schemas.receipt, [...managers,'warehouse'], (u,b,id) => erp.receiveUnits(u,id,b));
   write('assign', schemas.assign, managers, (u,b) => erp.assign(u,b));
+  write('crews',schemas.crew,managers,(u,b)=>erp.saveCrew(u,null,b));
+  write('crews/:id',schemas.crewUpdate,managers,(u,b,id)=>erp.saveCrew(u,id,b));
+  write('assign-crew',schemas.crewAssign,managers,(u,b)=>erp.assignCrew(u,b));
   write('tasks/:id/action', schemas.task, [...managers,'technician'], (u,b,id) => erp.taskAction(u,id,b));
   write('shifts/action', schemas.shift, [...managers,'technician'], (u,b) => erp.shiftAction(u,b));
   write('units/:id/quality', schemas.quality, [...managers,'inspector'], (u,b,id) => erp.quality(u,id,b));

@@ -6,6 +6,108 @@ import Fastify from 'fastify';
 import { createErp, MAX_SHIFT_MS } from '../src/erp-database.mjs';
 import { registerErpRoutes } from '../src/erp-routes.mjs';
 
+test('ERP crews validate members, permissions, revisions and team queue isolation',async context=>{
+  const f=fixture(context); const c=await crew(f);
+  assert.equal((await f.request('crews',{name:'Bad',leadId:2,members:[3]})).status,400);
+  assert.equal((await f.request('crews',{name:'Bad',leadId:4,members:[4]})).status,400);
+  assert.equal((await f.request('crews',{name:'Bad',leadId:2,members:[2,2]})).status,400);
+  assert.equal((await f.request('crews',{name:'Bad',leadId:2,members:[2]},2)).status,403);
+  assert.equal((await f.request(`crews/${c.group.id}/tasks`,undefined,5)).status,403);
+  f.db.exec("INSERT INTO erp_members VALUES(5,'technician')");
+  assert.equal((await f.request(`crews/${c.group.id}/tasks`,undefined,5)).status,403);
+  assert.deepEqual((await f.get('context',5)).crews,[]);
+  const own=await f.get('context',2);
+  assert.equal(own.crews.length,1);assert.equal(own.team,undefined);assert.equal(own.clients,undefined);
+  assert.equal(own.crews[0].members[0].email,undefined,'no coworker email disclosure to technician');
+  const edited={name:own.crews[0].name,leadId:2,members:[2,3],description:'Updated',archived:false,version:1};
+  await f.post(`crews/${c.group.id}`,edited);
+  assert.equal((await f.request(`crews/${c.group.id}`,edited)).status,409);
+  assert.equal((await f.request(`crews/${c.group.id}`,{...edited,version:2,archived:true})).status,409);
+  assert.equal((await f.request('members/2',{role:'observer'})).status,409);
+});
+
+test('ERP team batch queue atomically claims one worker and paginates all 150 units',async context=>{
+  const f=fixture(context);const c=await crew(f,'pool',150);
+  const first=await f.get(`crews/${c.group.id}/tasks?taskState=open&page=0`,2);
+  const second=await f.get(`crews/${c.group.id}/tasks?taskState=open&page=1`,3);
+  assert.equal(first.count,300);assert.equal(first.tasks.length,50);assert.notEqual(first.tasks[0].id,second.tasks[0].id);
+  const search=await f.get(`crews/${c.group.id}/tasks?q=sn-149`,2);assert.equal(search.count,2);
+  await f.post('shifts/action',{action:'start'},2);await f.post('shifts/action',{action:'start'},3);
+  const body={action:'start',version:first.tasks[0].version};const key=crypto.randomUUID();
+  const winner=await f.request(`tasks/${c.taskId}/action`,body,2,key);assert.equal(winner.status,200);
+  const loser=await f.request(`tasks/${c.taskId}/action`,body,3);assert.ok([403,409].includes(loser.status));
+  assert.equal((await f.request(`tasks/${c.taskId}/action`,body,2,key)).status,200);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_time_entries WHERE task_id=?').get(c.taskId).n,1);
+  assert.equal(freshTask(f,c.taskId).assigned_to,2);
+  await taskDo(f,c.taskId,'pause');
+  const group=(await f.get('context')).crews[0];
+  assert.equal((await f.request(`crews/${group.id}`,{name:group.name,description:'',members:[3],leadId:3,archived:false,version:group.version})).status,409);
+  await taskDo(f,c.taskId,'start');await taskDo(f,c.taskId,'complete');
+  const lot=await f.post('stock',{sku:'TEAM',name:'Деталь команди',clientId:null,condition:'new',reference:'Synthetic',quantity:1});
+  await f.post(`stock/${lot.id}/move`,{from:'warehouse',to:'workbench',unitId:c.unitId,quantity:1,note:'Для команди'});
+  await f.post(`crews/${group.id}`,{name:group.name,description:'',members:[3],leadId:3,archived:false,version:group.version});
+  assert.equal((await f.request(`crews/${group.id}/tasks`,undefined,2)).status,403);
+  assert.equal((await f.request(`stock/${lot.id}/move`,{from:'workbench',to:'installed',unitId:c.unitId,quantity:1,note:'Колишній учасник'},2)).status,403,'historical team assignment must not retain material permissions after removal');
+  assert.equal((await f.get(`tasks/${c.taskId}/work-history`)).length,1,'removing member preserves historical time');
+});
+
+test('ERP shared operation keeps individual timers, shift pauses and explicit team completion',async context=>{
+  const f=fixture(context);const c=await crew(f);
+  await f.post('shifts/action',{action:'start'},2);await f.post('shifts/action',{action:'start'},3);
+  await taskDo(f,c.taskId,'start',2);await taskDo(f,c.taskId,'start',3);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_time_entries WHERE ended_at IS NULL').get().n,2);
+  assert.equal((await f.get('context')).team.filter(u=>u.current?.id===c.taskId).length,2);
+  const two=(await f.get('context',2)).shifts[0];
+  await f.post('shifts/action',{action:'pause',version:two.version},2);
+  assert.equal(freshTask(f,c.taskId).state,'in_progress');
+  assert.equal(f.db.prepare('SELECT user_id FROM erp_time_entries WHERE ended_at IS NULL').get().user_id,3);
+  await taskDo(f,c.taskId,'finish_part',2);
+  assert.equal((await f.request(`tasks/${c.taskId}/action`,{action:'complete',version:freshTask(f,c.taskId).version},2)).status,409);
+  await taskDo(f,c.taskId,'finish_part',3);
+  assert.equal((await f.request(`tasks/${c.taskId}/action`,{action:'complete',version:freshTask(f,c.taskId).version},3)).status,403);
+  await taskDo(f,c.taskId,'complete',2);
+  assert.equal(freshTask(f,c.taskId).state,'done');
+  const history=await f.get(`tasks/${c.taskId}/work-history`);
+  assert.deepEqual(history.map(row=>row.user_id),[2,3]);assert.ok(history.every(row=>row.crew_id===c.group.id));
+  assert.equal((await f.request(`tasks/${c.taskId}/work-history`,undefined,2)).status,403);
+  const ctx=await f.get('context');assert.equal(ctx.team.find(u=>u.id===3).contributions,1);
+});
+
+test('ERP shared work cannot run alongside individual work or be closed by someone else ending a shift',async context=>{
+  const f=fixture(context);const c=await crew(f);const individual=await order(f,1);await assign(f,individual.id,2);
+  await f.post('shifts/action',{action:'start'},2);await f.post('shifts/action',{action:'start'},3);
+  await taskDo(f,c.taskId,'start',2);await taskDo(f,c.taskId,'start',3);
+  const personal=(await f.get(`orders/${individual.id}`)).tasks[0];
+  assert.equal((await f.request(`tasks/${personal.id}/action`,{action:'start',version:personal.version},2)).status,409);
+  const shift=(await f.get('context',2)).shifts[0];
+  await f.post('members/2/close-shift',{version:shift.version,endedAt:Date.now(),reason:'Завершення робочого дня'});
+  assert.equal(freshTask(f,c.taskId).state,'in_progress');assert.equal(f.db.prepare('SELECT user_id FROM erp_time_entries WHERE ended_at IS NULL').get().user_id,3);
+  const group=(await f.get('context')).crews[0];
+  assert.equal((await f.request(`crews/${group.id}`,{name:group.name,description:'',members:[3],leadId:3,archived:false,version:group.version})).status,409);
+  const live=freshTask(f,c.taskId);
+  assert.equal((await f.request('assign',{userId:2,tasks:[{id:live.id,version:live.version}]})).status,409);
+});
+
+test('ERP shared rework keeps historical contributions and prevents self quality after reassignment',async context=>{
+  const f=fixture(context);const c=await crew(f);
+  await f.post('shifts/action',{action:'start'},2);await f.post('shifts/action',{action:'start'},3);
+  for(const task of (await f.get(`orders/${c.orderId}`)).tasks) {
+    for(const user of [2,3]) {await taskDo(f,task.id,'start',user);await taskDo(f,task.id,'finish_part',user);}
+    await taskDo(f,task.id,'complete',2);
+  }
+  const unit=f.db.prepare('SELECT * FROM erp_units WHERE id=?').get(c.unitId);
+  assert.equal(unit.state,'quality');
+  // Historical worker temporarily gains QC-capable role; it must not bypass independence.
+  f.db.prepare("UPDATE erp_members SET role='manager' WHERE user_id=3").run();
+  assert.equal((await f.request(`units/${unit.id}/quality`,{result:'pass',version:unit.version},3)).status,409);
+  await f.post(`units/${unit.id}/quality`,{result:'rework',note:'Повторна перевірка',taskId:c.taskId,version:unit.version},4);
+  assert.equal(freshTask(f,c.taskId).work_round,3);
+  await taskDo(f,c.taskId,'start',3);await taskDo(f,c.taskId,'finish_part',3);await taskDo(f,c.taskId,'complete',2);
+  const history=await f.get(`tasks/${c.taskId}/work-history`);
+  assert.equal(history.length,3);assert.deepEqual(history.map(r=>r.work_round),[2,2,3]);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_task_participants WHERE task_id=?').get(c.taskId).n,3);
+});
+
 function fixture(context) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys=ON');
@@ -32,6 +134,15 @@ function fixture(context) {
   return {db,erp,users,request,post,get};
 }
 const steps=[{title:'Огляд',instructions:'Перевірити комплектність',plannedMinutes:5},{title:'Виконання замовлення',instructions:'За погодженим маршрутом',plannedMinutes:15}];
+async function crew(f, mode='shared', count=1) {
+  const group=await f.post('crews',{name:`Бригада ${crypto.randomUUID()}`,leadId:2,members:[2,3],description:'Спільний ремонт'});
+  const created=await order(f,count);
+  const detail=await f.get(`orders/${created.id}`);
+  await f.post('assign-crew',{crewId:group.id,mode,tasks:detail.tasks.map(t=>({id:t.id,version:t.version}))});
+  return {group,orderId:created.id,unitId:detail.units[0].id,taskId:detail.tasks[0].id};
+}
+const freshTask=(f,id)=>f.db.prepare('SELECT * FROM erp_tasks WHERE id=?').get(id);
+const taskDo=(f,id,action,user=2)=>f.post(`tasks/${id}/action`,{action,version:freshTask(f,id).version},user);
 async function order(f,count=3,clientId) {
   clientId??=(await f.post('clients',{name:`Клієнт ${crypto.randomUUID()}`})).id;
   return f.post('orders',{clientId,title:'Партія майстерні',model:'Модель А',kind:'upgrade',priority:'normal',dueDate:null,steps,serials:Array.from({length:count-1},(_,i)=>`SN-${i+1}`),unnumbered:1,reference:'Прийомка 01'});

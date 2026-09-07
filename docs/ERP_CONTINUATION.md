@@ -1,6 +1,17 @@
 # Продовження ERP з іншого ПК
 
-Оновлено: 2026-09-07 після production release. Перший ERP-контур запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+Оновлено: 2026-09-07, checkpoint робочих команд `0.25.0` **до deployment**. Перший ERP-контур запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+
+## Поточний checkpoint 0.25.0
+
+- Нова гілка `codex/erp-teams` від clean `origin/main=1991d0e`. До цього checkpoint production усе ще `0.24.0/e430efd`; новий номер package не є deployment.
+- Нова вимога власника: команди для одного великого складного дрона та модернізації партії. Реалізовано склад/старший, `pool` і `shared`, особисті внески, незалежні таймери й зміни, server ACL/версії/історію. Повністю прочитати `ERP_TEAMS.md`.
+- Нові файли: `src/erp-crews.mjs`, `public/erp-crews.css`, `scripts/erp-crews-browser-check.mjs`, `docs/ERP_TEAMS.md`. Зміни інтегровані в ERP database/routes/UI/tests/check; залежності й інші модулі незмінні.
+- Windows: точні install/check/test/audit пройшли, **25/25**, audit 0. Новий browser smoke пройшов на двох незалежних synthetic mobile акаунтах (390/360, dark/light); створення/редагування/призначення, одночасна робота, внески та старший. Скриншоти візуально перевірені. Початковий ERP browser regression теж пройшов.
+- Міграція на старій synthetic ERP: збережено 33 таблиці; після повторного старту на вже оновленій synthetic DB — 36. Source тільки read-only, дві міграції backup, quick_check/FK ok. Тепер перевіряються також усі старі ERP-значення, не лише legacy LABA.
+- Останній локальний in-memory smoke: 3000 виробів/9000 операцій/20 майстрів, owner median 8/p95 9 ms, worker median 7/p95 9 ms, setup 497 ms. Не benchmark production або гарантія місткості.
+- Ще виконати для release: fresh fetch і звірка фактичних файлів VPS з `e430efd`, staged install/check/test/audit та міграція копії production, backup й deployment тільки LABA, health/auth/read-only Chrome/sibling checks. Потім fast-forward main, push, фактичні SHA/paths/results у `CURRENT_STATE.md` і цей handoff.
+- Обмеження: послідовний маршрут (не DAG); 200 команд/50 людей у команді/500 призначень за команду; без payroll/date-range/offline. Старий ERP не може безпечно обслуговувати shared-записи — rollback лише за правилами `ERP_TEAMS.md`, переважно fix-forward.
 
 ## Репозиторій та гілка
 
@@ -53,7 +64,7 @@ git status --short --branch
 | `.npmrc` | Вимкнені install hooks залежностей; їхні runtime artifacts уже входять до поточних пакетів |
 | `docs/ERP.md` | Специфікація, ролі, обмеження, безпека, досліджені референси, наступні етапи |
 
-## Стан перевірок цього checkpoint
+## Історія перевірок першого релізу 0.24.0
 
 - Повний набір тестів перед release: **20/20** (11 наявних + 9 ERP). Точний `npm ci`, `npm run check`, `npm test`, `npm audit --omit=dev` пройшли на Windows; відомих vulnerabilities за результатом audit — 0.
 - Сценарій 150 виробів перевірений у транзакційних тестах, включно з rollback прийомки при дублікованому номері.
@@ -97,7 +108,7 @@ node src/server.mjs
 4. Перед масштабуванням додати пагінацію адміністративних списків понад задокументовані межі (200 замовлень, 500 партій запасів, 100 шаблонів, 1000 клієнтів) і профілювання справжнього багатокористувацького навантаження. Черга майстра вже має серверну пагінацію по 50.
 5. Кожен значущий checkpoint: код + тести + пояснення рішень/меж у цьому файлі, commit і **push**. Локальний commit без push не забезпечує відновлення при втраті ПК. Спільну історію не force-push.
 6. Перед кожним наступним release повторити checks/browser QA; на VPS staging — install/check/test/audit, `node scripts/erp-migration-check.mjs /opt/laba/data/portal.db`, performance smoke. Не запускати production seed/load tests.
-7. Звірити origin/main та фактичний VPS, створити SQLite backup, розгорнути конкретний Git archive зі збереженням `.env`, `data/`, `backups/`. Для rollback повертати старий код з **актуальною** БД, не стирати нові ERP-проводки старим backup.
+7. Звірити origin/main та фактичний VPS, створити SQLite backup, розгорнути конкретний Git archive зі збереженням `.env`, `data/`, `backups/`. Rollback лише після перевірки семантичної сумісності (особливо shared-таймери 0.25.0); зберігати **актуальну** БД, не стирати нові ERP-проводки старим backup.
 8. Після health/DB/auth/browser/sibling checks записати новий deployed SHA, backup/rollback та результати в `CURRENT_STATE.md`, push документації. Реліз не завершений, доки handoff лишається тільки на одному ПК.
 
 ## Доступ і відновлення

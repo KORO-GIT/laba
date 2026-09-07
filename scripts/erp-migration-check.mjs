@@ -22,25 +22,29 @@ try {
   source = null;
   copy = new Database(copyPath);
   copy.pragma('foreign_keys=ON');
-  const tables = copy.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'erp_%' AND name!='schema_migrations' ORDER BY name").all();
+  const tables = copy.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name!='schema_migrations' ORDER BY name").all().map(table=>({...table,columns:copy.pragma(`table_info("${table.name.replaceAll('"','""')}")`)}));
   function digest(table) {
     const hashes = [];
     const name = table.name.replaceAll('"', '""');
-    for (const row of copy.prepare(`SELECT * FROM "${name}"`).safeIntegers().iterate()) {
+    const columns=table.columns.map(column=>`"${column.name.replaceAll('"','""')}"`).join(',');
+    for (const row of copy.prepare(`SELECT ${columns} FROM "${name}"`).safeIntegers().iterate()) {
       const json = JSON.stringify(row, (_, value) => typeof value === 'bigint' ? `${value}n` : value);
       hashes.push(crypto.createHash('sha256').update(json).digest('hex'));
     }
     return crypto.createHash('sha256').update(hashes.sort().join('\n')).digest('hex');
   }
   const before = tables.map(digest);
-  const previousMigrations = copy.prepare("SELECT * FROM schema_migrations WHERE name!='erp_v1' ORDER BY name").all();
+  const previousMigrations = copy.prepare('SELECT * FROM schema_migrations ORDER BY name').all();
   migrateErp(copy);
   migrateErp(copy);
   assert.deepEqual(copy.pragma('quick_check'), [{ quick_check: 'ok' }]);
   assert.deepEqual(copy.pragma('foreign_key_check'), []);
   assert.deepEqual(tables.map(digest), before, 'Existing table contents changed');
-  for (const table of tables) assert.equal(copy.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(table.name).sql, table.sql);
-  assert.deepEqual(copy.prepare("SELECT * FROM schema_migrations WHERE name!='erp_v1' ORDER BY name").all(), previousMigrations);
+  for (const table of tables) {
+    if(!['erp_tasks','erp_time_entries'].includes(table.name))assert.equal(copy.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(table.name).sql, table.sql);
+    assert.deepEqual(copy.pragma(`table_info("${table.name.replaceAll('"','""')}")`).slice(0,table.columns.length),table.columns);
+  }
+  for(const marker of previousMigrations)assert.deepEqual(copy.prepare('SELECT * FROM schema_migrations WHERE name=?').get(marker.name),marker);
   console.log(JSON.stringify({ ok: true, sourceOpenedReadOnly: true, existingTablesPreserved: tables.length, migrationRuns: 2, quickCheck: 'ok', foreignKeys: 'ok' }));
 } finally {
   copy?.close();
