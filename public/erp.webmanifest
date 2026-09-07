@@ -1,0 +1,12 @@
+{
+  "id": "/erp",
+  "name": "LABA — Робоче місце майстра",
+  "short_name": "LABA Робота",
+  "lang": "uk",
+  "start_url": "/erp#my",
+  "scope": "/erp",
+  "display": "standalone",
+  "background_color": "#0e1113",
+  "theme_color": "#0e1113",
+  "icons": [{ "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

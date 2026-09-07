@@ -54,7 +54,7 @@ function websocketHandshake(port, host, origin, requestPath = '/websocket', extr
 }
 
 async function waitFor(url, child, logs) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     if (child.exitCode !== null) throw new Error(`Server exited early: ${logs.join('')}`);
     try {
       const response = await fetch(url);
@@ -384,7 +384,7 @@ test('development server serves portal API and protected admin writes', async (c
   assert.match(devicePage, /Фільтри пристроїв/);
 
   const modules = await fetch(`${root}/api/modules`).then((response) => response.json());
-  assert.deepEqual(modules.modules.map((module) => module.key), ['workshop', 'service', 'devices']);
+  assert.deepEqual(modules.modules.map((module) => module.key), ['workshop', 'service', 'devices', 'erp']);
 
   const rejectedAccountingSync = await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ records: [] })

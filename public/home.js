@@ -7,7 +7,8 @@ const toast = document.querySelector('#toast');
 const moduleMeta = {
   workshop: { href: '/workshop', number: '01', action: 'Відкрити майстерню' },
   service: { href: '/service', number: '02', action: 'Відкрити сервіс' },
-  devices: { href: '/devices', number: '03', action: 'Відкрити пристрої' }
+  devices: { href: '/devices', number: '03', action: 'Відкрити пристрої' },
+  erp: { href: '/erp', number: '04', action: 'Відкрити виробництво' }
 };
 
 function showToast(message) {

@@ -28,8 +28,11 @@ import {
   safeStreamName
 } from './security.mjs';
 import { starlinkAgentRequest } from './starlink-agent.mjs';
+import { createErp } from './erp-database.mjs';
+import { registerErpRoutes } from './erp-routes.mjs';
 
 validateConfig();
+const erp = createErp(db);
 
 const app = Fastify({
   logger: { level: config.nodeEnv === 'production' ? 'info' : 'warn' },
@@ -940,6 +943,7 @@ app.get('/api/me', async (request) => {
     email: request.portalUser.email,
     displayName: request.portalUser.display_name,
     role: request.portalUser.role,
+    erpRole: erp.role(request.portalUser),
     modules: moduleAccessMap(request.portalUser),
     baseDomain: config.baseDomain
   };
@@ -948,8 +952,11 @@ app.get('/api/me', async (request) => {
 app.get('/api/modules', async (request) => ({
   modules: moduleKeys
     .map((key) => ({ key, ...moduleDefinition(key), access: moduleAccess(request.portalUser, key) }))
+    .concat(erp.role(request.portalUser) === 'none' ? [] : [{ key: 'erp', title: 'Виробництво', description: 'Замовлення, склад, команда та особисте робоче місце майстра.', access: erp.role(request.portalUser) }])
     .filter((module) => module.access !== 'none')
 }));
+
+registerErpRoutes(app, erp);
 
 app.get('/api/devices', { preHandler: requireModule('devices') }, async (request) => {
   const rows = statements.listDevices.all().filter((device) => device.enabled);
