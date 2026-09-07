@@ -1,25 +1,23 @@
 # Продовження ERP з іншого ПК
 
-Оновлено: 2026-09-07. Цей файл описує незавершену розробку окремо від останнього підтвердженого production у `CURRENT_STATE.md`.
+Оновлено: 2026-09-07 після production release. Перший ERP-контур запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
 
 ## Репозиторій та гілка
 
 - Репозиторій: `https://github.com/KORO-GIT/laba` (не `kanban`, не Task).
-- Робоча гілка першого ERP-релізу: `codex/laba-erp`.
+- Гілка першого ERP-релізу `codex/laba-erp` об'єднана fast-forward у `main` і збережена як checkpoint. Продовжувати з актуальної `origin/main`.
 - База гілки: `5000d27` — документація production LABA `0.23.3`.
-- Версія розробки: `0.24.0`.
-- На момент цього проміжного checkpoint ERP ще **не розгорнуто в production**. Не вважати номер у `package.json` підтвердженням deployment.
+- Версія першого контуру: `0.24.0`; **розгорнуто `e430efd1366eb663c2f79ab92d66a5924c027855`**. Перший checkpoint — `f399a03`, release verification — `e430efd`, наступний docs-only commit фіксує deployment. Не вважати номер у `package.json` підтвердженням наступного deployment.
 - Працюючі `/workshop`, `/service`, `/devices`, SignalSynch та Task не мігруються в ERP і не замінюються.
 
 ```powershell
 git clone https://github.com/KORO-GIT/laba.git
 cd laba
 git fetch origin
-git switch --track origin/codex/laba-erp
-# Якщо гілка вже існує:
-# git switch codex/laba-erp
-# git pull --ff-only
+git switch main
+git pull --ff-only
 git status --short --branch
+# Нову роботу починати у новій codex/* гілці після перевірки clean tree.
 ```
 
 Повністю прочитати `AGENTS.md`, `README.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md`, `docs/CURRENT_STATE.md`, `docs/ERP.md` та цей файл. Перевірити нові commits з іншого ПК перед будь-яким merge/deploy; не перезаписувати dirty worktree.
@@ -61,10 +59,12 @@ git status --short --branch
 - Сценарій 150 виробів перевірений у транзакційних тестах, включно з rollback прийомки при дублікованому номері.
 - Повторний Playwright пройшов з актуальним backend: обидві теми desktop/mobile, збереження теми після reload, навігація адміністратора, деталі замовлення, форма прийомки, ізоляція майстра, pause/resume/complete на телефоні, зміни, ширина 360 px, відсутність JS/CSP помилок. Чотири скриншоти перевірено візуально.
 - Серверна пагінація/український пошук, версійність метаданих замовлення, аудит керівного закриття зміни й повторна міграція покриті новими тестами. Незалежний QC перевіряє також історичних виконавців до доробки/перепризначення.
-- На локальній демобазі міграція двічі зберегла всі 16 старих таблиць; quick_check і foreign keys — ok. Повторити на read-only копії production перед першим запуском.
+- На локальній демобазі й на тимчасовій `.backup` production міграція двічі зберегла всі 16 старих таблиць та попередні migration markers; quick_check і foreign keys — ok. Source production відкривався тільки read-only.
 - Локальний in-memory smoke: 3000 виробів / 9000 операцій / 20 майстрів, 40 snapshot-вимірювань: owner p95 6 ms, worker p95 2 ms, створення партій 223 ms. Це лише вузький smoke без мережі, диска й конкурентного навантаження, не гарантія місткості VPS.
 - Read-only звірка VPS перед release: 62 runtime/test/deploy файли точно відповідають production `5a816f2`; origin/main усе ще `5000d27`. `laba-portal`, Caddy, `koro-kanban`, `koro-task`, SignalSynch активні. Розбіжностей коду з іншого ПК не виявлено.
 - Production не використовувався для тестових переміщень, demo-клієнтів або майстрів.
+- На VPS staging пройшли точні install/check/test/audit: **20/20**, audit 0. In-memory smoke: owner p95 14 ms, worker p95 3 ms, створення 20 партій 584 ms. Усі 88 файлів release archive після deployment відповідають Git `e430efd` за SHA-256.
+- Live Chrome з Cloudflare-акаунтом власника перевірив головну → `Виробництво`, dark/light та persistence; сторінка залишена в темній темі. Без JWT ERP HTML/API/assets повертають 401. Резервна копія й rollback-каталог записані в `CURRENT_STATE.md`; Caddy і сусідні units незмінні.
 
 ## Локальний запуск
 
@@ -89,17 +89,16 @@ node src/server.mjs
 
 Для браузерних перевірок встановлений Chrome. `PLAYWRIGHT_MODULE` можна вказати на `index.mjs` доступного Playwright; машинні абсолютні runtime-шляхи не слід комітити. Скрипт працює лише з loopback `8083` та умовними даними. Перед повторенням після змін backend потрібно перезапустити локальний сервер; після завершення перевірок можна зупинити лише процес цього сервера.
 
-## Що доробити перед release
+## Release виконаний; як продовжувати без втрати іншого ПК
 
-1. Локальні behavioral/browser/security checks виконані; після будь-якої наступної зміни повторити відповідні перевірки.
-2. На VPS виконати `node scripts/erp-migration-check.mjs /opt/laba/data/portal.db` з staging-каталогу: скрипт сам створює тимчасову копію й не змінює source. `403` для користувача без ERP-ролі покритий API-тестами.
-3. Повторити `npm ci`, `npm run check`, `npm test`, `npm audit --omit=dev` та `node scripts/erp-performance-check.mjs` на staging, не навантажувати production.
-4. `README`, `SECURITY`, `DEPLOYMENT` оновлені. Усі незавершені модулі з `ERP.md` залишаються планом, а не нібито реалізованими функціями.
-5. `git fetch origin`, повторно звірити main та production code з базою безпосередньо перед switch. Секрети не виводити. Створити і перевірити SQLite `.backup`.
-6. Протестувати точний release archive в окремому staging-каталозі на VPS. Після успіху виконати звичайний LABA deployment зі збереженням `.env`, `data/`, `backups/`.
-7. ERP додає таблиці, але не змінює старі робочі дані. Для rollback спочатку повернути код; автоматично не відновлювати стару БД, щоб не втратити нові ERP-проводки.
-8. Перевірити health, SQLite quick_check, логи, browser assets, незмінність Caddy й сусідніх сервісів. Оновити `CURRENT_STATE.md` точним deployed commit і backup/rollback шляхами.
-9. Після merge залишити документований зв’язок feature branch → main → deployed code. Ніколи не force-push спільну історію.
+1. Після `fetch` прочитати всі нові commits, документацію й `git status`. Невідомі локальні зміни не видаляти/не reset. Наступну роботу відгалужувати від актуального main, не від застарілого checkpoint.
+2. Не вважати весь план ERP виконаним. Спочатку пройти з власником пілотний workflow: клієнт → маршрут → прийомка → призначення → зміна майстра → операції → незалежний QC → часткова видача. Акаунти й справжні операції створювати тільки за наданими власником даними.
+3. Наступні ітерації з `ERP.md`: склад/BOM/резерви й виправлення проводок компенсуючими операціями; зручний облік комплектуючих майстром із телефона; QR/фото/акти; аналітика за період/собівартість/зарплата. Наразі UI складу орієнтований на комірника/керівника; мобільна складська UI майстра ще не реалізована.
+4. Перед масштабуванням додати пагінацію адміністративних списків понад задокументовані межі (200 замовлень, 500 партій запасів, 100 шаблонів, 1000 клієнтів) і профілювання справжнього багатокористувацького навантаження. Черга майстра вже має серверну пагінацію по 50.
+5. Кожен значущий checkpoint: код + тести + пояснення рішень/меж у цьому файлі, commit і **push**. Локальний commit без push не забезпечує відновлення при втраті ПК. Спільну історію не force-push.
+6. Перед кожним наступним release повторити checks/browser QA; на VPS staging — install/check/test/audit, `node scripts/erp-migration-check.mjs /opt/laba/data/portal.db`, performance smoke. Не запускати production seed/load tests.
+7. Звірити origin/main та фактичний VPS, створити SQLite backup, розгорнути конкретний Git archive зі збереженням `.env`, `data/`, `backups/`. Для rollback повертати старий код з **актуальною** БД, не стирати нові ERP-проводки старим backup.
+8. Після health/DB/auth/browser/sibling checks записати новий deployed SHA, backup/rollback та результати в `CURRENT_STATE.md`, push документації. Реліз не завершений, доки handoff лишається тільки на одному ПК.
 
 ## Доступ і відновлення
 
