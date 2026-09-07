@@ -6,6 +6,7 @@ function run(command,args) {
   if(result.status!==0) process.exit(result.status||1);
 }
 for(const file of [
+  'scripts/erp-scrollbars-browser-check.mjs',
   'scripts/erp-notifications-browser-check.mjs',
   'src/server.mjs','src/database.mjs','src/security.mjs','src/probes.mjs','src/audio-agent.mjs','src/starlink-agent.mjs','src/erp-database.mjs','src/erp-routes.mjs','src/erp-crews.mjs','src/erp-materials.mjs',
   'scripts/configure-usb-camera.mjs','scripts/configure-audio-agent.mjs','scripts/configure-starlink-agent.mjs','scripts/erp-demo.mjs','scripts/erp-browser-check.mjs','scripts/erp-crews-browser-check.mjs','scripts/erp-materials-browser-check.mjs','scripts/erp-migration-check.mjs','scripts/erp-performance-check.mjs','scripts/erp-materials-performance-check.mjs',
