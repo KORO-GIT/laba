@@ -88,8 +88,33 @@ try {
   const worker=await page('worker@example.test',390,'replenishment');
   await worker.getByRole('heading',{name:'Моя робота',exact:true}).waitFor();assert.equal(await worker.getByRole('link',{name:/Матеріали|Поповнення/}).count(),0);
   const warehouse=await page('warehouse@example.test',360);assert.equal(await warehouse.getByRole('button',{name:'До шаблонів робіт',exact:true}).count(),0);
+  // Regression: the note must align with the panel heading, not touch its border.
+  const emptyOrder=await api('orders',{clientId:client.id,title:'Без норм · лише тест',model:'Тест',kind:'service',priority:'normal',steps,serials:[],unnumbered:1,reference:'Тест відступів'});
+  const spacing=[];
+  for(const [width,theme] of [[1440,'dark'],[1440,'light'],[390,'dark'],[360,'light']]){
+    const p=await page('admin@local.test',width,'orders');
+    if(theme==='light')await p.getByRole('button',{name:'Увімкнути світлу тему',exact:true}).click();
+    for(const [record,title,state] of [[emptyOrder,'Без норм · лише тест','empty'],[order,'Партія 150 · лише тест','filled']]){
+      await p.getByRole('row').filter({hasText:title}).getByRole('button',{name:'Відкрити',exact:true}).click();
+      const panel=p.locator('dialog .panel').filter({has:p.getByRole('heading',{name:'Матеріали за нормою',exact:true})});
+      await panel.locator('.material-spec-note').waitFor();
+      await panel.scrollIntoViewIfNeeded();
+      const bounds=await panel.evaluate(element=>{
+        const note=element.querySelector('.material-spec-note'),title=element.querySelector('h2'),header=element.querySelector('.panel-header');
+        const css=getComputedStyle(note),box=note.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(note);const text=range.getBoundingClientRect();
+        return {alignment:Math.abs(box.left+parseFloat(css.paddingLeft)-title.getBoundingClientRect().left),top:text.top-header.getBoundingClientRect().bottom,bottom:box.bottom-text.bottom,left:text.left-element.getBoundingClientRect().left,right:element.getBoundingClientRect().right-text.right,marginTop:css.marginTop,overflow:note.scrollWidth>note.clientWidth};
+      });
+      assert.ok(bounds.alignment<=1,JSON.stringify(bounds));assert.ok(bounds.top>=17);assert.ok(bounds.bottom>=17);assert.ok(bounds.left>=17&&bounds.right>=17);assert.equal(bounds.marginTop,'0px');assert.equal(bounds.overflow,false);
+      assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      await panel.screenshot({path:path.resolve(`data/erp-material-note-${state}-${width}-${theme}.png`)});
+      if(state==='filled')assert.equal(await panel.locator('tbody tr').count(),2);
+      assert.ok(record.id);await p.getByRole('button',{name:'Закрити',exact:true}).click();
+      spacing.push(`${state} ${width} ${theme}`);
+    }
+    await p.context().close();
+  }
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({ok:true,consumeUiMs,checks:['catalogue via UI','two per-unit template norms','150-unit snapshot','stock receipt','forecasted request150','partial50 + final100','confirmed consumption150','mobile390/360 dark/light','forbidden hash redirects technician','warehouse navigation','no browser errors','synthetic localhost only']}));
+  console.log(JSON.stringify({ok:true,consumeUiMs,spacing,checks:['catalogue via UI','two per-unit template norms','150-unit snapshot','stock receipt','forecasted request150','partial50 + final100','confirmed consumption150','mobile390/360 dark/light','forbidden hash redirects technician','warehouse navigation','panel text aligns with heading and has vertical spacing','no browser errors','synthetic localhost only']}));
 } finally {
   await browser?.close();if(server.exitCode===null){const exited=once(server,'exit');server.kill();await exited;}
   const resolved=fs.realpathSync(directory);assert.equal(path.dirname(resolved),temporaryRoot);assert.ok(path.basename(resolved).startsWith('laba-materials-browser-'));fs.rmSync(resolved,{recursive:true});

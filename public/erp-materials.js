@@ -47,9 +47,9 @@ export function createMaterialUI({getData,el,button,actions,icon,heading,panel,t
   function orderPanel(order) {
     const spec=order.materialSpec;
     return panel('Матеріали за нормою',spec.lines.length?el('div',{},
-      el('p',{class:'mobile-hint'},`Версія ${spec.version} · ${spec.openUnits} виробів до завершення контролю. Потреба не є складським резервом і не списує залишок.`),
+      el('p',{class:'mobile-hint material-spec-note'},`Версія ${spec.version} · ${spec.openUnits} виробів до завершення контролю. Потреба не є складським резервом і не списує залишок.`),
       table(['МАТЕРІАЛ / ВЛАСНИК','НА ОДИН','ПЛАН ВІДКРИТИХ ВИРОБІВ','ЩЕ ПОТРІБНО ЗІ СКЛАДУ'],spec.lines.map(l=>[el('div',{},el('strong',{},l.name),el('span',{class:'table-sub'},`${l.sku} · ${sourceName(l.source)}`)),milli(l.quantityMilli,l.uom),milli(l.plannedMilli,l.uom),milli(l.remainingMilli,l.uom)]))
-    ):el('p',{class:'task-context'},'Норми ще не задані. Їх можна скопіювати зі шаблону при створенні замовлення або задати тут.'),manager()?button('Норми витрат',()=>specDialog('order',order),'small quiet'):null);
+    ):el('p',{class:'task-context material-spec-note'},'Норми ще не задані. Їх можна скопіювати зі шаблону при створенні замовлення або задати тут.'),manager()?button('Норми витрат',()=>specDialog('order',order),'small quiet'):null);
   }
   async function consumeDialog(order,units) {
     if(!units.length){notify('Спочатку оберіть вироби',true);return;}

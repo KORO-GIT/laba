@@ -1,4 +1,4 @@
-import {createMaterialUI,materialQuantity,materialUnits} from './erp-materials.js?v=0.26.0';
+import {createMaterialUI,materialQuantity,materialUnits} from './erp-materials.js?v=0.26.2-spacing1';
 import {createGuideUI} from './erp-guides.js?v=0.27.0';
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
