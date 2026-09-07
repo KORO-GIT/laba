@@ -6,7 +6,19 @@
 
 Додаються лише дві таблиці, жодних реальних інструкцій або демо-записів у production. Нова залежність exactsharp0.35.4, `.npmrc ignore-scripts=true` збережено. Зображення оптимізуються локально сервером і зберігаються приватними SQLite BLOB; чинний backup включає фото. Немає публічної видачі, довільних URL, shell, стороннього storage або антивірус-сервісу. Міграцію перевіряти на disposable backup production read-only; не підмінювати живу базу старою.
 
-Перед release локальні check/test/audit:40/40, audit0. Browser/staging/production та остаточні SHA будуть зафіксовані після фактичних перевірок у CURRENT_STATE. До того runtime залишається0.26.2/8670895; не вважати цей checkpoint підтвердженням deployment.
+**Стан: код готовий/push, deployment НЕ відбувся.** Release-код `a481f5e35fa2a9bc24460739e7796914357219de`, наступний docs-only handoff не змінює його archive. Windows і Linux staging npm ci/check/test/audit:40/40, audit0. Новий browser guides та regression notifications/scrollbars/crews/materials пройшли. Візуально перевірено desktop dark, mobile light reader і mobile dark editor. Повні виміри/checksum — CURRENT_STATE.
+
+`/opt/laba-stage-a481f5e` уже містить перевірений код і Linux node_modules; root:root700, без production `.env`, `data/`, `backups/`. Archive108 файлів у `/tmp/laba-0.27.0-a481f5e.tar.gz`, SHA-256d9312d14afd5ae39ce45026f7701ccd3b66fd13ee07e7b608a8ee4b8b7c1578c. Міграція на read-only backup двічі зберегла39 існуючих таблиць, FK/quick_check ok. Staging не запускається як production і не містить реальних даних.
+
+Команда stop/backup/copy/swap була відхилена виконавчим середовищем (`blocked by policy`) ДО виконання. Повторна read-only перевірка підтвердила незмінний production0.26.2/8670895, health200, start21:39:22UTC, усі5 служб active та незмінний Caddy. Планований backup2159 і rollback-каталог2159 не існують. Нових копій робочих даних і production-міграцій ця робота не виконала. Не обходити блокування: deployment має завершуватися дозволеним способом уповноваженим оператором/середовищем.
+
+### Що залишається для release
+
+1. Fetch origin, прочитати CURRENT_STATE/цей checkpoint/ERP_GUIDES; перевірити чистоту checkout і нові commits з іншого ПК. Перейти в `codex/erp-instructions`, не вносити бібліотеку у KANBAN або Task. main під час перевірки=f55226b, не припускати, що він не змінився пізніше.
+2. Read-only перевірити поточний runtime/служби/дані та108 staged hashes доa481f5e. Якщо каталог/код/production змінився, спочатку звірити зміни; не перезаписувати роботу іншого ПК.
+3. За доступного дозволеного deployment створити НОВИЙ SQLite backup актуальної БД, перевірити quick_check/FK. Перед swap зупинити тільки LABA, зберегти найсвіжіші `.env`, `data/`, усі `backups/` і порівняти копії. Не використовувати стару тестову копію/backup замість живої БД. Підготувати права runtime-коду для групиlaba та зберегти root750/env640/data700/DB660, попередній каталог не видаляти. Не змінювати Caddyfile/units/інші сервіси/AUTH_MODE.
+4. Запустити LABA. Перевірити0.27.0/health200, лише additive ERP guides tables, старі таблиці/рядки/кількості, доступ SQLite, authcloudflare, loopback3020/MemoryMax512MiB, журнали, hashCaddy та active5 служб. Нові `guides`/image/API/assets без JWT мають401. Фото/публікацію перевіряти тільки на synthetic localhost; у live UI можна відкрити новий порожній розділ/форму та закрити без збереження.
+5. Записати ФАКТИЧНІ runtimeSHA, час, backup/previous paths і результати у CURRENT_STATE/ERP_CONTINUATION. Лише після повторного fetch/звірки origin/main без force об'єднати feature, pushmain і handoff; перевірити чистий Git. Не писати «розгорнуто» тільки тому, що гілка існує або змінено package.json.
 
 ## Поточний checkpoint 0.26.2 · скролбари ERP
 
