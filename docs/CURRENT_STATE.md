@@ -4,6 +4,7 @@
 
 ## Код і production
 
+- Підготовлено0.27.0 у `codex/erp-instructions` від cleanmain=f55226b: бібліотека інструкцій/фото для майстрів; workflow та обмеження у `ERP_GUIDES.md`. Windows clean npm ci/check/test/audit:40/40, audit0. Browser guides1440 dark/light,390dark/360light + mobile editor, draft/publish/photo/search/archive/409 пройшли; notifications та scrollbars regression пройшли. На VPS read-only baseline: усі101 файли відповідають8670895, auth/служби/Caddy незмінні. Це checkpoint до staging/deployment, поточний підтверджений runtime нижче ще0.26.2.
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
 - Поточна версія застосунку: `0.26.2`.
 - Останній підтверджений production-код: **`8670895db57828dc6396534deb898aaa9fa39cba`**, оформлення нативних скролбарів ERP. Старт **2026-09-07 21:39:22 UTC**, health підтверджено **21:39:24 UTC** (08 вересня, 00:39 за Києвом). Усі **101** файли archive на VPS звірено за SHA-256. `codex/erp-scrollbars` fast-forward об'єднано й push у `main`; повторний fetch підтвердив незмінний origin/main=f0a39a2. Наступний docs-only handoff не є новим runtime SHA.

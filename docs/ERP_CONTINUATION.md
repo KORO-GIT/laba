@@ -1,5 +1,13 @@
 # Продовження ERP з іншого ПК
 
+## Checkpoint0.27.0 · бібліотека інструкцій
+
+Гілка `codex/erp-instructions` від clean `origin/main=f55226b`. Запит власника: кнопка корисних матеріалів для майстрів, адміністратор додає інструкції з картинками. Реалізовано окрему бібліотеку `guides` з пошуком/24 на сторінку, кроками/фото, редактором та переглядом у dark/light/mobile. Draft окремий від published, архів без видалення, optimistic version409 зі збереженням введеного. Повний workflow, schema/upload boundaries, backup/rollback, обмеження та перевірки — `ERP_GUIDES.md`.
+
+Додаються лише дві таблиці, жодних реальних інструкцій або демо-записів у production. Нова залежність exactsharp0.35.4, `.npmrc ignore-scripts=true` збережено. Зображення оптимізуються локально сервером і зберігаються приватними SQLite BLOB; чинний backup включає фото. Немає публічної видачі, довільних URL, shell, стороннього storage або антивірус-сервісу. Міграцію перевіряти на disposable backup production read-only; не підмінювати живу базу старою.
+
+Перед release локальні check/test/audit:40/40, audit0. Browser/staging/production та остаточні SHA будуть зафіксовані після фактичних перевірок у CURRENT_STATE. До того runtime залишається0.26.2/8670895; не вважати цей checkpoint підтвердженням deployment.
+
 ## Поточний checkpoint 0.26.2 · скролбари ERP
 
 Гілка `codex/erp-scrollbars` від clean `origin/main=f0a39a2`. Власник попросив замінити грубі системні скролбари у формах. Новий `public/erp-scrollbars.css` підключено тільки до ERP: прозора доріжка, скруглений повзунок 6px усередині нативної області 10px, відступи на кінцях, без стрілок; помаранчевий hover/active. Окремі кольори dark/light; native CSS `scrollbar-width/color` для браузерів без WebKit-псевдоелементів. У forced-colors custom rules не застосовуються, залишаються системні контролі. `dialog` має stable gutter, щоб поява смуги не зміщувала поля. Колесо, клавіатура, drag і touch нативні: без scroll listeners, бібліотек, перехоплення подій чи зміни overflow. Стилі інших модулів не зачіпаються. Backend/API/БД/залежності не змінено.

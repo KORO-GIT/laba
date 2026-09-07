@@ -4,6 +4,8 @@
 
 ## ERP / Виробництво
 
+Бібліотека інструкцій0.27.0: перед змінами читати `docs/ERP_GUIDES.md`. Draft/published розділені; тільки ERPadmin редагує та завантажує фото, майстри читають публікації. Зображення приватні, у SQLite backup, не в public/Git. Sharp exact0.35.4; не послаблювати `.npmrc ignore-scripts=true`, ACL/квоти/перекодування. Запускати новий browser check `scripts/erp-guides-browser-check.mjs` плюс notifications/scrollbars. Підтверджений deployment дивитися у CURRENT_STATE; package version не є підтвердженням production.
+
 Скролбари ERP `0.26.2` розгорнуто (`8670895`, 2026-09-07 21:39:22 UTC), гілку `codex/erp-scrollbars` об'єднано/push у `main`. Стилі тільки в `public/erp-scrollbars.css`: нативна прокрутка, dark/light, forced-colors зберігає системні контролі. Для регресії запускати `scripts/erp-scrollbars-browser-check.mjs` та перевірку повідомлень; Chrome headless потребує `ignoreDefaultArgs:['--hide-scrollbars']`. Не замінювати прокрутку JS-обробниками. Підтверджений runtime/backup — у CURRENT_STATE.
 
 Hotfix повідомлень `0.26.1` розгорнуто (`7c925e7`, 2026-09-07 21:27:25 UTC) і fast-forward об'єднано/push у `main`. Native modal `showModal()` має browser top layer: ERP toast переноситься у sticky заголовок відкритого діалогу, а не підіймається body z-index. При змінах діалогів/помилок запускати `scripts/erp-notifications-browser-check.mjs`; зберігати введені поля та єдиний live region. Backend/схема/дані цим hotfix не змінені. Деталі deployment і handoff — `docs/CURRENT_STATE.md` та `docs/ERP_CONTINUATION.md`.

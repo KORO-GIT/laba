@@ -1,4 +1,5 @@
 import {createMaterialUI,materialQuantity,materialUnits} from './erp-materials.js?v=0.26.0';
+import {createGuideUI} from './erp-guides.js?v=0.27.0';
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
@@ -16,6 +17,7 @@ let crewId = null;
 let crewQueue = null;
 const pendingRequests = new Map();
 const icons = {
+  guides: ['M12 5v16','M12 5C8 2 4 3 2 4v16c3-2 6-2 10 1','M12 5c4-3 8-2 10-1v16c-3-2-6-2-10 1'],
   overview: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
   orders: ['M8 4H5v17h14V4h-3','M8 2h8v5H8z','M8 12h8','M8 16h5'],
   stock: ['m3 7 9-5 9 5v10l-9 5-9-5z','m3 7 9 5 9-5','M12 12v10','m7 4 10 6'],
@@ -36,6 +38,7 @@ const icons = {
 const labels = { received:'Прийнято', working:'У роботі', quality:'Контроль якості', ready:'Готово', delivered:'Видано', pending:'У черзі', in_progress:'Виконується', paused:'На паузі', blocked:'Заблоковано', done:'Завершено', active:'На зміні', closed:'Зміну закрито', normal:'Звичайний', high:'Високий', urgent:'Терміново', admin:'Адміністратор', manager:'Керівник', warehouse:'Комірник', technician:'Майстер', inspector:'Контролер якості', observer:'Спостерігач', none:'Без доступу', new:'Нова', good:'Справна', unknown:'Потребує перевірки', defective:'Несправна', external:'Надходження', workbench:'У роботі', installed:'Встановлено', returned:'Повернено', scrap:'Списано' };
 icons.crews = icons.team;
 const titles = { overview:'Огляд виробництва', orders:'Замовлення', stock:'Склад',materials:'Матеріали',replenishment:'Поповнення', team:'Команда', crews:'Робочі команди', my:'Моя робота', history:'Мої зміни', clients:'Клієнти', templates:'Шаблони робіт' };
+titles.guides='Інструкції';
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key,value] of Object.entries(attrs)) {
@@ -117,12 +120,12 @@ async function mutate(path, body, after) {
   } finally {busy=false;controls.forEach(b=>b.disabled=false);}
 }
 function navSections() {
-  if (data.me.role==='technician') return ['my',...(data.crews.length?['crews']:[]),'history'];
-  if (data.me.role==='warehouse') return ['overview','orders','stock','materials','replenishment'];
-  if (data.me.role==='inspector') return ['overview','orders'];
-  return ['overview','orders','stock','materials','replenishment','team','crews',...(worker()?['my','history']:[]),'clients','templates'];
+  if (data.me.role==='technician') return ['my','guides',...(data.crews.length?['crews']:[]),'history'];
+  if (data.me.role==='warehouse') return ['overview','orders','stock','materials','replenishment','guides'];
+  if (data.me.role==='inspector') return ['overview','orders','guides'];
+  return ['overview','orders','stock','materials','replenishment','team','crews',...(worker()?['my','history']:[]),'clients','templates','guides'];
 }
-function go(key) { section=key;search='';taskPage=0;location.hash=key;if(['my','crews','replenishment'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
+function go(key) { section=key;search='';taskPage=0;guideUI.resetPage();location.hash=key;if(['my','crews','replenishment','guides'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
 function heading(title,subtitle,action) { return el('div',{class:'page-heading'},el('div',{},el('p',{class:'eyebrow'},'LABA / ВИРОБНИЦТВО'),el('h1',{},title),el('p',{class:'subtitle'},subtitle)),action); }
 function panel(title,body,action,description) { return el('section',{class:'panel'},el('div',{class:'panel-header'},el('div',{},el('h2',{},title),description?el('p',{},description):null),action),body); }
 function empty(title,description,action,glyph='orders') { return el('div',{class:'empty-state'},icon(glyph),el('h3',{},title),el('p',{},description),action); }
@@ -152,7 +155,7 @@ function overview() {
       el('div',{},data.team?panel('Команда зараз',teamRows.length?el('div',{},teamRows.map(u=>el('div',{class:'team-row'},avatar(u.display_name||u.email),el('div',{class:'team-info'},el('strong',{},u.display_name||u.email),el('p',{},u.current?`${u.current.title} · ${u.current.serial||u.current.unit_code}`:u.shift?'На зміні · немає активної операції':'Поза зміною')),badge(u.current?'in_progress':u.shift?.state||'closed')))):empty('Команда ще не налаштована','Додайте майстрів і призначте доступ до виробництва.',null,'team'),el('a',{href:'#team',onclick:()=>go('team'),class:'section-link'},'Команда →'),`${working.length} майстрів виконують операції`):null,
       el('div',{class:'status-callout neutral'},icon('my'),el('div',{},el('strong',{},'Від прийомки до повернення'),el('p',{},'Кожен виріб має свій номер, історію робіт і власника. Готовність та видача обліковуються окремо.')))))];
 }
-function searchToolbar(placeholder,extra) {const input=el('input',{class:'search',type:'search',placeholder,value:search,maxLength:120,'aria-label':placeholder});input.addEventListener('input',()=>{search=input.value;const start=input.selectionStart;const refresh=()=>{const next=document.querySelector('.search');next?.focus();next?.setSelectionRange(start,start);};if(section==='my'||(section==='crews'&&crewId)){taskPage=0;clearTimeout(searchTimer);searchTimer=setTimeout(()=>load().then(refresh).catch(error=>notify(error.message,true)),300);}else{render();refresh();}});return el('div',{class:'toolbar'},input,extra);}
+function searchToolbar(placeholder,extra) {const input=el('input',{class:'search',type:'search',placeholder,value:search,maxLength:120,'aria-label':placeholder});input.addEventListener('input',()=>{search=input.value;const start=input.selectionStart;const refresh=()=>{const next=document.querySelector('.search');next?.focus();next?.setSelectionRange(start,start);};if(section==='my'||section==='guides'||(section==='crews'&&crewId)){taskPage=0;guideUI.resetPage();clearTimeout(searchTimer);searchTimer=setTimeout(()=>load().then(refresh).catch(error=>notify(error.message,true)),300);}else{render();refresh();}});return el('div',{class:'toolbar'},input,extra);}
 function ordersView() {return [heading('Замовлення','Партії клієнтів, серійні номери та готовність до видачі.',manager()?button('Прийняти партію',newOrder,'primary','plus'):null),searchToolbar('Пошук замовлення або клієнта'),panel(`Замовлення · ${data.orderCount}`,ordersTable(data.orders.filter(match))),data.orderCount>200?el('p',{class:'mobile-hint'},'Показано останні 200 замовлень.'):null];}
 function myView() {
   const shift=data.shifts.find(s=>!s.ended_at);
@@ -225,7 +228,7 @@ function render() {
   navigation.replaceChildren(...available.map(key=>el('a',{class:`nav-link${section===key?' active':''}`,href:`#${key}`,onclick:()=>go(key),'aria-current':section===key?'page':'false'},icon(key),titles[key],key==='my'&&data.myTaskCounts.open?el('span',{class:'nav-count'},data.myTaskCounts.open):key==='replenishment'&&data.materialPlanning?.alertCount?el('span',{class:'nav-count'},data.materialPlanning.alertCount):null)));
   document.querySelector('#breadcrumb').textContent=titles[section];
   document.querySelector('#identity').replaceChildren(avatar(data.me.name),el('span',{},data.me.name));
-  const views={overview,orders:ordersView,my:myView,team:teamView,crews:crewsView,stock:stockView,materials:materialUI.materialsView,replenishment:materialUI.replenishmentView,clients:clientsView,templates:templatesView,history:historyView};
+  const views={overview,orders:ordersView,my:myView,team:teamView,crews:crewsView,stock:stockView,materials:materialUI.materialsView,replenishment:materialUI.replenishmentView,clients:clientsView,templates:templatesView,history:historyView,guides:guideUI.view};
   const alertCount=data.materialPlanning?.alertCount||0;
   document.querySelector('#material-notification').replaceChildren(...(alertCount?[button(`${alertCount}`,()=>go('replenishment'),'quiet','alert')]:[]));
   const alertButton=document.querySelector('#material-notification button');if(alertButton){alertButton.setAttribute('aria-label',`Поповнення запасів: ${alertCount} позицій`);alertButton.title=`Поповнення запасів: ${alertCount} позицій`;}
@@ -411,15 +414,18 @@ async function contributionHistory(order,unit,task) {
 }
 
 const materialUI=createMaterialUI({getData:()=>data,el,button,actions,icon,heading,panel,table,empty,field,select,form,openDialog,dialog,manager,warehouse,api,mutate,notify,date,searchToolbar,match,go,load,openOrder,clientOptions});
+const guideUI=createGuideUI({getData:()=>data,el,button,actions,icon,heading,empty,field,openDialog,dialog,api,notify,date,load,searchToolbar,getSearch:()=>search});
 async function load() {
   const revision=++loadRevision;
   const next=await api(`context?taskState=${taskFilter}&page=${taskPage}&q=${encodeURIComponent(section==='my'?search:'')}`);
   const selectedCrew=next.crews.some(c=>c.id===crewId)?crewId:null;
   const nextQueue=section==='crews'&&selectedCrew?await api(`crews/${selectedCrew}/tasks?taskState=${taskFilter}&page=${taskPage}&q=${encodeURIComponent(search)}`):null;
   const nextMaterials=await materialUI.fetchState(next.materialPlanning?section:null);
+  const nextGuides=await guideUI.fetchState(section,next.me.role);
   if(revision!==loadRevision)return;
   crewId=selectedCrew;crewQueue=nextQueue;
   materialUI.acceptState(nextMaterials);
+  guideUI.acceptState(nextGuides);
   data=next;
   document.querySelector('#connection').textContent='Облік актуальний';document.querySelector('#connection').classList.remove('offline');
   document.querySelector('#updated-at').textContent=`Оновлено ${date(next.serverTime,true)} · Київ`;

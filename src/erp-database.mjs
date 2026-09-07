@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { migrateCrews, createCrewFeatures } from './erp-crews.mjs';
 import { migrateMaterials, createMaterialFeatures, quantityMilli } from './erp-materials.mjs';
+import { migrateGuides, createGuideFeatures } from './erp-guides.mjs';
 
 export function migrateErp(db) {
   db.transaction(() => {
@@ -118,6 +119,7 @@ export function migrateErp(db) {
     db.prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)').run('erp_v1');
     migrateCrews(db);
     migrateMaterials(db);
+    migrateGuides(db);
   }).immediate();
 }
 
@@ -152,15 +154,20 @@ export function createErp(db) {
   const stopTimer = (taskId, time) => run('UPDATE erp_time_entries SET ended_at=MAX(started_at,MIN(?,(SELECT started_at+? FROM erp_shifts WHERE id=shift_id))) WHERE task_id=? AND ended_at IS NULL', time, MAX_SHIFT_MS, taskId);
   const crews = createCrewFeatures({ db,get,all,run,insert,entity,version,role,requireRole,manages,event,fail,now,activeShift,maxShiftMs:MAX_SHIFT_MS });
   const materials = createMaterialFeatures({get,all,run,insert,entity,version,requireRole,event,fail,now,moveStock});
+  const guides = createGuideFeatures({get,all,run,insert,entity,version,role,requireRole,event,fail,now});
 
+  function replayCommand(user, requestId, path, body) {
+    const fingerprint = crypto.createHash('sha256').update(JSON.stringify([path, body])).digest('hex');
+    const previous = get('SELECT * FROM erp_commands WHERE user_id=? AND request_id=?', user.id, requestId);
+    if(!previous)return null;
+    if(previous.fingerprint!==fingerprint)fail(409,'Ідентифікатор повторного запиту має інші дані');
+    return {result:JSON.parse(previous.response_json)};
+  }
   function command(user, requestId, path, body, work) {
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify([path, body])).digest('hex');
     return db.transaction(() => {
-      const previous = get('SELECT * FROM erp_commands WHERE user_id=? AND request_id=?', user.id, requestId);
-      if (previous) {
-        if (previous.fingerprint !== fingerprint) fail(409, 'Ідентифікатор повторного запиту має інші дані');
-        return JSON.parse(previous.response_json);
-      }
+      const previous=replayCommand(user,requestId,path,body);
+      if(previous)return previous.result;
       const result = work();
       run('INSERT INTO erp_commands VALUES(?,?,?,?,?)', user.id, requestId, fingerprint, JSON.stringify(result), now());
       return result;
@@ -433,7 +440,7 @@ export function createErp(db) {
     return { id: moveId };
   }
 
-  return { role, requireRole, command, snapshot, orderDetail, taskAction, shiftAction, quality, deliver, receiveStock, moveStock,
+  return { ...guides, role, requireRole, command, replayCommand, snapshot, orderDetail, taskAction, shiftAction, quality, deliver, receiveStock, moveStock,
     saveMaterial:materials.saveMaterial,saveMaterialSpec:materials.saveSpec,linkMaterialLot:materials.linkLot,
     replenishments:materials.requests,saveReplenishment:materials.saveReplenishment,consumeMaterials:materials.consume,previewConsumption:materials.previewConsumption,
     saveCrew:crews.saveCrew, assignCrew:crews.assignCrew, workHistory:crews.workHistory,

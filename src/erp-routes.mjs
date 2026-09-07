@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { config } from './config.mjs';
 import { fail } from './erp-database.mjs';
+import {MAX_GUIDE_UPLOAD,normalizeGuideImage} from './erp-guide-images.mjs';
 
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const text = (max) => z.string().trim().min(1).max(max);
@@ -16,6 +17,8 @@ const quantity=z.number().positive().max(1000000);
 const materialFields={sku:text(100),name:text(160),uom:z.enum(['pcs','m','g','ml']),minimum:z.number().min(0).max(1000000),target:z.number().min(0).max(1000000)};
 const specSchema=z.object({version:z.number().int().min(0),lines:z.array(z.object({materialId:id,quantity,source:z.enum(['workshop','client'])}).strict()).max(40).refine(lines=>new Set(lines.map(l=>`${l.materialId}:${l.source}`)).size===lines.length,'Повторні матеріали')}).strict();
 const replenishmentFields={quantity,note:text(500)};
+const guideFields={title:text(160),summary:z.string().trim().max(500).default(''),category:z.string().trim().max(80).default(''),model:z.string().trim().max(120).default(''),publish:z.boolean().default(false),
+  steps:z.array(z.object({title:z.string().trim().max(120),text:z.string().trim().max(6000),imageId:z.uuid().nullable().default(null),caption:z.string().trim().max(300).default('')}).strict()).min(1).max(30)};
 const schemas = {
   client: z.object({ name: text(160), contact: z.string().trim().max(200).default(''), notes: note }).strict(),
   template: z.object({ name: text(160), steps }).strict(),
@@ -72,27 +75,50 @@ export function registerErpRoutes(app, erp) {
     return erp.crewTasks(request.portalUser,numericId(request),parsed.data);
   });
 
-  function write(path, schema, access, action) {
+  app.get('/api/erp/guides',{preHandler:allowed(roles)},async request=>{
+    const query=z.object({q:z.string().max(120).default(''),page:z.coerce.number().int().min(0).max(100000).default(0),scope:z.enum(['published','draft','archived','all']).default('published')}).strict().safeParse(request.query);
+    if(!query.success)fail(400,'Некоректний пошук інструкцій');return erp.guideList(request.portalUser,query.data);
+  });
+  app.get('/api/erp/guides/:id',{preHandler:allowed(roles)},async request=>{
+    const query=z.object({draft:z.enum(['0','1']).default('0')}).strict().safeParse(request.query);
+    if(!query.success)fail(400,'Некоректний запит інструкції');return erp.guideDetail(request.portalUser,numericId(request),query.data.draft==='1');
+  });
+  app.get('/api/erp/guides/:id/images/:imageId',{preHandler:allowed(roles)},async(request,reply)=>{
+    if(!z.uuid().safeParse(request.params.imageId).success)fail(404,'Фото не знайдено');
+    return reply.header('Cache-Control','no-store').header('X-Content-Type-Options','nosniff').header('Cross-Origin-Resource-Policy','same-origin').header('Content-Disposition','inline; filename="instruction.webp"').type('image/webp').send(erp.guideImage(request.portalUser,numericId(request),request.params.imageId));
+  });
+
+  function write(path, schema, access, action, options={}) {
     app.post(`/api/erp/${path}`, {
-      bodyLimit: 256 * 1024,
+      bodyLimit: options.bodyLimit ?? 256 * 1024,
       preHandler: [allowed(access), async request => {
         const expected = config.nodeEnv === 'production' ? `https://${config.baseDomain}` : `http://${request.headers.host}`;
         if (request.headers.origin !== expected || request.headers['x-portal-request'] !== '1'
           || ['cross-site','same-site'].includes(request.headers['sec-fetch-site'])) fail(403, 'Запит відхилено захистом CSRF');
         if (!z.uuid().safeParse(request.headers['x-erp-request-id']).success) fail(400, 'Потрібен унікальний ідентифікатор операції');
       }],
-      config: { rateLimit: { max: 90, timeWindow: '1 minute', keyGenerator: request => `erp-write:${request.portalUser?.id ?? request.ip}` } }
+      config: { rateLimit: { max: options.max ?? 90, timeWindow: '1 minute', keyGenerator: request => `${options.prepare?'erp-image':'erp-write'}:${request.portalUser?.id ?? request.ip}` } }
     }, async request => {
       const parsed = schema.safeParse(request.body);
       if (!parsed.success) fail(400, `Перевірте поля: ${parsed.error.issues.map(i => i.path.join('.')).slice(0,5).join(', ')}`);
       try {
-        return erp.command(request.portalUser, request.headers['x-erp-request-id'], request.url, parsed.data, () => action(request.portalUser, parsed.data, request.params.id ? numericId(request) : null));
+        const id=request.params.id?numericId(request):null;
+        if(options.prepare){const previous=erp.replayCommand(request.portalUser,request.headers['x-erp-request-id'],request.url,parsed.data);if(previous)return previous.result;}
+        const prepared=options.prepare?await options.prepare(request.portalUser,id,parsed.data):undefined;
+        return erp.command(request.portalUser, request.headers['x-erp-request-id'], request.url, parsed.data, () => action(request.portalUser, parsed.data, id, prepared));
       } catch (error) {
         if (String(error.code).startsWith('SQLITE_CONSTRAINT')) fail(409, 'Операція конфліктує з обліком: перевірте дублікати номерів, назви та поточний стан');
         throw error;
       }
     });
   }
+  write('guides',z.object(guideFields).strict(),['admin'],(u,b)=>erp.saveGuide(u,null,b));
+  write('guides/:id',z.object({...guideFields,version:id}).strict(),['admin'],(u,b,id)=>erp.saveGuide(u,id,b));
+  write('guides/:id/archive',z.object({version:id,archived:z.boolean()}).strict(),['admin'],(u,b,id)=>erp.archiveGuide(u,id,b));
+  write('guides/:id/images',z.object({version:id,filename:z.string().min(1).max(160).regex(/^[^/\\\x00-\x1f]+\.(?:jpe?g|png|webp)$/i),data:z.string().min(4).max(4*Math.ceil(MAX_GUIDE_UPLOAD/3))}).strict(),['admin'],(u,b,id,image)=>erp.saveGuideImage(u,id,b,image),{
+    bodyLimit:4*Math.ceil(MAX_GUIDE_UPLOAD/3)+1024,max:12,
+    prepare:async(u,id,b)=>{erp.checkGuideUpload(u,id,b.version);return normalizeGuideImage(b);}
+  });
   write('clients', schemas.client, managers, (u,b) => erp.createClient(u,b));
   write('templates', schemas.template, managers, (u,b) => erp.createTemplate(u,b));
   write('orders', schemas.order, managers, (u,b) => erp.createOrder(u,b));
