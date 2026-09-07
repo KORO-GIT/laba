@@ -1,12 +1,19 @@
 # Продовження ERP з іншого ПК
 
-## Новий робочий checkpoint 0.26.0 · матеріали
+## Поточний checkpoint 0.26.0 · матеріали
 
-`codex/erp-material-planning` від clean `origin/main=eed5419`; перший checkpoint `b036322` push. Реалізовані каталог/норми на шаблон і замовлення, розрахунок всіх відкритих потреб, внутрішні попередження, заявки з частковим надходженням, підтвердження фактичної витрати. Повністю прочитати `ERP_MATERIALS.md`; production до перевіреного deployment залишається `c947dcb/0.25.0`. Windows install/check/test/audit пройшли:33/33,audit0; три browser smoke та два performance smoke пройшли; migration-check двічі зберіг36 таблиць synthetic DB. Детальні результати у `ERP_MATERIALS.md`. VPS stage/deploy ще попереду. Не видавати checkpoint за готовий production. Особливо важливо зберігати `quantity_scale` та незмінні legacy рухи. Перед stage всі92 VPS-файли збігалися з `c947dcb`; origin/main ще `eed5419`. На VPS вже з'явилась1 реальна команда (поряд із4 виробами) — зберегти найсвіжіший стан після stop, не копіювати застарілий backup поверх нього.
+`codex/erp-material-planning` від clean `origin/main=eed5419`; перший checkpoint `b036322`, release **`70508a06c77de081968177f067d7ac3474d71453`**. Розгорнуто **2026-09-07 21:13:53 UTC**, health21:13:54; гілку fast-forward об'єднано й push у main. Реалізовані каталог/норми на шаблон і замовлення, розрахунок всіх відкритих потреб, внутрішні попередження, заявки з частковим надходженням, підтвердження фактичної витрати. Повністю прочитати `ERP_MATERIALS.md`.
 
-Оновлено: 2026-09-07 після deployment робочих команд `0.25.0`. Виробничий контур і команди запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+- Windows та VPS staging install/check/test/audit:33/33,audit0. Три локальні browser smoke (початкова ERP, команди, матеріали) та два performance smoke пройшли. Synthetic та production-read-only backup migration-check двічі зберегли36 старих таблиць/колонок/значень; quick_check/FK ok.
+- VPS material smoke:201 замовлення,3181 виріб,3 матеріали,501 партія; setup658ms, read median41/p9564ms, проведення150×3 —683ms. Загальний3000-unit/9000-task smoke: setup645ms, owner10/13ms, worker10/13ms. Це in-memory, не concurrent SLA чи гарантія місткості.
+- Перед release всі92 старі VPS-файли збігалися з c947dcb; після —98 з70508a0. Origin/main повторно перевірена до merge: залишаласяeed5419, чужих нових commits не було. Збережено актуальні4 вироби та1 створену користувачем команду. Дані скопійовані після stop й побайтово звірені, не зі старого backup.
+- Backup `/opt/laba/backups/portal-20260907-2113-before-0.26.0.db`, попередній каталог `/opt/laba-previous-20260907T2113Z-0.25.0`. Старі backups не видалені. Caddy/Pi/Task/Starlink/SignalSynch не змінювалися. Усі5 VPS-служб active, authCloudflare, безJWT нові API/assets401, SQL/FK ok, права збережено, loopback3020, ~49MiB ізMemoryMax512MiB.
+- Live Chrome: overview → каталог → форма без збереження → поповнення; візуально перевірено через Computer Use. На VPS матеріалів/норм/заявок ще0; це налаштовує власник за реальними даними, не seed. Підказки видимі, тестових проводок агент не робив. Для першого реального шаблону: каталог/власник/одиниці → норми на один виріб → прийомка запасу → замовлення зі snapshot норм → прогноз/заявка → фактичний розхід до QC.
+- Особливо важливо зберігати `quantity_scale` та незмінні legacy рухи; старий writable ERP несумісний. Немає зовнішніх сповіщень, hard reserve, автосписання при завершенні майстром чи offsite backup. Наступна робота — тільки нова codex/* від актуального origin/main; docs-only SHA не плутати з runtime70508a0.
 
-## Поточний checkpoint 0.25.0
+Оновлено: 2026-09-08 за Києвом після deployment матеріалів `0.26.0`. Виробничий контур, команди та матеріали запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+
+## Історичний checkpoint 0.25.0
 
 - `codex/erp-teams` створено від clean `origin/main=1991d0e`, checkpoint **`c947dcb38b6ff9982490801600d91b3f040cbb2b`** push і розгорнуто 2026-09-07 о 20:47 UTC. Після повторного fetch гілку fast-forward об'єднано й push у `main`. Наступний docs-only commit фіксує deployment, його не плутати з runtime SHA.
 - Нова вимога власника: команди для одного великого складного дрона та модернізації партії. Реалізовано склад/старший, `pool` і `shared`, особисті внески, незалежні таймери й зміни, server ACL/версії/історію. Повністю прочитати `ERP_TEAMS.md`.

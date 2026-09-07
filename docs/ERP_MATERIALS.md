@@ -1,6 +1,6 @@
 # Матеріали, норми та поповнення ERP · 0.26.0
 
-Статус цього checkpoint: розробка в `codex/erp-material-planning` від `origin/main=eed5419`. Підтверджений production ще `0.25.0/c947dcb`; цей документ сам по собі не є підтвердженням deployment. Фактичний release фіксується в `CURRENT_STATE.md`.
+Статус: **розгорнуто 2026-09-07 21:13:53 UTC**, health21:13:54. Release **`70508a06c77de081968177f067d7ac3474d71453`**; `codex/erp-material-planning` від `origin/main=eed5419` fast-forward об'єднано й push у main. Фактичний production та наступні docs-only commits розрізняти за `CURRENT_STATE.md`.
 
 ## Вимога та межі
 
@@ -62,7 +62,9 @@ Checkpoint `b036322` push з кодом/документацією до browser 
 - Загальний read smoke: 3000 виробів/9000 операцій/20 майстрів, setup259ms, owner median4/p956ms, worker4/6ms.
 - `scripts/erp-materials-performance-check.mjs`: 201 замовлення,3181 виріб,3 норми,501 партія; доводить урахування записів поза UI-лімітами200/500. Setup298ms, context median21/p9522ms, атомарна витрата150×3 —311ms. Це in-memory smoke, не concurrent load test/гарантія місткості.
 
-Перед production ще потрібні install/check/test/audit на VPS staging, дворазова migration-check приватного backup актуальної production DB, свіжа перевірка origin/main та hashes deployed files. Фактичні результати deployment додати до `CURRENT_STATE.md` і handoff.
+VPS staging теж пройшов install/check/test/audit33/33,audit0; дворазова міграція приватного read-only backup актуальної production зберегла36 старих таблиць і всі старі значення. Material smoke:setup658ms, read median41/p9564ms,150×3 витрати683ms. Загальний read smoke:setup645ms, owner10/13ms, worker10/13ms. Усі92 початкові файли збігались зc947dcb, усі98 після deployment — з70508a0. Реальних тестових записів не додавали. Збережено4 користувацькі вироби та1 команду; новий каталог/норми/заявки порожні до фактичного налаштування.
+
+Backup `/opt/laba/backups/portal-20260907-2113-before-0.26.0.db`, previous `/opt/laba-previous-20260907T2113Z-0.25.0`. `.env/data/backups` скопійовано після stop та побайтово звірено; тільки LABA перезапущена. SQL/FK/health/Cloudflare й permissions перевірені, сторонні служби active, Caddy hash незмінний. Live Chrome через Computer Use: каталог, форма без збереження, поповнення; сторінка залишена відкритою. Повний handoff — `ERP_CONTINUATION.md`.
 
 **Rollback:** старий код до 0.26.0 не знає `quantity_scale` і помилково прочитає нові тисячні як цілу кількість. Не запускати стару ERP з writable доступом поверх оновленої БД. Переважно fix-forward. Для аварійного rollback потрібен окремий погоджений план блокування ERP/звірки нових записів; не відновлювати старий backup поверх нових користувацьких даних. Перед deployment новий SQLite backup, stage з install/check/test/audit та дворазовим migration-check; зупиняється тільки `laba-portal`, копіюються поточні `.env`, `data`, `backups` без змін. Caddy і сусідні служби не змінювати.
 

@@ -1,12 +1,17 @@
 # Поточний стан LABA
 
-Актуально на 2026-09-07. Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
+Актуально на 2026-09-08 за Києвом (deployment 2026-09-07 UTC). Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
 
 ## Код і production
 
 - Репозиторій: `https://github.com/KORO-GIT/laba`, гілка `main`.
-- Поточна версія застосунку: `0.25.0`.
-- Останній підтверджений production-код: **`c947dcb38b6ff9982490801600d91b3f040cbb2b`**, робочі команди ERP. Розгорнуто 2026-09-07 о **20:47:13 UTC**, health підтверджено о 20:47:15; усі **92** файли Git archive на VPS звірено за SHA-256 без розбіжностей. `codex/erp-teams` fast-forward об'єднано й push у `main`. Наступні documentation-only commits не означають нового deployment коду.
+- Поточна версія застосунку: `0.26.0`.
+- Останній підтверджений production-код: **`70508a06c77de081968177f067d7ac3474d71453`**, норми матеріалів/потреби/поповнення ERP. Старт **2026-09-07 21:13:53 UTC**, health підтверджено **21:13:54 UTC** (08 вересня,00:13 за Києвом). Усі **98** файлів Git archive на VPS звірено за SHA-256, без розбіжностей. `codex/erp-material-planning` fast-forward об'єднано й push у `main`; наступний docs-only handoff не є новим runtime SHA.
+- Перед deployment `0.26.0` створено й перевірено SQLite backup **`/opt/laba/backups/portal-20260907-2113-before-0.26.0.db`** (root:root600); попередній каталог **`/opt/laba-previous-20260907T2113Z-0.25.0`** збережено. Після stop тільки LABA поточні `.env`, `data/`, `backups/` скопійовано та побайтово звірено до старту. Збережені4 користувацькі вироби й1 нова робоча команда; агент не додавав реальних матеріалів/норм/заявок.
+- VPS staging: `npm ci/check/test/audit` пройшли, **33/33**, audit0. Migration-check read-only backup production двічі зберіг **36** існуючих таблиць, старі колонки/значення/markers, quick_check/FK ok. Нові3 матеріальні таблиці й3 додаткові колонки старих партій, жодної перезаписаної старої кількості. Нові партії `quantity_scale=1000`; старі scale1. Не запускати старий ERP writable поверх цієї семантики — правила `ERP_MATERIALS.md`, переважно fix-forward.
+- Після deployment: Cloudflare auth незмінний, `/erp`, context/replenishments/material-preview та обидва нові assets без JWT —401; quick_check/FK ok, каталог750/env640/data700/DB660, write permissions користувача laba перевірені. MemoryCurrent близько49MiB, MemoryMax512MiB незмінний; loopback3020, журнал err після старту порожній. Caddyfile hash і активність усіх сусідніх служб незмінні.
+- Live Chrome (Computer Use) перевірено: overview збережених виробів → каталог → форма нового матеріалу без вводу/збереження → `Поповнення`; сторінку залишено `/erp#replenishment`. Заповнені сценарії та mobile360/390 dark/light перевірялися тільки на synthetic localhost. Почати реальне налаштування з каталогу/мінімумів і норм шаблонів; порожній каталог не означає відсутність потреби.
+- Попередній production `0.25.0`: **`c947dcb38b6ff9982490801600d91b3f040cbb2b`**, робочі команди ERP. Розгорнуто 2026-09-07 о **20:47:13 UTC**, health підтверджено о20:47:15; усі92 файли archive звірені. Гілка `codex/erp-teams` об'єднана в main і збережена.
 - Перед deployment команд створено SQLite backup **`/opt/laba/backups/portal-20260907-2048-before-0.25.0.db`**; попередній код `0.24.0/e430efd` збережено в **`/opt/laba-previous-20260907T2048Z-0.24.0`**. Шляхи містять `2048`, але фактичний час старту зазначено вище. `.env`, актуальні `data/` і `backups/` скопійовано після зупинки лише LABA, побайтово звірено до старту. Міграція додала тільки таблиці/колонки команд; старі значення не переписувались. Rollback старої ERP поверх нових shared-таймерів семантично несумісний: див. `ERP_TEAMS.md`, переважно fix-forward; нову БД старим backup не замінювати.
 - Перший ERP release `0.24.0/e430efd` був 2026-09-07 близько 20:22–20:24 UTC, 88 файлів archive збігалися. Його backup **`/opt/laba/backups/portal-20260907-2022-before-0.24.0.db`** і попередній каталог **`/opt/laba-previous-20260907T2022Z-0.23.3`** збережені.
 - `laba-portal`, `koro-kanban`, `koro-task`, `koro-signal-sheets-sync`, Caddy активні; `/healthz` — 200, SQLite quick_check — `ok`, foreign_key_check — без порушень. Caddyfile незмінний: SHA-256 `e317ddf8b5ad832ab20339f3606a242ebc1af2fdd55d97536186af9bd3203396`. SignalSynch залишився на раніше підтвердженому `8f81ae22bb2e428de89b608d26e6adf7aebe63f3`; його код/конфігурація не змінювалися.
@@ -25,6 +30,7 @@ Production-паролі, SSH-дані, Cloudflare API tokens, `.env`, база, 
 
 - Портал: `https://laba.zpseapil.club`.
 - Виробництво ERP: `https://laba.zpseapil.club/erp`; майстрам — `/erp#my`, робочі команди — `/erp#crews`.
+- Матеріали — `/erp#materials`, норми типових процедур — `/erp#templates`, прогноз/внутрішні заявки — `/erp#replenishment`. Детальна інструкція `ERP_MATERIALS.md`. Повідомлення тільки всередині відкритого ERP; зовнішніх push/автозакупівель немає, фактичний розхід підтверджується окремо від плану.
 - Майстерня: `https://laba.zpseapil.club/workshop`.
 - Гарантійний сервіс: `https://laba.zpseapil.club/service`.
 - Пристрої: `https://laba.zpseapil.club/devices`.
