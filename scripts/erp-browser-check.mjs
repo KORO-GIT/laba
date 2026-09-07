@@ -12,7 +12,14 @@ try {
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(`${base}/erp`);
   await page.getByRole('heading',{name:'Виробництво під контролем'}).waitFor();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.screenshot({path:path.resolve('data/erp-desktop.png'),fullPage:true});
+  await page.getByRole('button',{name:'Увімкнути світлу тему'}).click();
+  await page.reload();
+  await page.getByRole('heading',{name:'Виробництво під контролем'}).waitFor();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'light','theme survives reload');
+  await page.screenshot({path:path.resolve('data/erp-desktop-light.png'),fullPage:true});
+  await page.getByRole('button',{name:'Увімкнути темну тему'}).click();
   for(const name of ['Замовлення','Склад','Команда','Клієнти','Шаблони робіт']) {
     await page.getByRole('link',{name,exact:true}).click();
     await page.getByRole('heading',{name:name==='Склад'?'Склад комплектуючих':name,exact:true}).waitFor();
@@ -39,6 +46,10 @@ try {
     await phone.locator('.task-card.running').waitFor();
   }
   await phone.screenshot({path:path.resolve('data/erp-mobile.png')});
+  await phone.getByRole('button',{name:'Увімкнути світлу тему'}).click();
+  assert.equal(await phone.locator('html').getAttribute('data-theme'),'light');
+  await phone.screenshot({path:path.resolve('data/erp-mobile-light.png')});
+  await phone.getByRole('button',{name:'Увімкнути темну тему'}).click();
   const running=phone.locator('.task-card.running');
   await running.getByRole('button',{name:'Пауза',exact:true}).click();
   await phone.locator('.task-card.running').waitFor({state:'hidden'});
@@ -54,5 +65,5 @@ try {
   await phone.setViewportSize({width:360,height:740});
   assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'small mobile overflows');
   assert.deepEqual(errors,[],'browser errors');
-  console.log(JSON.stringify({ok:true,desktop:'data/erp-desktop.png',mobile:'data/erp-mobile.png',checks:['admin navigation','order detail','receipt form','technician isolation','mobile pause/resume/complete','shifts','360px layout','CSP/page errors']}));
+  console.log(JSON.stringify({ok:true,desktop:'data/erp-desktop.png',mobile:'data/erp-mobile.png',checks:['dark/light themes','theme persistence','admin navigation','order detail','receipt form','technician isolation','mobile pause/resume/complete','shifts','360px layout','CSP/page errors']}));
 } finally { await browser.close(); }

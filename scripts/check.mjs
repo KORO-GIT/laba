@@ -7,7 +7,7 @@ function run(command,args) {
 }
 for(const file of [
   'src/server.mjs','src/database.mjs','src/security.mjs','src/probes.mjs','src/audio-agent.mjs','src/starlink-agent.mjs','src/erp-database.mjs','src/erp-routes.mjs',
-  'scripts/configure-usb-camera.mjs','scripts/configure-audio-agent.mjs','scripts/configure-starlink-agent.mjs','scripts/erp-demo.mjs','scripts/erp-browser-check.mjs',
+  'scripts/configure-usb-camera.mjs','scripts/configure-audio-agent.mjs','scripts/configure-starlink-agent.mjs','scripts/erp-demo.mjs','scripts/erp-browser-check.mjs','scripts/erp-migration-check.mjs','scripts/erp-performance-check.mjs',
   'public/icons.js','public/home.js','public/dashboard.js','public/maintenance.js','public/admin.js','public/desktop.js','public/camera.js','public/erp.js','public/erp-theme.js','public/vendor/go2rtc/video-rtc.js','public/vendor/go2rtc/video-stream.js'
 ]) run(process.execPath,['--check',file]);
 

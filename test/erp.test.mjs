@@ -175,3 +175,32 @@ test('ERP caps abandoned shifts at 16 hours and never grants access to other LAB
   await f.post('shifts/action',{action:'end',version:own.shifts[0].version},2);
   assert.equal(f.db.prepare('SELECT ended_at-started_at AS duration FROM erp_shifts WHERE user_id=2').get().duration,MAX_SHIFT_MS);
 });
+
+test('ERP searches the complete personal queue with pagination and accurate totals',async context=>{
+  const f=fixture(context);const {id}=await order(f,150);await assign(f,id);
+  const first=await f.get('context?taskState=open&page=0',2);
+  const third=await f.get('context?taskState=open&page=2',2);
+  assert.equal(first.myTaskCount,300);assert.equal(first.myTaskCounts.open,300);assert.equal(first.myTasks.length,50);assert.equal(third.myTasks.length,50);
+  assert.ok(third.myTasks.every(t=>!first.myTasks.some(other=>other.id===t.id)));
+  const found=await f.get('context?taskState=open&q=SN-149',2);assert.equal(found.myTaskCount,2);
+  const ukrainian=await f.get('context?q='+encodeURIComponent('огляд'),2);assert.equal(ukrainian.myTaskCount,150);
+  assert.equal((await f.request('context?page=-1',undefined,2)).status,400);
+  assert.equal((await f.get('context?taskState=open',3)).myTaskCount,0);
+});
+
+test('ERP records manager shift closure and protects stale order edits without rewriting history',async context=>{
+  const f=fixture(context);const {id}=await order(f);const detail=await assign(f,id);const task=detail.tasks[0];
+  await f.post('shifts/action',{action:'start'},2);await f.post(`tasks/${task.id}/action`,{action:'start',version:task.version},2);
+  const shift=(await f.get('context',2)).shifts[0];
+  assert.equal((await f.request('members/2/close-shift',{version:shift.version,endedAt:Date.now(),reason:'Test'},3)).status,403);
+  await f.post('members/2/close-shift',{version:shift.version,endedAt:Date.now(),reason:'Майстер забув закрити зміну'});
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_time_entries WHERE ended_at IS NULL').get().n,0);
+  const event=f.db.prepare("SELECT * FROM erp_events WHERE action='shift.closed_by_manager'").get();assert.equal(event.actor_id,1);assert.match(event.details_json,/Майстер/);
+  const updated={title:'Уточнений ремонт',priority:'urgent',dueDate:'2026-10-01',notes:'Новий термін погоджено',version:detail.version};
+  await f.post(`orders/${id}/update`,updated);
+  assert.equal((await f.request(`orders/${id}/update`,updated)).status,409);
+  assert.equal((await f.get(`orders/${id}`)).units.length,3);
+  const before=f.db.prepare('SELECT COUNT(*) AS n FROM erp_events').get().n;
+  createErp(f.db);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_events').get().n,before,'repeat migration preserves history');
+});

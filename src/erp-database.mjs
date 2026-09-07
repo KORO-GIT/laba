@@ -56,6 +56,7 @@ export function migrateErp(db) {
         id INTEGER PRIMARY KEY, shift_id INTEGER NOT NULL REFERENCES erp_shifts(id),
         started_at INTEGER NOT NULL, ended_at INTEGER, CHECK(ended_at IS NULL OR ended_at >= started_at)
       );
+      CREATE INDEX IF NOT EXISTS erp_intervals_shift ON erp_shift_intervals(shift_id);
       CREATE TABLE IF NOT EXISTS erp_time_entries (
         id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES erp_tasks(id),
         user_id INTEGER NOT NULL REFERENCES users(id), shift_id INTEGER NOT NULL REFERENCES erp_shifts(id),
@@ -63,11 +64,13 @@ export function migrateErp(db) {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS erp_one_running_timer ON erp_time_entries(user_id) WHERE ended_at IS NULL;
       CREATE INDEX IF NOT EXISTS erp_time_user ON erp_time_entries(user_id,started_at);
+      CREATE INDEX IF NOT EXISTS erp_time_task ON erp_time_entries(task_id,started_at);
       CREATE TABLE IF NOT EXISTS erp_quality_checks (
         id INTEGER PRIMARY KEY, unit_id INTEGER NOT NULL REFERENCES erp_units(id),
         result TEXT NOT NULL CHECK(result IN ('pass','rework')), note TEXT NOT NULL,
         actor_id INTEGER NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS erp_quality_unit ON erp_quality_checks(unit_id);
       CREATE TABLE IF NOT EXISTS erp_deliveries (
         id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES erp_orders(id),
         reference TEXT NOT NULL, recipient TEXT NOT NULL, actor_id INTEGER NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL
@@ -94,6 +97,7 @@ export function migrateErp(db) {
         id INTEGER PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL,
         entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL, details_json TEXT NOT NULL, created_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS erp_events_actor_action ON erp_events(actor_id,action);
       CREATE TABLE IF NOT EXISTS erp_commands (
         user_id INTEGER NOT NULL REFERENCES users(id), request_id TEXT NOT NULL,
         fingerprint TEXT NOT NULL, response_json TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -327,7 +331,7 @@ export function createErp(db) {
     const unit = entity('erp_units', id);
     version(unit, body.version);
     if (unit.state !== 'quality') fail(409, 'Виріб ще не готовий до контролю якості');
-    if (get('SELECT id FROM erp_tasks WHERE unit_id=? AND completed_by=?', id, user.id)) fail(409, 'Перевірку має виконати інша людина, ніж виконавець робіт');
+    if (get('SELECT t.id FROM erp_tasks t JOIN erp_time_entries e ON e.task_id=t.id WHERE t.unit_id=? AND e.user_id=?', id, user.id)) fail(409, 'Перевірку має виконати інша людина, ніж виконавець робіт');
     if (body.result === 'pass') {
       if (get("SELECT id FROM erp_tasks WHERE unit_id=? AND state!='done'", id)) fail(409, 'Є незавершені операції');
       if (get("SELECT lot_id,SUM(CASE WHEN to_location='workbench' THEN quantity ELSE 0 END-CASE WHEN from_location='workbench' THEN quantity ELSE 0 END) AS qty FROM erp_stock_moves WHERE unit_id=? GROUP BY lot_id HAVING qty>0", id)) fail(409, 'Спочатку підтвердьте встановлення або повернення всіх виданих деталей');
