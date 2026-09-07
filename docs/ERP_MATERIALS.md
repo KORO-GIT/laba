@@ -54,7 +54,15 @@
 
 Код: `src/erp-materials.mjs`, інтеграція в `erp-database.mjs`/`erp-routes.mjs`; UI `public/erp-materials.js`/`.css`, `erp.js`/`.html`. Поведінкові тести — `test/erp.test.mjs`: власність, дробова арифметика, копія норм, партія 150, пороги, часткові надходження, retry, stale-версії, повний rollback, QC, ACL/CSRF, preview без записів, міграційна сумісність старих партій. Browser/performance результати додати після фактичного запуску.
 
-На checkpoint пройшли JS syntax та 22 ERP-тести. Перед release обов'язково повні `npm ci`, `npm run check`, `npm test`, `npm audit --omit=dev`, isolated browser regression dark/light/mobile і migration-check read-only backup поточної production DB, плюс перевірка свіжої origin/main та hash усіх deployed файлів.
+Checkpoint `b036322` push з кодом/документацією до browser QA. Потім на Windows виконано точні `npm ci`, `npm run check`, `npm test`: **33/33** (22 ERP), `npm audit --omit=dev`: **0** vulnerabilities. JS/Python перевірки пройшли. Нових dependencies немає.
+
+- `scripts/erp-materials-browser-check.mjs`: власний disposable localhost8085; UI каталогу/двох норм, партія150, прийомка200, рекомендація150, заявка, прийомки50+100, фактична витрата150, role-safe hash для technician, navigation warehouse, без browser errors. Chrome headless; dark/light390/360 візуально перевірено, скриншоти лише ignored `data/`. Підтвердження150 у UI ~356 ms на цьому ПК, не SLA.
+- `scripts/erp-crews-browser-check.mjs` та початковий `scripts/erp-browser-check.mjs` повторно пройшли, включно зі змінами/паузами/спільною роботою. Тестових даних на VPS не створено.
+- `erp-migration-check` двічі мігрував read-only backup локальної попередньої synthetic ERP: **36** старих таблиць, колонки й усі значення збережено; quick_check/FK ok.
+- Загальний read smoke: 3000 виробів/9000 операцій/20 майстрів, setup259ms, owner median4/p956ms, worker4/6ms.
+- `scripts/erp-materials-performance-check.mjs`: 201 замовлення,3181 виріб,3 норми,501 партія; доводить урахування записів поза UI-лімітами200/500. Setup298ms, context median21/p9522ms, атомарна витрата150×3 —311ms. Це in-memory smoke, не concurrent load test/гарантія місткості.
+
+Перед production ще потрібні install/check/test/audit на VPS staging, дворазова migration-check приватного backup актуальної production DB, свіжа перевірка origin/main та hashes deployed files. Фактичні результати deployment додати до `CURRENT_STATE.md` і handoff.
 
 **Rollback:** старий код до 0.26.0 не знає `quantity_scale` і помилково прочитає нові тисячні як цілу кількість. Не запускати стару ERP з writable доступом поверх оновленої БД. Переважно fix-forward. Для аварійного rollback потрібен окремий погоджений план блокування ERP/звірки нових записів; не відновлювати старий backup поверх нових користувацьких даних. Перед deployment новий SQLite backup, stage з install/check/test/audit та дворазовим migration-check; зупиняється тільки `laba-portal`, копіюються поточні `.env`, `data`, `backups` без змін. Caddy і сусідні служби не змінювати.
 
