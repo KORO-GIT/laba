@@ -1,5 +1,15 @@
 # Продовження ERP з іншого ПК
 
+## Checkpoint `0.26.2-spacing1` · відступи пояснення норм
+
+Поточний UI patchc607018 розгорнуто2026-09-07 22:06:28UTC: тільки4 статичні файли поверх backend/base8670895, package0.26.2 і start21:39:22UTC незмінні. Відступи `.material-spec-note`18px вертикально/22px горизонтально, mobile17px відповідають `.panel-header`; призначена тільки двом абзацам orderPanel (empty та опис заповнених норм). Текст/таблиця/розрахунки/БД не змінені. Теги assets `0.26.2-spacing1` змушують браузер завантажити нові стилі й module після reload.
+
+Гілка `codex/erp-material-panel-spacing` від cleanmainf55226b. Перед update звірено4 старі SHA з8670895; archive4 файли маєSHA-25652c82393527482e312af3db92e4937f24089873d74b019f252630ff8c3225ffa. Зроблено read-only SQLite backup `/opt/laba/backups/portal-20260907-2206-before-spacing1.db` root600, перевіреноFK/quick_check,4 оригінальні assets збережено у root-only `/opt/laba/backups/ui-spacing-c607018/`. Нові файли встановлено з тими самимиroot:laba664; сервіс не зупиняли, каталоги не міняли, Caddy/units/секрети/інші служби не зачіпали. Post-check101 runtime hashes збігаються зbase867+4c607; health200/auth401/SQLite/FK/служби/права ok,4units/1crew збережено. Результати й точні шляхи — CURRENT_STATE.
+
+Clean npm ci/check/test/audit33/33, audit0. `erp-materials-browser-check` тепер перевіряє empty/filled по4 viewport/theme, заголовок/абзац на одній осі, вертикальний простір, no overflow та незмінну таблицю; повний synthetic150-unit material workflow пройшов. Для майбутніх змін mobile spacing орієнтуватися на `public/erp-responsive.css`, де body .panel-header має17px. Не змінювати глобальний .task-context: це зачепило б картки майстрів.
+
+Паралельна бібліотека0.27.0 у `codex/erp-instructions` ще НЕ production. Її stageda481f5e застарів після цього hotfix; інтегрувати зміни і зібрати свіжий staging. Не втратити guide draft/published/ACL/upload код і не розгортати старий archive поверх нової верстки. При rollback цього CSS не потрібне відновлення старої БД: за необхідності повертаються тільки4 assets із їхнього backup.
+
 ## Поточний checkpoint 0.26.2 · скролбари ERP
 
 Гілка `codex/erp-scrollbars` від clean `origin/main=f0a39a2`. Власник попросив замінити грубі системні скролбари у формах. Новий `public/erp-scrollbars.css` підключено тільки до ERP: прозора доріжка, скруглений повзунок 6px усередині нативної області 10px, відступи на кінцях, без стрілок; помаранчевий hover/active. Окремі кольори dark/light; native CSS `scrollbar-width/color` для браузерів без WebKit-псевдоелементів. У forced-colors custom rules не застосовуються, залишаються системні контролі. `dialog` має stable gutter, щоб поява смуги не зміщувала поля. Колесо, клавіатура, drag і touch нативні: без scroll listeners, бібліотек, перехоплення подій чи зміни overflow. Стилі інших модулів не зачіпаються. Backend/API/БД/залежності не змінено.
