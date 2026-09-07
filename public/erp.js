@@ -1,6 +1,7 @@
 import {createMaterialUI,materialQuantity,materialUnits} from './erp-materials.js?v=0.26.0';
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
+const toast = document.querySelector('#toast');
 const navigation = document.querySelector('#navigation');
 let data;
 let busy = false;
@@ -64,7 +65,22 @@ const date = (time, full = false) => time ? new Intl.DateTimeFormat('uk-UA',{tim
 const duration = (ms) => `${Math.floor(ms/3600000)} год ${Math.floor(ms/60000)%60} хв`;
 const number = (n) => Number(n || 0).toLocaleString('uk-UA');
 const match = (row) => JSON.stringify(row).toLocaleLowerCase('uk-UA').includes(search.toLocaleLowerCase('uk-UA'));
-function notify(message, error = false) { const toast=document.querySelector('#toast');toast.textContent=message;toast.className=`show${error?' error':''}`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.className='',5500); }
+// A modal dialog lives in the browser top layer; body toasts cannot out-rank its backdrop.
+function placeToast() {
+  const host=dialog.open?dialog.querySelector('.dialog-header'):document.body;
+  if(toast.parentElement!==host)host.append(toast);
+}
+function notify(message, error = false) {
+  placeToast();
+  toast.setAttribute('role',error?'alert':'status');
+  toast.setAttribute('aria-live',error?'assertive':'polite');
+  toast.textContent=message;toast.className=`show${error?' error':''}`;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.className='',5500);
+}
+function clearDialogError() {
+  if(toast.classList.contains('error')){clearTimeout(toastTimer);toast.className='';toast.textContent='';}
+}
+dialog.addEventListener('close',()=>{if(!dialog.open){clearDialogError();placeToast();}});
 
 async function api(path, body) {
   const key = `${path}:${JSON.stringify(body)}`;
@@ -96,8 +112,6 @@ async function mutate(path, body, after) {
     if (after) await after(result);
     return result;
   } catch(error) {
-    const errorBox=dialog.open && dialog.querySelector('.form-error');
-    if (errorBox) errorBox.textContent=error.message;
     if(error.status===409&&!dialog.open)try{await load();}catch{}
     notify(error.message,true);
   } finally {busy=false;controls.forEach(b=>b.disabled=false);}
@@ -218,15 +232,19 @@ function render() {
   content.replaceChildren(...views[section]().filter(Boolean));
 }
 function openDialog(title,...body) {
+  // Preserve the single live region when replacing an already-open dialog (e.g. after save).
+  clearDialogError();
+  document.body.append(toast);
   if (dialog.open) dialog.close();
   dialog.replaceChildren(el('div',{class:'dialog-header'},el('h2',{id:'dialog-title'},title),el('button',{class:'close-button',type:'button',onclick:()=>dialog.close(),'aria-label':'Закрити'},icon('close'))),el('div',{class:'dialog-body'},body));
   dialog.showModal();
+  placeToast();
 }
 function field(label,name,type='text',options={}) {const input=type==='textarea'?el('textarea',{name,...options}):el('input',{name,type,...options});return el('label',{class:'field'},label,input);}
 function select(label,name,items,options={}) {return el('label',{class:'field'},label,el('select',{name,'aria-label':label,...options},items.map(([value,title])=>el('option',{value},title))));}
 const clientOptions=()=>[['','Власність майстерні'],...data.clients.map(c=>[c.id,c.name])];
 function form(title,description,fields,submitLabel,handler) {
-  const node=el('form',{},el('p',{class:'dialog-description'},description),el('div',{class:'form-error',role:'alert'}),fields,el('div',{class:'form-actions'},button('Скасувати',()=>dialog.close()),el('button',{type:'submit',class:'button primary'},submitLabel)));
+  const node=el('form',{},el('p',{class:'dialog-description'},description),fields,el('div',{class:'form-actions'},button('Скасувати',()=>dialog.close()),el('button',{type:'submit',class:'button primary'},submitLabel)));
   node.addEventListener('submit',event=>{event.preventDefault();if(!busy) handler(Object.fromEntries(new FormData(node)),node);});
   openDialog(title,node);
 }

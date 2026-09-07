@@ -1,5 +1,13 @@
 # Продовження ERP з іншого ПК
 
+## Робочий checkpoint 0.26.1 · повідомлення у діалозі
+
+Гілка `codex/erp-dialog-notifications` від clean `origin/main=00bab8e`. Власник показав помилку позаду розмитого backdrop. Причина: `showModal()` переносить dialog у browser top layer; звичайний body `#toast` із z-index50 залишається нижче, просте збільшення z-index не допомагає. Один існуючий toast тепер переміщується у sticky `.dialog-header` відкритого вікна, а після close/Escape повертається у body. DOM-вузол збережений між replaceChildren/reopen, тому успіх після save→повторне відкриття теж видимий. Помилки мають alert/assertive, успіх status/polite, aria-atomic; duplicate `.form-error` прибрано, введені поля не скидаються. Старі помилки очищуються при зміні/закритті діалогу, таймер лишається один, 5,5с. CSS переносить довгі рядки, теми/мобільний екран збережені.
+
+Змінено лише ERP frontend/asset version/package patch, browser regression та цю документацію. Серверні API/ACL/схема/проводки/час/дані й інші модулі не змінюються. На момент checkpoint підтверджений runtime ще70508a0/0.26.0; новий номер package не означає deploy. `scripts/erp-notifications-browser-check.mjs` запускає власний disposable localhost8086, перевіряє empty selection безPOST, реальний409 без втрати полів, один live region, topmost hit-test, sticky після scroll, довгу текстову помилку безHTML, success після заміни діалогу, Escape/timer, dark/light1440/390/360. Скриншоти лише ignored data, жодних тестових дій у production. Перед release — точні install/check/test/audit, на VPS staging й read-only migration-check; зберегти найсвіжіші `.env/data/backups`, перезапуск тількиLABA, Git push та final handoff.
+
+Локальні точні `npm ci`, `npm run check`, `npm test` пройшли (33/33), `npm audit --omit=dev` —0 vulnerabilities. Новий browser smoke та повторні materials/crews smoke пройшли; скриншоти desktop1440 dark і довга помилка mobile360 light візуально перевірені. До release всі98 файлів VPS збігалися з70508a0; production4 вироби/1 команда, Cloudflare/SQL/FK ok, Caddy hash незмінний,5 служб active. У source/backend diff порожній. Фінальний deployedSHA/backup записати після фактичного завершення.
+
 ## Поточний checkpoint 0.26.0 · матеріали
 
 `codex/erp-material-planning` від clean `origin/main=eed5419`; перший checkpoint `b036322`, release **`70508a06c77de081968177f067d7ac3474d71453`**. Розгорнуто **2026-09-07 21:13:53 UTC**, health21:13:54; гілку fast-forward об'єднано й push у main. Реалізовані каталог/норми на шаблон і замовлення, розрахунок всіх відкритих потреб, внутрішні попередження, заявки з частковим надходженням, підтвердження фактичної витрати. Повністю прочитати `ERP_MATERIALS.md`.
