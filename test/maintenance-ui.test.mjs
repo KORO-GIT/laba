@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const maintenanceSource = await readFile(new URL('../public/maintenance.js', import.meta.url), 'utf8');
 const stylesSource = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+const maintenanceHtml = await readFile(new URL('../public/maintenance.html', import.meta.url), 'utf8');
 
 test('maintenance drag cleanup prevents stale touch previews', () => {
   const startDrag = maintenanceSource.slice(
@@ -24,4 +25,6 @@ test('maintenance board rerenders without drop flicker', () => {
   assert.match(maintenanceSource, /previousBoardSignature !== boardRenderSignature\(data\)/);
   assert.match(stylesSource, /\.drag-preview\s*\{[^}]*transition:\s*none;/s);
   assert.doesNotMatch(stylesSource, /\.maintenance-lane\s*\{[^}]*animation:/s);
+  assert.match(maintenanceHtml, /styles\.css\?v=0\.23\.3/);
+  assert.match(maintenanceHtml, /maintenance\.js\?v=0\.23\.3/);
 });
