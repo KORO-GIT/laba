@@ -12,6 +12,7 @@ const state = {
   selectedId: null,
   cardDirty: false,
   dragging: null,
+  suppressCardOpenUntil: 0,
   movePending: 0,
   mutationVersion: 0,
   boardLoading: false,
@@ -164,7 +165,7 @@ function cardNode(card) {
   article.append(asset, title);
   if (meta.childElementCount) article.append(meta);
   article.addEventListener('click', () => {
-    if (!state.dragging?.moved) openCard(card.id);
+    if (!state.dragging?.moved && Date.now() >= state.suppressCardOpenUntil) openCard(card.id);
   });
   article.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -192,6 +193,26 @@ function renderBoard() {
     return laneNode;
   });
   board.replaceChildren(...lanes);
+}
+
+function boardRenderSignature(data) {
+  if (!data) return '';
+  return JSON.stringify({
+    canEdit: data.canEdit,
+    lanes: (data.lanes || []).map(({ key, title, color }) => ({ key, title, color })),
+    cards: (data.cards || []).map((card) => ({
+      id: card.id,
+      lane: card.lane,
+      asset: card.asset,
+      sourceName: card.sourceName,
+      boardIdentifier: card.boardIdentifier,
+      sourceStatus: card.sourceStatus,
+      reportNumber: card.reportNumber,
+      hasNotes: Boolean(card.notes),
+      cardStatuses: (card.cardStatuses || []).map(({ id, name, color }) => ({ id, name, color })),
+      cardLabels: (card.cardLabels || []).map(({ id, name, color }) => ({ id, name, color }))
+    }))
+  });
 }
 
 function renderSyncState() {
@@ -396,7 +417,7 @@ function beginPointerDrag(event) {
 }
 
 function startDrag(drag, point) {
-  if (drag.moved) return;
+  if (state.dragging !== drag || drag.moved) return;
   const rect = drag.source.getBoundingClientRect();
   drag.moved = true;
   drag.offsetX = point.x - rect.left;
@@ -414,7 +435,7 @@ function startDrag(drag, point) {
 }
 
 function positionPreview(drag, x, y) {
-  drag.clone.style.transform = `translate3d(${x - drag.offsetX}px, ${y - drag.offsetY}px, 0) rotate(1deg)`;
+  drag.clone.style.transform = `translate3d(${x - drag.offsetX}px, ${y - drag.offsetY}px, 0)`;
 }
 
 function pointerMove(event) {
@@ -445,6 +466,7 @@ function pointerMove(event) {
 async function finishPointerDrag(event) {
   const drag = state.dragging;
   cleanupPointerListeners(drag);
+  clearTimeout(drag?.timer);
   if (!drag?.moved) {
     state.dragging = null;
     return;
@@ -458,8 +480,8 @@ async function finishPointerDrag(event) {
   const beforeCardId = next ? Number(next.dataset.cardId) : null;
   if (!lane) {
     cleanupDragVisuals(drag);
-    state.dragging = { moved: true };
-    setTimeout(() => { state.dragging = null; }, 0);
+    state.suppressCardOpenUntil = Date.now() + 350;
+    state.dragging = null;
     renderBoard();
     return;
   }
@@ -468,16 +490,15 @@ async function finishPointerDrag(event) {
   state.mutationVersion += 1;
   applyOptimisticMove(drag.cardId, lane, beforeCardId);
   cleanupDragVisuals(drag);
-  state.dragging = { moved: true };
-  setTimeout(() => { state.dragging = null; }, 0);
+  state.suppressCardOpenUntil = Date.now() + 350;
+  state.dragging = null;
   renderBoard();
   try {
     const updated = await api(`/api/maintenance/${module}/cards/${drag.cardId}/move`, {
       method: 'POST', body: JSON.stringify({ lane, beforeCardId })
     });
     const index = state.data.cards.findIndex((card) => card.id === updated.id);
-    state.data.cards[index] = updated;
-    renderBoard();
+    if (index >= 0) state.data.cards[index] = updated;
   } catch (error) {
     state.data.cards = previousCards;
     renderBoard();
@@ -500,11 +521,13 @@ function applyOptimisticMove(cardId, lane, beforeCardId) {
 
 function cancelPointerDrag() {
   const drag = state.dragging;
+  const moved = Boolean(drag?.moved);
   cleanupPointerListeners(drag);
   clearTimeout(drag?.timer);
   cleanupDragVisuals(drag);
+  if (moved) state.suppressCardOpenUntil = Date.now() + 350;
   state.dragging = null;
-  renderBoard();
+  if (moved) renderBoard();
 }
 
 function cleanupPointerListeners(drag) {
@@ -521,6 +544,7 @@ async function loadBoard({ quiet = false } = {}) {
   if (state.boardLoading) return;
   state.boardLoading = true;
   const mutationVersion = state.mutationVersion;
+  const previousBoardSignature = quiet ? boardRenderSignature(state.data) : '';
   try {
     const data = await api(`/api/maintenance/${module}`);
     if (quiet && (mutationVersion !== state.mutationVersion || state.movePending || state.dragging?.moved)) return;
@@ -529,7 +553,7 @@ async function loadBoard({ quiet = false } = {}) {
     document.querySelector('#page-title').textContent = data.title;
     renderAssetFilter();
     renderLabelLegend();
-    renderBoard();
+    if (!quiet || previousBoardSignature !== boardRenderSignature(data)) renderBoard();
     renderSyncState();
     if (state.selectedId) renderOpenCard();
   } catch (error) {

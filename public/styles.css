@@ -275,7 +275,10 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .maintenance-card { position: relative; min-height: 118px; display: flex; flex-direction: column; overflow: hidden; padding: 15px; border: 1px solid var(--line); border-radius: 11px; outline: 0; background: var(--surface-2); box-shadow: 0 9px 24px rgba(0,0,0,.16); transition: transform .18s ease, border-color .18s ease, opacity .18s ease; touch-action: pan-y; user-select: none; }
 .maintenance-card.draggable { cursor: grab; }
 .maintenance-card.draggable:active { cursor: grabbing; }
-.maintenance-card:hover, .maintenance-card:focus-visible { border-color: var(--line-strong); transform: translateY(-1px); }
+.maintenance-card:focus-visible { border-color: var(--line-strong); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) {
+  .maintenance-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+}
 .card-accent { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); }
 .card-accent.status-service { background: var(--lime); }
 .maintenance-card-label-bars { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 11px; }
@@ -292,7 +295,7 @@ h1, h2, h3, h4, p { margin-top: 0; }
 .lane-empty { margin: 0; padding: 28px 10px; color: var(--faint); text-align: center; font-size: 10px; }
 .card-placeholder { min-height: 76px; border: 1px dashed rgba(242,100,48,.62); border-radius: 11px; background: rgba(242,100,48,.075); animation: placeholder-pulse .8s ease-in-out infinite alternate; }
 .drag-source { display: none; }
-.drag-preview { position: fixed; z-index: 100; top: 0; left: 0; margin: 0; pointer-events: none; opacity: .94; box-shadow: 0 28px 60px rgba(0,0,0,.5); will-change: transform; }
+.drag-preview { position: fixed; z-index: 70; top: 0; left: 0; margin: 0; pointer-events: none; opacity: .94; box-shadow: 0 28px 60px rgba(0,0,0,.5); transition: none; will-change: transform; }
 
 .maintenance-dialog { position: fixed; z-index: 80; inset: 0; display: flex; justify-content: flex-end; }
 .maintenance-dialog-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.64); animation: fade-in .2s ease both; }
@@ -755,7 +758,7 @@ option { color: var(--ink); background: #15191c; }
 .maintenance-label-swatch { width: 9px; height: 9px; }
 .sync-state { font-size: 12px; }
 .maintenance-board { grid-auto-columns: minmax(250px, 1fr); gap: 14px; padding: 16px 16px 34px; }
-.maintenance-lane { border-radius: 8px; background: rgba(255,255,255,.018); animation: content-in .22s ease both; }
+.maintenance-lane { border-radius: 8px; background: rgba(255,255,255,.018); }
 .maintenance-lane-heading { min-height: 58px; padding: 0 15px; }
 .maintenance-lane-heading h2 { font-size: 15px; font-weight: 700; }
 .lane-count { min-width: 27px; height: 27px; font-size: 12px; }
