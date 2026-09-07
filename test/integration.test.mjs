@@ -260,7 +260,7 @@ test('development server serves portal API and protected admin writes', async (c
   const boardAdminWorkshopHtml = await boardAdminWorkshopPage.text();
   assert.match(boardAdminWorkshopHtml, /id="board-settings-link"/);
   assert.match(boardAdminWorkshopHtml, /id="tara-asset-filter"/);
-  assert.match(boardAdminWorkshopHtml, /styles\.css\?v=0\.23\.2/);
+  assert.match(boardAdminWorkshopHtml, /styles\.css\?v=0\.23\.3/);
   const iconsAsset = await fetch(`${root}/assets/icons.js`, { headers: boardAdminHeaders });
   assert.equal(iconsAsset.status, 200);
   const iconsSource = await iconsAsset.text();
