@@ -1,14 +1,20 @@
 # Продовження ERP з іншого ПК
 
-## Робочий checkpoint 0.26.2 · скролбари ERP
+## Поточний checkpoint 0.26.2 · скролбари ERP
 
 Гілка `codex/erp-scrollbars` від clean `origin/main=f0a39a2`. Власник попросив замінити грубі системні скролбари у формах. Новий `public/erp-scrollbars.css` підключено тільки до ERP: прозора доріжка, скруглений повзунок 6px усередині нативної області 10px, відступи на кінцях, без стрілок; помаранчевий hover/active. Окремі кольори dark/light; native CSS `scrollbar-width/color` для браузерів без WebKit-псевдоелементів. У forced-colors custom rules не застосовуються, залишаються системні контролі. `dialog` має stable gutter, щоб поява смуги не зміщувала поля. Колесо, клавіатура, drag і touch нативні: без scroll listeners, бібліотек, перехоплення подій чи зміни overflow. Стилі інших модулів не зачіпаються. Backend/API/БД/залежності не змінено.
 
 Новий `scripts/erp-scrollbars-browser-check.mjs`: власний disposable localhost8087, synthetic24 вироби, desktop1440 dark/light та mobile390 dark/360 light; перевіряє геометрію/кольори, вкладений список, drag справжнього повзунка, CDP touch swipe, textarea wheel/Control+End, горизонтальну таблицю за наявності overflow, відсутність ширшої сторінки, forced-colors. У Chrome headless обов'язково `ignoreDefaultArgs:['--hide-scrollbars']`, інакше Playwright приховує саме те, що перевіряємо. Hover перевіряється скриншотом: computed pseudo style може відставати від native paint. Скриншоти лише ignored `data/`; браузерний сценарій не надсилає POST. Перевірка повідомлень0.26.1 запускається повторно після зміни ширини діалогу.
 
-Локальні `npm ci/check/test/audit`:33/33, audit0. Browser scrollbars пройшов; desktop dark/light, hoverorange і mobile360light перевірено візуально. До release всі99 VPS-файлів збігаються з7c925e7, SQL/FK ok,4 вироби/1 команда,5 служб active, Caddy hash незмінний. Підтверджений production ще0.26.1; номер package0.26.2 не означає deployment. Після staging/backup/release записати фактичний SHA/час/перевірки в CURRENT_STATE і цей handoff, push main.
+Підтверджений runtime **8670895db57828dc6396534deb898aaa9fa39cba/0.26.2**. Старт **2026-09-07 21:39:22 UTC**, health21:39:24. Повторний fetch перед release/merge: origin/main залишавсяf0a39a2; гілку fast-forward об'єднано й push у main. Наступний docs-only commit не є runtime SHA.
 
-## Поточний checkpoint 0.26.1 · повідомлення у діалозі
+- Windows та VPS staging `npm ci/check/test/audit`:33/33, audit0. Browser scrollbars пройшов на всіх чотирьох viewport/theme та forced-colors; повідомлення0.26.1 повторно пройшли повністю. Desktop dark/light, hoverorange і mobile360light перевірено візуально. Тимчасові localhost сервери завершені, synthetic DB видалені самим тестом, скриншоти лише ignored data.
+- До release всі99 VPS-файлів збігалися з7c925e7; після — всі101 з8670895. Archive SHA-256 `9ff4a9e4af0f815db5d315783dc3962918d79459e6cb7673c123bb38d1f60986`, SCP завершився перед перевіркою checksum. Немає diff у `src/` або runtime JavaScript. Read-only migration-check production backup двічі зберіг39 існуючих таблиць/значення/markers, quick_check/FK ok; нової міграції немає. In-memory smoke3000 виробів/9000 операцій: setup626ms, owner10/13ms, worker9/12ms (median/p95); це не реальне concurrent навантаження.
+- Backup **`/opt/laba/backups/portal-20260907-2139-before-0.26.2.db`**, root600; попередній каталог **`/opt/laba-previous-20260907T2139Z-0.26.1`** збережено. Після stop лишеLABA актуальні `.env`, `data/`, `backups/` скопійовано й побайтово звірено. Збережено4 вироби/1 команду та актуальні робочі записи. Старих backup/каталогів не видаляли, БД не відновлювали старою копією.
+- Після deployment: health200, Cloudflare auth, ERP/context/новийCSS безJWT401, SQL/FK ok, root750/env640/data700/DB660 та sqlite-write-path-ok. Loopback3020, ~49MiB при MemoryMax512MiB, журнал err після старту порожній. Caddy SHA-256 незмінний,5 служб active, Task/Starlink/SignalSynch не змінено.
+- Live Chrome через Computer Use: перевірено відсутність незавершеного вводу, reload → замовлення → порожня форма прийомки. Скролбар із відступами та скругленням візуально підтверджено; нічого не вводили/не зберігали. Форму закрито, відновлено `/erp#team`. Mobile touch і світлу тему перевірено на synthetic localhost; реальний телефон/Firefox/Safari не оголошуються перевіреними. Наступна робота — нова codex/* від актуальної main.
+
+## Історичний checkpoint 0.26.1 · повідомлення у діалозі
 
 Гілка `codex/erp-dialog-notifications` від clean `origin/main=00bab8e`. Власник показав помилку позаду розмитого backdrop. Причина: `showModal()` переносить dialog у browser top layer; звичайний body `#toast` із z-index50 залишається нижче, просте збільшення z-index не допомагає. Один існуючий toast тепер переміщується у sticky `.dialog-header` відкритого вікна, а після close/Escape повертається у body. DOM-вузол збережений між replaceChildren/reopen, тому успіх після save→повторне відкриття теж видимий. Помилки мають alert/assertive, успіх status/polite, aria-atomic; duplicate `.form-error` прибрано, введені поля не скидаються. Старі помилки очищуються при зміні/закритті діалогу, таймер лишається один, 5,5с. CSS переносить довгі рядки, теми/мобільний екран збережені.
 
@@ -34,7 +40,7 @@
 - Live Chrome: overview → каталог → форма без збереження → поповнення; візуально перевірено через Computer Use. На VPS матеріалів/норм/заявок ще0; це налаштовує власник за реальними даними, не seed. Підказки видимі, тестових проводок агент не робив. Для першого реального шаблону: каталог/власник/одиниці → норми на один виріб → прийомка запасу → замовлення зі snapshot норм → прогноз/заявка → фактичний розхід до QC.
 - Особливо важливо зберігати `quantity_scale` та незмінні legacy рухи; старий writable ERP несумісний. Немає зовнішніх сповіщень, hard reserve, автосписання при завершенні майстром чи offsite backup. Наступна робота — тільки нова codex/* від актуального origin/main; docs-only SHA не плутати з runtime70508a0.
 
-Оновлено: 2026-09-08 за Києвом після deployment повідомлень `0.26.1`. Виробничий контур, команди та матеріали запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+Оновлено: 2026-09-08 за Києвом після deployment скролбарів `0.26.2`. Виробничий контур, команди та матеріали запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
 
 ## Історичний checkpoint 0.25.0
 
@@ -56,7 +62,7 @@
 - Репозиторій: `https://github.com/KORO-GIT/laba` (не `kanban`, не Task).
 - Гілка першого ERP-релізу `codex/laba-erp` об'єднана fast-forward у `main` і збережена як checkpoint. Продовжувати з актуальної `origin/main`.
 - База гілки: `5000d27` — документація production LABA `0.23.3`.
-- Історична версія першого контуру: `0.24.0`, попередній production `e430efd1366eb663c2f79ab92d66a5924c027855`. Перший checkpoint — `f399a03`, release verification — `e430efd`, docs-only handoff — `1991d0e`. Наступні releases: команди `c947dcb/0.25.0`, матеріали `70508a0/0.26.0`; поточний `7c925e7/0.26.1`, як зазначено вище. Не вважати номер у `package.json` підтвердженням наступного deployment.
+- Історична версія першого контуру: `0.24.0`, попередній production `e430efd1366eb663c2f79ab92d66a5924c027855`. Перший checkpoint — `f399a03`, release verification — `e430efd`, docs-only handoff — `1991d0e`. Наступні releases: команди `c947dcb/0.25.0`, матеріали `70508a0/0.26.0`, повідомлення `7c925e7/0.26.1`; поточний `8670895/0.26.2`, як зазначено вище. Не вважати номер у `package.json` підтвердженням наступного deployment.
 - Працюючі `/workshop`, `/service`, `/devices`, SignalSynch та Task не мігруються в ERP і не замінюються.
 
 ```powershell
