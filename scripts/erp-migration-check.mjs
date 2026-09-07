@@ -41,7 +41,7 @@ try {
   assert.deepEqual(copy.pragma('foreign_key_check'), []);
   assert.deepEqual(tables.map(digest), before, 'Existing table contents changed');
   for (const table of tables) {
-    if(!['erp_tasks','erp_time_entries'].includes(table.name))assert.equal(copy.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(table.name).sql, table.sql);
+    if(!['erp_tasks','erp_time_entries','erp_stock_lots'].includes(table.name))assert.equal(copy.prepare('SELECT sql FROM sqlite_master WHERE name=?').get(table.name).sql, table.sql);
     assert.deepEqual(copy.pragma(`table_info("${table.name.replaceAll('"','""')}")`).slice(0,table.columns.length),table.columns);
   }
   for(const marker of previousMigrations)assert.deepEqual(copy.prepare('SELECT * FROM schema_migrations WHERE name=?').get(marker.name),marker);

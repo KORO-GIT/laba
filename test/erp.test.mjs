@@ -142,6 +142,10 @@ async function crew(f, mode='shared', count=1) {
   return {group,orderId:created.id,unitId:detail.units[0].id,taskId:detail.tasks[0].id};
 }
 const freshTask=(f,id)=>f.db.prepare('SELECT * FROM erp_tasks WHERE id=?').get(id);
+const createMaterial=(f,overrides={})=>f.post('materials',{sku:`MAT-${crypto.randomUUID()}`,name:'Витратний матеріал',uom:'pcs',minimum:0,target:0,...overrides});
+const receiveMaterial=(f,materialId,quantity,overrides={})=>f.post('stock',{materialId,sku:'ignored',name:'ignored',quantity,condition:'new',reference:'Synthetic receipt',...overrides});
+const materialRow=async(f,id,owner=null)=>(await f.get('context')).materialPlanning.rows.find(r=>r.materialId===id&&r.clientId===owner);
+const setOrderNorm=(f,orderId,lines,version=0)=>f.post(`orders/${orderId}/materials`,{version,lines});
 const taskDo=(f,id,action,user=2)=>f.post(`tasks/${id}/action`,{action,version:freshTask(f,id).version},user);
 async function order(f,count=3,clientId) {
   clientId??=(await f.post('clients',{name:`Клієнт ${crypto.randomUUID()}`})).id;
@@ -160,6 +164,147 @@ async function finishUnit(f,orderId,unitId,worker=2) {
     await f.post(`tasks/${task.id}/action`,{action:'complete',version:updated.version},worker);
   }
 }
+
+test('ERP materials preserve legacy stock, normalize SKU, enforce units and catalogue roles',async context=>{
+  const f=fixture(context);
+  const legacy=await f.post('stock',{sku:' old-1 ',name:'Old item',quantity:5,condition:'new',reference:'Legacy'});
+  const material=await createMaterial(f,{sku:'OLD-1',minimum:2,target:10});
+  assert.equal((await materialRow(f,material.id)).warehouseMilli,0,'unlinked legacy lots must not silently count');
+  assert.equal((await f.request('materials',{sku:'old-1',name:'Duplicate',uom:'pcs',minimum:0,target:0})).status,409);
+  assert.equal((await f.request(`stock/${legacy.id}/link-material`,{materialId:material.id},2)).status,403);
+  await f.post(`stock/${legacy.id}/link-material`,{materialId:material.id});
+  assert.equal((await materialRow(f,material.id)).warehouseMilli,5000);
+  assert.equal(f.db.prepare('SELECT quantity FROM erp_stock_moves WHERE lot_id=?').get(legacy.id).quantity,5);
+  assert.equal((await f.get(`stock/${legacy.id}/history`))[0].quantity,5);
+  assert.equal((await f.request('stock',{sku:'X',name:'X',materialId:material.id,quantity:0.5,condition:'new',reference:'Bad'})).status,400);
+  assert.equal((await f.request(`materials/${material.id}`,{sku:'OLD-1',name:'Changed',uom:'m',minimum:0,target:0,version:1})).status,409);
+  assert.equal((await f.request('materials',{sku:'M',name:'M',uom:'g',minimum:5,target:2})).status,400);
+  assert.equal((await f.request('materials',{sku:'M',name:'M',uom:'g',minimum:0.0001,target:2})).status,400);
+});
+
+test('ERP material templates snapshot norms without spending and count all receipt units',async context=>{
+  const f=fixture(context),material=await createMaterial(f),client=await f.post('clients',{name:'Norm client'});
+  const template=await f.post('templates',{name:'Модернізація А',steps});
+  await f.post(`templates/${template.id}/materials`,{version:0,lines:[{materialId:material.id,quantity:2,source:'workshop'}]});
+  const created=await f.post('orders',{clientId:client.id,title:'Norm order',model:'A',kind:'upgrade',priority:'normal',steps,templateId:template.id,serials:[],unnumbered:150,reference:'150 units'});
+  assert.equal((await materialRow(f,material.id)).demandMilli,300000);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_stock_moves').get().n,0);
+  await f.post(`templates/${template.id}/materials`,{version:1,lines:[{materialId:material.id,quantity:3,source:'workshop'}]});
+  assert.equal((await f.get(`orders/${created.id}`)).materialSpec.lines[0].quantityMilli,2000);
+  await f.post(`orders/${created.id}/receive`,{serials:[],unnumbered:2,reference:'Additional'});
+  assert.equal((await materialRow(f,material.id)).demandMilli,304000);
+  assert.equal((await f.request(`templates/${template.id}/materials`,{version:1,lines:[]})).status,409);
+  assert.equal((await f.request(`orders/${created.id}/materials`,{version:1,lines:[{materialId:material.id,quantity:1,source:'workshop'},{materialId:material.id,quantity:1,source:'workshop'}]})).status,400);
+});
+
+test('ERP material replenishment calculates projected shortages and partial receipts without duplicate requests',async context=>{
+  const f=fixture(context),material=await createMaterial(f,{minimum:20,target:50}),created=await order(f,150);
+  await setOrderNorm(f,created.id,[{materialId:material.id,quantity:2,source:'workshop'}]);
+  await receiveMaterial(f,material.id,200);
+  let row=await materialRow(f,material.id);assert.equal(row.projectedMilli,-100000);assert.equal(row.suggestedMilli,150000);assert.equal(row.low,true);
+  const request=await f.post('replenishments',{materialId:material.id,quantity:150,note:'Потреба 150 виробів'});
+  assert.equal((await f.request('replenishments',{materialId:material.id,quantity:150,note:'Duplicate'})).status,409);
+  row=await materialRow(f,material.id);assert.equal(row.warehouseMilli,200000);assert.equal(row.requestedMilli,150000);assert.equal(row.suggestedMilli,0);assert.equal(row.low,true,'a request is not stock');
+  await receiveMaterial(f,material.id,50,{replenishmentId:request.id});
+  row=await materialRow(f,material.id);assert.equal(row.warehouseMilli,250000);assert.equal(row.requestedMilli,100000);
+  await receiveMaterial(f,material.id,100,{replenishmentId:request.id});
+  row=await materialRow(f,material.id);assert.equal(row.warehouseMilli,350000);assert.equal(row.projectedMilli,50000);assert.equal(row.low,false);
+  assert.equal((await f.get('replenishments')).rows[0].state,'received');
+  assert.equal((await f.request('stock',{materialId:material.id,replenishmentId:request.id,sku:'X',name:'X',quantity:1,condition:'new',reference:'Extra'})).status,409);
+});
+
+test('ERP material consumption uses fixed point quantities and never spends the same norm twice',async context=>{
+  const f=fixture(context),material=await createMaterial(f,{uom:'m'}),created=await order(f,3);
+  await setOrderNorm(f,created.id,[{materialId:material.id,quantity:0.125,source:'workshop'}]);
+  const lot=await receiveMaterial(f,material.id,1);
+  const detail=await f.get(`orders/${created.id}`),key=crypto.randomUUID();
+  const body={specVersion:1,units:detail.units.map(u=>({id:u.id,version:u.version})),note:'Фактично використано'};
+  const previewPath=`orders/${created.id}/material-preview?units=${detail.units.map(u=>u.id).join(',')}`;
+  const quote=await f.get(previewPath);assert.equal(quote.canConsume,true);assert.deepEqual(quote.units,body.units);
+  assert.equal(quote.lines[0].consumeMilli,375);assert.equal(quote.lines[0].warehouseRequiredMilli,375);
+  assert.equal((await f.request(previewPath,undefined,2)).status,403);
+  assert.equal((await f.request(`orders/${created.id}/material-preview?units=1,1`)).status,400);
+  assert.equal((await f.request(`orders/${created.id}/material-preview?units=-1`)).status,400);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_stock_moves').get().n,1,'preview is read-only');
+  const first=await f.request(`orders/${created.id}/consume-materials`,body,1,key);assert.equal(first.status,200);
+  assert.deepEqual(await f.request(`orders/${created.id}/consume-materials`,body,1,key),first);
+  assert.equal((await materialRow(f,material.id)).warehouseMilli,625);
+  const latest=await f.get(`orders/${created.id}`);assert.equal(latest.materialSpec.lines[0].remainingMilli,0);
+  assert.equal((await f.get(previewPath)).canConsume,false);
+  assert.equal((await f.request(`orders/${created.id}/consume-materials`,body)).status,409,'stale quote cannot be reused');
+  assert.equal((await f.request(`orders/${created.id}/consume-materials`,{...body,units:latest.units.map(u=>({id:u.id,version:u.version}))})).status,409);
+  const stock=(await f.get('context')).stock.find(l=>l.id===lot.id);assert.equal(stock.warehouse,0.625);assert.equal(stock.installed,0.375);
+  assert.ok(f.db.prepare('SELECT quantity FROM erp_stock_moves').all().every(r=>Number.isInteger(r.quantity)));
+  assert.equal((await f.request('stock',{materialId:material.id,sku:'X',name:'X',quantity:0.0001,condition:'new',reference:'Bad precision'})).status,400);
+});
+
+test('ERP material batch consumption rolls back fully on shortages and respects client ownership',async context=>{
+  const f=fixture(context),a=await createMaterial(f),b=await createMaterial(f),created=await order(f,2);
+  const other=await f.post('clients',{name:'Other owner'}),detail=await f.get(`orders/${created.id}`);
+  await setOrderNorm(f,created.id,[{materialId:a.id,quantity:1,source:'workshop'},{materialId:b.id,quantity:1,source:'client'}]);
+  await receiveMaterial(f,a.id,10);
+  await receiveMaterial(f,b.id,10,{clientId:other.id});
+  await receiveMaterial(f,b.id,10,{clientId:detail.client_id,condition:'defective'});
+  const before=f.db.prepare('SELECT COUNT(*) AS n FROM erp_stock_moves').get().n;
+  const body={specVersion:1,units:detail.units.map(u=>({id:u.id,version:u.version})),note:'Use norm'};
+  const quote=await f.get(`orders/${created.id}/material-preview?units=${detail.units.map(u=>u.id).join(',')}`);
+  assert.equal(quote.canConsume,false);assert.equal(quote.lines[1].shortageMilli,2000);
+  assert.equal((await f.request(`orders/${created.id}/consume-materials`,body)).status,409);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_stock_moves').get().n,before);
+  assert.deepEqual((await f.get(`orders/${created.id}`)).units.map(u=>u.version),detail.units.map(u=>u.version));
+  assert.equal((await materialRow(f,b.id,detail.client_id)).warehouseMilli,0);
+  await receiveMaterial(f,b.id,2,{clientId:detail.client_id});
+  await f.post(`orders/${created.id}/consume-materials`,body);
+  assert.equal((await materialRow(f,b.id,other.id)).warehouseMilli,10000);
+  assert.equal((await materialRow(f,b.id,detail.client_id)).demandMilli,0);
+});
+
+test('ERP material forecast caps coverage per unit and does not double subtract workbench material',async context=>{
+  const f=fixture(context),material=await createMaterial(f),created=await order(f,2);
+  await setOrderNorm(f,created.id,[{materialId:material.id,quantity:2,source:'workshop'}]);
+  const detail=await f.get(`orders/${created.id}`),lot=await receiveMaterial(f,material.id,10);
+  await f.post(`stock/${lot.id}/move`,{from:'warehouse',to:'workbench',unitId:detail.units[0].id,quantity:3,note:'Extra for first unit'});
+  const row=await materialRow(f,material.id);assert.equal(row.warehouseMilli,7000);assert.equal(row.demandMilli,2000);assert.equal(row.projectedMilli,5000);
+  const quote=await f.get(`orders/${created.id}/material-preview?units=${detail.units.map(u=>u.id).join(',')}`);
+  assert.equal(quote.lines[0].consumeMilli,4000);assert.equal(quote.lines[0].workbenchMilli,2000);assert.equal(quote.lines[0].warehouseRequiredMilli,2000);
+  await f.post(`stock/${lot.id}/move`,{from:'workbench',to:'warehouse',unitId:detail.units[0].id,quantity:1,note:'Return extra'});
+  assert.equal((await materialRow(f,material.id)).demandMilli,2000);
+  await f.post(`orders/${created.id}/consume-materials`,{specVersion:1,units:(await f.get(`orders/${created.id}`)).units.map(u=>({id:u.id,version:u.version})),note:'Use both'});
+  assert.equal((await materialRow(f,material.id)).warehouseMilli,6000);
+  assert.equal((await materialRow(f,material.id)).demandMilli,0);
+});
+
+test('ERP material planning is private, protects CSRF and freezes norms after quality acceptance',async context=>{
+  const f=fixture(context),material=await createMaterial(f),created=await order(f,1);
+  await setOrderNorm(f,created.id,[{materialId:material.id,quantity:1,source:'workshop'}]);
+  const technician=await f.get('context',2);assert.equal(technician.materials,undefined);assert.equal(technician.materialPlanning,undefined);
+  assert.equal((await f.request('replenishments',undefined,2)).status,403);
+  assert.equal((await f.request(`orders/${created.id}/materials`,{version:1,lines:[]},2)).status,403);
+  assert.equal((await f.request('materials',{sku:'FORGED',name:'X',uom:'pcs',minimum:0,target:0},1,crypto.randomUUID(),{origin:'https://evil.test'})).status,403);
+  await assign(f,created.id,2);await f.post('shifts/action',{action:'start'},2);
+  const unit=(await f.get(`orders/${created.id}`)).units[0];await finishUnit(f,created.id,unit.id);
+  const updated=(await f.get(`orders/${created.id}`)).units[0];
+  await f.post(`units/${unit.id}/quality`,{result:'pass',version:updated.version},4);
+  assert.equal((await materialRow(f,material.id)).demandMilli,0,'accepted units no longer reserve forecast, without inventing consumption');
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM erp_stock_moves').get().n,0);
+  assert.equal((await f.request(`orders/${created.id}/materials`,{version:1,lines:[]})).status,409);
+});
+
+test('ERP replenishment partial receipts retain history through edits, cancellation and retries',async context=>{
+  const f=fixture(context),material=await createMaterial(f,{uom:'g'});
+  const request=await f.post('replenishments',{materialId:material.id,quantity:10,note:'Initial'});
+  const key=crypto.randomUUID(),receipt={materialId:material.id,replenishmentId:request.id,sku:'X',name:'X',quantity:2.125,condition:'good',reference:'Partial'};
+  const first=await f.request('stock',receipt,1,key);assert.equal(first.status,200);assert.deepEqual(await f.request('stock',receipt,1,key),first);
+  assert.equal((await f.get('replenishments')).rows[0].received_milli,2125);
+  assert.equal((await f.request(`replenishments/${request.id}`,{version:1,quantity:10,note:'Stale'})).status,409);
+  assert.equal((await f.request(`replenishments/${request.id}`,{version:2,quantity:1,note:'Too small'})).status,400);
+  assert.equal((await f.request('stock',{...receipt,quantity:1,condition:'unknown'})).status,400);
+  await f.post(`replenishments/${request.id}`,{version:2,quantity:10,cancel:true,note:'Cancel remaining only'});
+  assert.equal((await materialRow(f,material.id)).warehouseMilli,2125);assert.equal((await materialRow(f,material.id)).requestedMilli,0);
+  assert.equal((await f.get(`stock/${first.body.id}/history`))[0].quantity,2.125);
+  await f.post('replenishments',{materialId:material.id,quantity:5,note:'New request'});
+  assert.equal((await f.get('replenishments')).count,2);
+});
 
 test('ERP receives 150 serialised units atomically and preserves replay/duplicate invariants',async context=>{
   const f=fixture(context);

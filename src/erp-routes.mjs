@@ -12,6 +12,10 @@ const roles = ['admin','manager','warehouse','technician','inspector','observer'
 const managers = ['admin','manager'];
 const taskQuery = z.object({taskState:z.enum(['all','open','pending','in_progress','paused','blocked','done']).default('all'),q:z.string().max(120).default(''),page:z.coerce.number().int().min(0).max(100000).default(0)}).strict();
 const crewFields = {name:text(100),description:note,leadId:id,members:z.array(id).min(1).max(50).refine(values=>new Set(values).size===values.length,'Повторні учасники')};
+const quantity=z.number().positive().max(1000000);
+const materialFields={sku:text(100),name:text(160),uom:z.enum(['pcs','m','g','ml']),minimum:z.number().min(0).max(1000000),target:z.number().min(0).max(1000000)};
+const specSchema=z.object({version:z.number().int().min(0),lines:z.array(z.object({materialId:id,quantity,source:z.enum(['workshop','client'])}).strict()).max(40).refine(lines=>new Set(lines.map(l=>`${l.materialId}:${l.source}`)).size===lines.length,'Повторні матеріали')}).strict();
+const replenishmentFields={quantity,note:text(500)};
 const schemas = {
   client: z.object({ name: text(160), contact: z.string().trim().max(200).default(''), notes: note }).strict(),
   template: z.object({ name: text(160), steps }).strict(),
@@ -25,8 +29,8 @@ const schemas = {
   shift: z.object({ action: z.enum(['start','pause','resume','end']), version: id.optional() }).strict(),
   quality: z.object({ result: z.enum(['pass','rework']), version: id, note, taskId: id.optional() }).strict(),
   delivery: z.object({ reference: text(160), recipient: text(160), units: selected }).strict(),
-  stock: z.object({ sku: text(100), name: text(160), clientId: id.nullable().default(null), condition: z.enum(['new','good','unknown','defective']), shelf: z.string().trim().max(100).default(''), reference: text(160), originUnitId: id.nullable().default(null), quantity: z.number().int().min(1).max(1000000) }).strict(),
-  move: z.object({ from: z.enum(['warehouse','workbench','installed']), to: z.enum(['warehouse','workbench','installed','returned','scrap']), unitId: id.nullable().default(null), quantity: z.number().int().min(1).max(1000000), note: text(500) }).strict(),
+  stock: z.object({ sku: text(100), name: text(160), materialId:id.nullable().default(null),replenishmentId:id.nullable().default(null),clientId: id.nullable().default(null), condition: z.enum(['new','good','unknown','defective']), shelf: z.string().trim().max(100).default(''), reference: text(160), originUnitId: id.nullable().default(null), quantity }).strict(),
+  move: z.object({ from: z.enum(['warehouse','workbench','installed']), to: z.enum(['warehouse','workbench','installed','returned','scrap']), unitId: id.nullable().default(null), quantity, note: text(500) }).strict(),
   member: z.object({ role: z.enum(['none',...roles]) }).strict(),
   newMember: z.object({ name: text(120), email: z.email().max(254), role: z.enum(['manager','warehouse','technician','inspector','observer']) }).strict(),
   orderUpdate: z.object({title:text(160),priority:z.enum(['normal','high','urgent']),dueDate:z.iso.date().nullable(),notes:note,version:id}).strict(),
@@ -50,6 +54,18 @@ export function registerErpRoutes(app, erp) {
   app.get('/api/erp/stock/:id/history', { preHandler: allowed(['admin','manager','warehouse','observer']) }, async request => erp.stockHistory(request.portalUser, numericId(request)));
   app.get('/api/erp/members/:id/shifts', { preHandler: allowed(['admin','manager','observer']) }, async request => erp.memberShifts(request.portalUser,numericId(request)));
   app.get('/api/erp/tasks/:id/work-history', { preHandler:allowed(roles.filter(r=>r!=='technician')) }, async request=>erp.workHistory(request.portalUser,numericId(request)));
+  app.get('/api/erp/replenishments',{preHandler:allowed([...managers,'warehouse','observer'])},async request=>{
+    const query=z.object({page:z.coerce.number().int().min(0).max(100000).default(0)}).strict().safeParse(request.query);
+    if(!query.success)fail(400,'Некоректна сторінка заявок');
+    return erp.replenishments(request.portalUser,query.data);
+  });
+  app.get('/api/erp/orders/:id/material-preview',{preHandler:allowed([...managers,'warehouse'])},async request=>{
+    const parsed=z.object({units:z.string().min(1).max(8000).regex(/^\d+(,\d+)*$/)}).strict().safeParse(request.query);
+    if(!parsed.success)fail(400,'Оберіть вироби');
+    const ids=z.array(id).min(1).max(500).refine(values=>new Set(values).size===values.length).safeParse(parsed.data.units.split(',').map(Number));
+    if(!ids.success)fail(400,'Оберіть до 500 різних виробів');
+    return erp.previewConsumption(request.portalUser,numericId(request),ids.data);
+  });
   app.get('/api/erp/crews/:id/tasks', { preHandler:allowed(['admin','manager','technician','observer']) }, async request=>{
     const parsed=taskQuery.safeParse(request.query);
     if(!parsed.success)fail(400,'Некоректні параметри пошуку');
@@ -95,4 +111,12 @@ export function registerErpRoutes(app, erp) {
   write('members', schemas.newMember, ['admin'], (u,b) => erp.createMember(u,b));
   write('members/:id/close-shift', schemas.closeShift, managers, (u,b,id) => erp.closeMemberShift(u,id,b));
   write('orders/:id/update', schemas.orderUpdate, managers, (u,b,id) => erp.updateOrder(u,id,b));
+  write('materials',z.object(materialFields).strict(),managers,(u,b)=>erp.saveMaterial(u,null,b));
+  write('materials/:id',z.object({...materialFields,version:id}).strict(),managers,(u,b,id)=>erp.saveMaterial(u,id,b));
+  write('templates/:id/materials',specSchema,managers,(u,b,id)=>erp.saveMaterialSpec(u,'template',id,b));
+  write('orders/:id/materials',specSchema,managers,(u,b,id)=>erp.saveMaterialSpec(u,'order',id,b));
+  write('stock/:id/link-material',z.object({materialId:id}).strict(),managers,(u,b,id)=>erp.linkMaterialLot(u,id,b));
+  write('replenishments',z.object({...replenishmentFields,materialId:id,clientId:id.nullable().default(null)}).strict(),[...managers,'warehouse'],(u,b)=>erp.saveReplenishment(u,null,b));
+  write('replenishments/:id',z.object({...replenishmentFields,version:id,cancel:z.boolean().default(false)}).strict(),[...managers,'warehouse'],(u,b,id)=>erp.saveReplenishment(u,id,b));
+  write('orders/:id/consume-materials',z.object({specVersion:id,units:selected,note:text(400)}).strict(),[...managers,'warehouse'],(u,b,id)=>erp.consumeMaterials(u,id,b));
 }

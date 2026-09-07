@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { migrateCrews, createCrewFeatures } from './erp-crews.mjs';
+import { migrateMaterials, createMaterialFeatures, quantityMilli } from './erp-materials.mjs';
 
 export function migrateErp(db) {
   db.transaction(() => {
@@ -116,6 +117,7 @@ export function migrateErp(db) {
     if (!db.pragma('table_info(erp_orders)').some(column=>column.name==='version')) db.exec('ALTER TABLE erp_orders ADD COLUMN version INTEGER NOT NULL DEFAULT 1');
     db.prepare('INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)').run('erp_v1');
     migrateCrews(db);
+    migrateMaterials(db);
   }).immediate();
 }
 
@@ -149,6 +151,7 @@ export function createErp(db) {
   const canWorkUnit = (user, id) => manages(user) || Boolean(get(`SELECT t.id FROM erp_tasks t WHERE t.unit_id=? AND ((t.crew_id IS NULL AND t.assigned_to=?) OR EXISTS(SELECT 1 FROM erp_crew_members m JOIN erp_crews c ON c.id=m.crew_id WHERE m.crew_id=t.crew_id AND m.user_id=? AND c.archived=0))`, id, user.id, user.id));
   const stopTimer = (taskId, time) => run('UPDATE erp_time_entries SET ended_at=MAX(started_at,MIN(?,(SELECT started_at+? FROM erp_shifts WHERE id=shift_id))) WHERE task_id=? AND ended_at IS NULL', time, MAX_SHIFT_MS, taskId);
   const crews = createCrewFeatures({ db,get,all,run,insert,entity,version,role,requireRole,manages,event,fail,now,activeShift,maxShiftMs:MAX_SHIFT_MS });
+  const materials = createMaterialFeatures({get,all,run,insert,entity,version,requireRole,event,fail,now,moveStock});
 
   function command(user, requestId, path, body, work) {
     const fingerprint = crypto.createHash('sha256').update(JSON.stringify([path, body])).digest('hex');
@@ -191,7 +194,7 @@ export function createErp(db) {
     const order = get('SELECT o.*,c.name AS client_name FROM erp_orders o JOIN erp_clients c ON c.id=o.client_id WHERE o.id=?', id);
     if (!order) fail(404, 'Замовлення не знайдено');
     return {
-      ...order, code: orderCode(id), steps: JSON.parse(order.steps_json),
+      ...order, code: orderCode(id), steps: JSON.parse(order.steps_json), materialSpec:materials.orderNeeds(id),
       units: all('SELECT * FROM erp_units WHERE order_id=? ORDER BY id', id).map(u => ({ ...u, code: unitCode(u.id) })),
       tasks: all(`${taskSelect} WHERE u.order_id=? ORDER BY u.id,t.sequence`, now(), id).map(t=>serializeTask(crews.decorateTask(t,user))),
       receipts: all('SELECT * FROM erp_receipts WHERE order_id=? ORDER BY id DESC', id),
@@ -227,13 +230,13 @@ export function createErp(db) {
   }
 
   function stock() {
-    return all(`SELECT l.*,COALESCE(c.name,'Власність майстерні') AS owner_name,
+    return all(`SELECT l.*,COALESCE(c.name,'Власність майстерні') AS owner_name,COALESCE(i.uom,'pcs') AS uom,
       COALESCE(SUM(CASE WHEN m.to_location='warehouse' THEN m.quantity ELSE 0 END - CASE WHEN m.from_location='warehouse' THEN m.quantity ELSE 0 END),0) AS warehouse,
       COALESCE(SUM(CASE WHEN m.to_location='workbench' THEN m.quantity ELSE 0 END - CASE WHEN m.from_location='workbench' THEN m.quantity ELSE 0 END),0) AS workbench,
       COALESCE(SUM(CASE WHEN m.to_location='installed' THEN m.quantity ELSE 0 END - CASE WHEN m.from_location='installed' THEN m.quantity ELSE 0 END),0) AS installed,
       COALESCE(SUM(CASE WHEN m.to_location='returned' THEN m.quantity ELSE 0 END),0) AS returned,
       COALESCE(SUM(CASE WHEN m.to_location='scrap' THEN m.quantity ELSE 0 END),0) AS scrap
-      FROM erp_stock_lots l LEFT JOIN erp_clients c ON c.id=l.client_id LEFT JOIN erp_stock_moves m ON m.lot_id=l.id GROUP BY l.id ORDER BY l.id DESC LIMIT 500`);
+      FROM erp_stock_lots l LEFT JOIN erp_clients c ON c.id=l.client_id LEFT JOIN erp_materials i ON i.id=l.material_id LEFT JOIN erp_stock_moves m ON m.lot_id=l.id GROUP BY l.id ORDER BY l.id DESC LIMIT 500`).map(lot=>({...lot,...Object.fromEntries(['warehouse','workbench','installed','returned','scrap'].map(k=>[k,lot[k]/lot.quantity_scale]))}));
   }
 
   function snapshot(user, query = {}) {
@@ -258,7 +261,8 @@ export function createErp(db) {
     if (access !== 'technician') {
       result.orders = listOrders();
       result.clients = all('SELECT * FROM erp_clients ORDER BY name LIMIT 1000');
-      result.templates = all('SELECT * FROM erp_templates ORDER BY id DESC LIMIT 100').map(t => ({...t, steps: JSON.parse(t.steps_json)}));
+      result.templates = all('SELECT * FROM erp_templates ORDER BY id DESC LIMIT 100').map(t => ({...t, steps: JSON.parse(t.steps_json),materialSpec:materials.spec('template',t.id)}));
+      result.materials = materials.catalogue();
       result.stock = stock();
       result.stockCount=get('SELECT COUNT(*) AS count FROM erp_stock_lots').count;
       result.totals = get(`SELECT COUNT(*) AS received,COALESCE(SUM(state='ready'),0) AS ready,COALESCE(SUM(state='delivered'),0) AS delivered,COALESCE(SUM(state='quality'),0) AS quality FROM erp_units`);
@@ -268,6 +272,7 @@ export function createErp(db) {
       result.team = team();
       result.events = all(`SELECT e.*,COALESCE(NULLIF(u.display_name,''),u.email) AS actor FROM erp_events e JOIN users u ON u.id=e.actor_id ORDER BY e.id DESC LIMIT 80`);
     }
+    if(['admin','manager','warehouse','observer'].includes(access))result.materialPlanning=materials.planning(user);
     return result;
   }
 
@@ -384,21 +389,26 @@ export function createErp(db) {
 
   function receiveStock(user, body) {
     requireRole(user, ['admin','manager','warehouse']);
+    const receipt=materials.receiptInfo(body);
     if (body.clientId) entity('erp_clients', body.clientId);
     if (body.originUnitId) {
       const unit = entity('erp_units', body.originUnitId);
       if (unit.client_id !== body.clientId || ['ready','delivered'].includes(unit.state)) fail(409, 'Зняті деталі мають належати клієнту цього відкритого виробу');
       if (body.condition === 'new') fail(400, 'Знята деталь не може мати стан «Нова»');
     }
-    const id = insert('INSERT INTO erp_stock_lots(sku,name,client_id,condition,shelf,reference,origin_unit_id,created_at) VALUES(?,?,?,?,?,?,?,?)', body.sku, body.name, body.clientId, body.condition, body.shelf, body.reference, body.originUnitId, now());
-    insert("INSERT INTO erp_stock_moves(lot_id,from_location,to_location,unit_id,quantity,note,actor_id,created_at) VALUES(?,'external','warehouse',?,?,?,?,?)", id, body.originUnitId, body.quantity, body.reference, user.id, now());
-    event(user, 'stock.received', 'lot', id, { quantity: body.quantity, reference: body.reference, originUnitId: body.originUnitId });
+    const id = insert('INSERT INTO erp_stock_lots(sku,name,client_id,condition,shelf,reference,origin_unit_id,created_at,material_id,quantity_scale,replenishment_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)', receipt.material?.sku??body.sku, receipt.material?.name??body.name, body.clientId, body.condition, body.shelf, body.reference, body.originUnitId, now(),receipt.material?.id??null,receipt.scale,body.replenishmentId??null);
+    insert("INSERT INTO erp_stock_moves(lot_id,from_location,to_location,unit_id,quantity,note,actor_id,created_at) VALUES(?,'external','warehouse',?,?,?,?,?)", id, body.originUnitId, receipt.quantity, body.reference, user.id, now());
+    materials.receiveReplenishment(user,body.replenishmentId,receipt.quantity,id);
+    event(user, 'stock.received', 'lot', id, { quantity: body.quantity,uom:receipt.material?.uom??'pcs', reference: body.reference, originUnitId: body.originUnitId });
     return { id };
   }
 
   function moveStock(user, id, body) {
     requireRole(user, ['admin','manager','warehouse','technician']);
     const lot = entity('erp_stock_lots', id);
+    const uom=lot.material_id?entity('erp_materials',lot.material_id).uom:'pcs';
+    const quantity=quantityMilli(body.quantity,uom)*lot.quantity_scale/1000;
+    if(!Number.isSafeInteger(quantity)||quantity<=0)fail(400,'Некоректна точність або кількість складського руху');
     const allowed = new Set(['warehouse:workbench','workbench:warehouse','workbench:installed','installed:warehouse','warehouse:returned','warehouse:scrap']);
     if (!allowed.has(`${body.from}:${body.to}`)) fail(400, 'Недопустиме складське переміщення');
     if (body.to === 'scrap' && !manages(user)) fail(403, 'Списання підтверджує керівник');
@@ -416,14 +426,16 @@ export function createErp(db) {
       if (body.unitId) fail(400, 'Ця дія не прив’язується до виробу');
     }
     const balance = get(`SELECT COALESCE(SUM(CASE WHEN to_location=? THEN quantity ELSE 0 END-CASE WHEN from_location=? THEN quantity ELSE 0 END),0) AS qty FROM erp_stock_moves WHERE lot_id=? ${body.from === 'warehouse' ? '' : 'AND unit_id=?'}`, body.from, body.from, id, ...(body.from === 'warehouse' ? [] : [body.unitId])).qty;
-    if (balance < body.quantity) fail(409, 'Недостатньо залишку в обраному місці');
-    const moveId = insert('INSERT INTO erp_stock_moves(lot_id,from_location,to_location,unit_id,quantity,note,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?)', id, body.from, body.to, body.unitId, body.quantity, body.note, user.id, now());
+    if (balance < quantity) fail(409, 'Недостатньо залишку в обраному місці');
+    const moveId = insert('INSERT INTO erp_stock_moves(lot_id,from_location,to_location,unit_id,quantity,note,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?)', id, body.from, body.to, body.unitId, quantity, body.note, user.id, now());
     if (needsUnit) run('UPDATE erp_units SET version=version+1 WHERE id=?', body.unitId);
-    event(user, 'stock.moved', 'lot', id, { moveId, ...body });
+    event(user, 'stock.moved', 'lot', id, { moveId, ...body,uom });
     return { id: moveId };
   }
 
   return { role, requireRole, command, snapshot, orderDetail, taskAction, shiftAction, quality, deliver, receiveStock, moveStock,
+    saveMaterial:materials.saveMaterial,saveMaterialSpec:materials.saveSpec,linkMaterialLot:materials.linkLot,
+    replenishments:materials.requests,saveReplenishment:materials.saveReplenishment,consumeMaterials:materials.consume,previewConsumption:materials.previewConsumption,
     saveCrew:crews.saveCrew, assignCrew:crews.assignCrew, workHistory:crews.workHistory,
     crewTasks(user,id,query) {
       requireRole(user,['admin','manager','technician','observer']);
@@ -486,6 +498,7 @@ export function createErp(db) {
       const steps = body.templateId ? JSON.parse(entity('erp_templates', body.templateId).steps_json) : body.steps;
       const id = insert('INSERT INTO erp_orders(client_id,title,model,kind,priority,due_date,notes,steps_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)', body.clientId, body.title, body.model, body.kind, body.priority, body.dueDate, body.notes, JSON.stringify(steps), now());
       receive(user, entity('erp_orders', id), body);
+      materials.copyTemplate(user,id,body.templateId);
       event(user, 'order.created', 'order', id);
       return { id };
     },
@@ -516,8 +529,9 @@ export function createErp(db) {
     },
     stockHistory(user,id) {
       requireRole(user,['admin','manager','warehouse','observer']);
-      entity('erp_stock_lots',id);
-      return all('SELECT m.*,u.display_name AS actor FROM erp_stock_moves m JOIN users u ON u.id=m.actor_id WHERE lot_id=? ORDER BY m.id DESC LIMIT 200',id);
+      const lot=entity('erp_stock_lots',id);
+      const uom=lot.material_id?entity('erp_materials',lot.material_id).uom:'pcs';
+      return all('SELECT m.*,u.display_name AS actor FROM erp_stock_moves m JOIN users u ON u.id=m.actor_id WHERE lot_id=? ORDER BY m.id DESC LIMIT 200',id).map(m=>({...m,quantity:m.quantity/lot.quantity_scale,uom}));
     }
   };
 }

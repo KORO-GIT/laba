@@ -1,3 +1,4 @@
+import {createMaterialUI,materialQuantity,materialUnits} from './erp-materials.js?v=0.26.0';
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
 const navigation = document.querySelector('#navigation');
@@ -33,7 +34,7 @@ const icons = {
 };
 const labels = { received:'Прийнято', working:'У роботі', quality:'Контроль якості', ready:'Готово', delivered:'Видано', pending:'У черзі', in_progress:'Виконується', paused:'На паузі', blocked:'Заблоковано', done:'Завершено', active:'На зміні', closed:'Зміну закрито', normal:'Звичайний', high:'Високий', urgent:'Терміново', admin:'Адміністратор', manager:'Керівник', warehouse:'Комірник', technician:'Майстер', inspector:'Контролер якості', observer:'Спостерігач', none:'Без доступу', new:'Нова', good:'Справна', unknown:'Потребує перевірки', defective:'Несправна', external:'Надходження', workbench:'У роботі', installed:'Встановлено', returned:'Повернено', scrap:'Списано' };
 icons.crews = icons.team;
-const titles = { overview:'Огляд виробництва', orders:'Замовлення', stock:'Склад', team:'Команда', crews:'Робочі команди', my:'Моя робота', history:'Мої зміни', clients:'Клієнти', templates:'Шаблони робіт' };
+const titles = { overview:'Огляд виробництва', orders:'Замовлення', stock:'Склад',materials:'Матеріали',replenishment:'Поповнення', team:'Команда', crews:'Робочі команди', my:'Моя робота', history:'Мої зміни', clients:'Клієнти', templates:'Шаблони робіт' };
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key,value] of Object.entries(attrs)) {
@@ -48,7 +49,7 @@ function el(tag, attrs = {}, ...children) {
 function icon(name) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
-  for (const value of icons[name] || icons.overview) { const p = document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',value);svg.append(p); }
+  for (const value of icons[name] || (name==='materials'?icons.stock:name==='replenishment'?icons.alert:icons.overview)) { const p = document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',value);svg.append(p); }
   return svg;
 }
 const button = (label, action, kind = '', glyph) => el('button',{type:'button',class:`button ${kind}`,onclick:action,'aria-label':label},glyph ? icon(glyph) : null,label);
@@ -103,11 +104,11 @@ async function mutate(path, body, after) {
 }
 function navSections() {
   if (data.me.role==='technician') return ['my',...(data.crews.length?['crews']:[]),'history'];
-  if (data.me.role==='warehouse') return ['overview','orders','stock'];
+  if (data.me.role==='warehouse') return ['overview','orders','stock','materials','replenishment'];
   if (data.me.role==='inspector') return ['overview','orders'];
-  return ['overview','orders','stock','team','crews',...(worker()?['my','history']:[]),'clients','templates'];
+  return ['overview','orders','stock','materials','replenishment','team','crews',...(worker()?['my','history']:[]),'clients','templates'];
 }
-function go(key) { section=key;search='';taskPage=0;location.hash=key;if(['my','crews'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
+function go(key) { section=key;search='';taskPage=0;location.hash=key;if(['my','crews','replenishment'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
 function heading(title,subtitle,action) { return el('div',{class:'page-heading'},el('div',{},el('p',{class:'eyebrow'},'LABA / ВИРОБНИЦТВО'),el('h1',{},title),el('p',{class:'subtitle'},subtitle)),action); }
 function panel(title,body,action,description) { return el('section',{class:'panel'},el('div',{class:'panel-header'},el('div',{},el('h2',{},title),description?el('p',{},description):null),action),body); }
 function empty(title,description,action,glyph='orders') { return el('div',{class:'empty-state'},icon(glyph),el('h3',{},title),el('p',{},description),action); }
@@ -130,7 +131,7 @@ function overview() {
   const working=(data.team||[]).filter(u=>u.current);
   const blocked=(data.team||[]).reduce((sum,u)=>sum+u.blocked,0);
   const teamRows=(data.team||[]).filter(u=>u.enabled&&u.erp_role!=='none').slice(0,6);
-  return [heading('Виробництво під контролем',`${date(Date.now())} · Замовлення, люди й комплектуючі в одному просторі.`,manager()?button('Прийняти партію',newOrder,'primary','plus'):null),
+  return [heading('Виробництво під контролем',`${date(Date.now())} · Замовлення, люди й комплектуючі в одному просторі.`,manager()?button('Прийняти партію',newOrder,'primary','plus'):null),materialUI.warning(),
     el('div',{class:'metrics'},metric('У майстерні',totals.received-totals.delivered,'прийнято, ще не видано','orders',true),metric('На контролі',totals.quality,'очікують перевірки якості','my'),metric('Готові до видачі',totals.ready,'перевірені вироби','stock'),metric('Видано клієнтам',totals.delivered,'за весь час обліку','arrow')),
     el('div',{class:'grid-two'},el('div',{},panel('Активні замовлення',ordersTable(ongoing.slice(0,6),true),el('a',{href:'#orders',onclick:()=>go('orders'),class:'section-link'},'Усі замовлення →'),`${ongoing.length} у поточному списку`),
       blocked?el('div',{class:'status-callout'},icon('alert'),el('div',{},el('strong',{},`${blocked} операцій потребують уваги`),el('p',{},'Майстри вказали причини блокування. Перевірте деталі, щоб відновити роботу.'))):null),
@@ -193,24 +194,28 @@ function teamView() {
     data.me.role==='admin'&&u.portal_role!=='admin'?button(labels[u.erp_role],()=>editMember(u),'small'):badge(u.erp_role)
   ]))),el('p',{class:'mobile-hint'},'Час рахується за активними операціями, а не за відкритою вкладкою. Перерви виключені. Після 16 годин облік відкритої зміни обмежується; майстер має закрити її.')];
 }
-function stockView() {return [heading('Склад комплектуючих','Власник, стан і кожне переміщення зберігаються в обліку.',warehouse()?button('Прийняти деталі',newStock,'primary','plus'):null),searchToolbar('Назва, артикул або власник'),panel('Залишки за партіями',data.stock.length?table(['КОМПЛЕКТУЮЧІ / ВЛАСНИК','НА СКЛАДІ','У РОБОТІ','ВСТАНОВЛЕНО','ПОВЕРНЕНО',''],data.stock.filter(match).map(l=>[
-    el('div',{},el('span',{class:'table-title'},l.name),el('span',{class:'table-sub'},`${l.sku} · ${l.owner_name}`),el('span',{class:'table-sub'},`${labels[l.condition]} · ${l.shelf||'Місце не вказано'} · партія ${l.id}`)),
+function stockView() {return [heading('Склад комплектуючих','Власник, стан і кожне переміщення зберігаються в обліку.',warehouse()?button('Прийняти деталі',newStock,'primary','plus'):null),materialUI.warning(),searchToolbar('Назва, артикул або власник'),panel('Залишки за партіями',data.stock.length?table(['КОМПЛЕКТУЮЧІ / ВЛАСНИК','НА СКЛАДІ','У РОБОТІ','ВСТАНОВЛЕНО / ВИТРАЧЕНО','ПОВЕРНЕНО',''],data.stock.filter(match).map(l=>[
+    el('div',{},el('span',{class:'table-title'},l.name),el('span',{class:'table-sub'},`${l.sku} · ${l.owner_name}`),el('span',{class:'table-sub'},`${labels[l.condition]} · ${l.shelf||'Місце не вказано'} · партія ${l.id} · ${materialUnits[l.uom]}${!l.material_id?' · не пов’язано з нормами':''}`)),
     el('strong',{class:'tabular'},number(l.warehouse)),number(l.workbench),number(l.installed),el('div',{},number(l.returned),l.scrap?el('span',{class:'table-sub'},`Списано ${l.scrap}`):null),
-    actions(warehouse()?button('Рух',()=>stockMove(l),'small'):null,button('Історія',()=>showStockHistory(l),'small quiet'))
+    actions(warehouse()?button('Рух',()=>stockMove(l),'small'):null,button('Історія',()=>showStockHistory(l),'small quiet'),manager()&&!l.material_id?button('Зв’язати з каталогом',()=>materialUI.linkLot(l),'small quiet'):null)
   ])):empty('Склад готовий до прийомки','Приймайте власні деталі та комплектуючі клієнтів окремими партіями. Залишки формуються лише з рухів.',null,'stock')),
-  el('div',{class:'status-callout neutral'},icon('stock'),el('div',{},el('strong',{},'Ім’я власника завжди зберігається'),el('p',{},'Видане майстру ще не означає встановлене. Списання потребує причини й прав керівника. Зняті з виробу деталі приймайте окремою партією з посиланням на виріб.')))];}
+  data.stockCount>500?el('p',{class:'mobile-hint'},'Показано останні 500 складських партій; розрахунок потреб використовує всі пов’язані партії.'):null,
+  el('div',{class:'status-callout neutral'},icon('stock'),el('div',{},el('strong',{},'Ім’я власника завжди зберігається'),el('p',{},'Видане майстру ще не означає встановлене або витрачене. Зняті з виробу деталі приймайте окремою партією з посиланням на виріб.'))),warehouse()&&data.materials.length?button('Стара прийомка без номенклатури',legacyStock,'small quiet'):null];}
 function clientsView() {return [heading('Клієнти','Замовники та майно, яке вони передали майстерні.',manager()?button('Додати клієнта',newClient,'primary','plus'):null),searchToolbar('Назва клієнта'),panel('Клієнтський облік',data.clients.length?table(['КЛІЄНТ','КОНТАКТ','ПРИМІТКА'],data.clients.filter(match).map(c=>[el('span',{class:'table-title'},c.name),c.contact||'—',c.notes||'—'])):empty('Додайте першого клієнта','Його можна буде обрати під час прийомки виробів і комплектуючих.',manager()?button('Додати клієнта',newClient,'primary','plus'):null,'clients'))];}
-function templatesView() {return [heading('Шаблони робіт','Маршрут операцій копіюється в замовлення й зберігає його історію.',manager()?button('Новий шаблон',newTemplate,'primary','plus'):null),panel('Маршрути виробництва',data.templates.length?table(['НАЗВА','ОПЕРАЦІЇ','СТВОРЕНО'],data.templates.map(t=>[el('span',{class:'table-title'},t.name),el('div',{},t.steps.map((s,i)=>el('p',{class:'task-context'},`${i+1}. ${s.title}`))),date(t.created_at)])):empty('Повторювані роботи — один шаблон','Опишіть послідовність операцій для ремонту або модернізації. Кожен прийнятий виріб отримає власний маршрут.',manager()?button('Створити шаблон',newTemplate,'primary','plus'):null,'templates'))];}
+function templatesView() {return [heading('Шаблони робіт','Маршрут і норми копіюються в нове замовлення. Старі замовлення не змінюються.',manager()?button('Новий шаблон',newTemplate,'primary','plus'):null),panel('Маршрути виробництва',data.templates.length?table(['НАЗВА','ОПЕРАЦІЇ','НОРМИ ВИТРАТ','СТВОРЕНО'],data.templates.map(t=>[el('span',{class:'table-title'},t.name),el('div',{},t.steps.map((s,i)=>el('p',{class:'task-context'},`${i+1}. ${s.title}`))),el('div',{},el('p',{class:'task-context'},`${t.materialSpec.lines.length} матеріалів · версія ${t.materialSpec.version}`),manager()?button('Норми витрат',()=>materialUI.specDialog('template',t),'small'):null),date(t.created_at)])):empty('Повторювані роботи — один шаблон','Опишіть послідовність операцій для ремонту або модернізації. Кожен прийнятий виріб отримає власний маршрут.',manager()?button('Створити шаблон',newTemplate,'primary','plus'):null,'templates'))];}
 function shiftTable(shifts) {return table(['ПОЧАТОК','ЗАВЕРШЕННЯ','БЕЗ ПЕРЕРВ','СТАН'],shifts.map(s=>[date(s.started_at,true),s.ended_at?date(s.ended_at,true):'Триває',duration(s.elapsed_ms),badge(s.state)]));}
 function historyView() {return [heading('Мої зміни','Зафіксовані початок, перерви та завершення. Час — за Києвом.'),panel('Останні 60 змін',data.shifts.length?shiftTable(data.shifts):empty('Перша зміна попереду','Перейдіть у «Моя робота» та почніть зміну.',button('До моєї роботи',()=>go('my'),'primary'),'clock'))];}
 function render() {
   if (!data) return;
   const available=navSections();if (!available.includes(section)) section=data.me.role==='technician'?'my':'overview';
-  navigation.replaceChildren(...available.map(key=>el('a',{class:`nav-link${section===key?' active':''}`,href:`#${key}`,onclick:()=>go(key),'aria-current':section===key?'page':'false'},icon(key),titles[key],key==='my'&&data.myTaskCounts.open?el('span',{class:'nav-count'},data.myTaskCounts.open):null)));
+  navigation.replaceChildren(...available.map(key=>el('a',{class:`nav-link${section===key?' active':''}`,href:`#${key}`,onclick:()=>go(key),'aria-current':section===key?'page':'false'},icon(key),titles[key],key==='my'&&data.myTaskCounts.open?el('span',{class:'nav-count'},data.myTaskCounts.open):key==='replenishment'&&data.materialPlanning?.alertCount?el('span',{class:'nav-count'},data.materialPlanning.alertCount):null)));
   document.querySelector('#breadcrumb').textContent=titles[section];
   document.querySelector('#identity').replaceChildren(avatar(data.me.name),el('span',{},data.me.name));
-  const views={overview,orders:ordersView,my:myView,team:teamView,crews:crewsView,stock:stockView,clients:clientsView,templates:templatesView,history:historyView};
-  content.replaceChildren(...views[section]());
+  const views={overview,orders:ordersView,my:myView,team:teamView,crews:crewsView,stock:stockView,materials:materialUI.materialsView,replenishment:materialUI.replenishmentView,clients:clientsView,templates:templatesView,history:historyView};
+  const alertCount=data.materialPlanning?.alertCount||0;
+  document.querySelector('#material-notification').replaceChildren(...(alertCount?[button(`${alertCount}`,()=>go('replenishment'),'quiet','alert')]:[]));
+  const alertButton=document.querySelector('#material-notification button');if(alertButton){alertButton.setAttribute('aria-label',`Поповнення запасів: ${alertCount} позицій`);alertButton.title=`Поповнення запасів: ${alertCount} позицій`;}
+  content.replaceChildren(...views[section]().filter(Boolean));
 }
 function openDialog(title,...body) {
   if (dialog.open) dialog.close();
@@ -243,7 +248,7 @@ function receiptFields() {return [field('Документ / номер прий�
 const receiptBody=v=>({reference:v.reference,serials:v.serials.split('\n').map(s=>s.trim()).filter(Boolean),unnumbered:Number(v.unnumbered)});
 function newOrder() {
   if (!data.clients.length) {newClient(()=>newOrder());return;}
-  form('Прийняти партію','Створюємо замовлення, акт прийомки та маршрут для кожного виробу.',[
+  form('Прийняти партію','Створюємо замовлення, акт прийомки та маршрут для кожного виробу. Норми обраного шаблону копіюються окремо; склад не списується.',[
     el('div',{class:'form-grid'},select('Клієнт','clientId',data.clients.map(c=>[c.id,c.name])),field('Назва замовлення','title','text',{required:true,maxLength:160,placeholder:'Модернізація партії'}),field('Модель / тип виробу','model','text',{required:true,maxLength:120}),select('Тип робіт','kind',[['upgrade','Модернізація'],['repair','Ремонт'],['service','Обслуговування']]),field('Бажаний термін','dueDate','date'),select('Пріоритет','priority',[['normal','Звичайний'],['high','Високий'],['urgent','Терміново']])),
     select('Маршрут','templateId',[['','Власний маршрут нижче'],...data.templates.map(t=>[t.id,t.name])]),field('Власні операції — по одному на рядок','steps','textarea',{value:'Вхідний огляд\nВиконання робіт за замовленням\nСамоперевірка комплектності'}),
     receiptFields(),field('Примітка до замовлення','notes','textarea',{maxLength:2000})
@@ -266,6 +271,7 @@ async function openOrder(id) {
     openDialog(`${order.code} · ${order.title}`,
       el('p',{class:'dialog-description'},`${order.client_name} · ${order.model} · термін ${date(order.due_date)}${order.notes?` · ${order.notes}`:''}`),manager()?button('Змінити термін / пріоритет',()=>editOrder(order),'small quiet'):null,
       el('div',{class:'detail-stats'},[['Прийнято',order.units.length],['На контролі',order.units.filter(u=>u.state==='quality').length],['Готово',order.units.filter(u=>u.state==='ready').length],['Видано',order.units.filter(u=>u.state==='delivered').length]].map(([label,value])=>el('div',{class:'detail-stat'},el('strong',{},value),el('small',{},label)))),
+      materialUI.orderPanel(order),warehouse()&&order.materialSpec.lines.length?button('Витрата за нормою для обраних',()=>materialUI.consumeDialog(order,pick()),'small'):null,
       el('div',{class:'toolbar detail-toolbar'},el('label',{class:'actions'},allBox,'Обрати всі',counter),actions(manager()?button('Призначити',()=>selected.size?assignDialog(order,pick()):notify('Спочатку оберіть вироби',true),'small'):null,manager()?button('Призначити команді',()=>selected.size?assignCrewDialog(order,pick()):notify('Спочатку оберіть вироби',true),'small'):null,warehouse()?button('Видати',()=>selected.size?deliveryDialog(order,pick()):notify('Спочатку оберіть вироби',true),'small primary'):null)),unitList,
       warehouse()?el('div',{class:'spaced'},button('Додаткова прийомка',()=>form('Прийняти ще вироби',`Додаткова прийомка до ${order.code}. Маршрут робіт буде той самий.`,receiptFields(),'Прийняти',v=>mutate(`orders/${id}/receive`,receiptBody(v),()=>openOrder(id))),'','plus')):null,
       el('h3',{class:'spaced'},'Документи руху'),el('div',{},order.receipts.map(r=>el('p',{class:'task-context'},`${date(r.created_at,true)} · Прийнято ${r.quantity} · ${r.reference}`)),order.deliveries.map(d=>el('p',{class:'task-context'},`${date(d.created_at,true)} · Видано ${d.quantity} · ${d.reference} · ${d.recipient}`)))
@@ -297,16 +303,17 @@ function unitDetail(order,unit) {
   const tasks=order.tasks.filter(t=>t.unit_id===unit.id);
   openDialog(`${unit.serial||unit.code} · маршрут робіт`,el('p',{class:'dialog-description'},`${unit.code} · ${order.code}`),...tasks.map(t=>el('div',{class:'activity'},el('span',{class:'activity-dot'}),el('div',{},el('h3',{},t.title),el('p',{},`${t.assignee} · ${duration(t.elapsed_ms)}${t.note?` · ${t.note}`:''}`),badge(t.state),button('Внесок майстрів',()=>contributionHistory(order,unit,t),'small quiet')))),...order.quality.filter(q=>q.unit_id===unit.id).map(q=>el('p',{class:'task-context spaced'},`${date(q.created_at,true)} · ${q.actor} · ${q.result==='pass'?'Перевірено':'Доопрацювання'} · ${q.note}`)),el('div',{class:'spaced'},button('До замовлення',()=>openOrder(order.id))));
 }
-function newStock() {form('Прийняти комплектуючі','Одна позиція, один власник та один стан — окрема складська партія.',[
+function newStock() {if(data.materials.length)materialUI.receiveDialog();else legacyStock();}
+function legacyStock() {form('Прийняти комплектуючі','Стара прийомка в штуках без зв’язку з нормами. Для автоматичних потреб використовуйте номенклатуру «Матеріали». Власник і рухи зберігаються.',[
   el('div',{class:'form-grid'},field('Назва','name','text',{required:true,maxLength:160}),field('Артикул','sku','text',{required:true,maxLength:100}),select('Власник','clientId',clientOptions()),select('Стан','condition',[['new','Нова'],['good','Справна'],['unknown','Потребує перевірки'],['defective','Несправна']]),field('Кількість, шт.','quantity','number',{min:1,max:1000000,required:true,value:1}),field('Комірка / місце зберігання','shelf','text',{maxLength:100})),field('Документ прийомки / підстава','reference','text',{required:true,maxLength:160}),field('Внутрішній номер виробу, якщо деталі зняті з нього','originUnitId','text',{placeholder:'LB-000001 · залиште порожнім для нових надходжень'})
 ],'Прийняти',v=>mutate('stock',{...v,quantity:Number(v.quantity),clientId:v.clientId?Number(v.clientId):null,originUnitId:v.originUnitId?Number(v.originUnitId.replace(/^LB-/i,'')):null}));}
 function stockMove(lot) {
-  form('Рух комплектуючих',`${lot.name} · ${lot.owner_name}. На складі ${lot.warehouse}, у роботі ${lot.workbench}.`,[
-    select('Дія','move',[['warehouse:workbench','Видати зі складу на виріб'],['workbench:installed','Підтвердити встановлення'],['workbench:warehouse','Повернути невикористане на склад'],['installed:warehouse','Зняти встановлене та повернути на склад'],['warehouse:returned','Повернути залишок клієнту'],...(manager()?[['warehouse:scrap','Списати з причиною']]:[])]),
-    field('Кількість, шт.','quantity','number',{min:1,max:1000000,required:true,value:1}),field('Внутрішній номер виробу','unitId','text',{placeholder:'LB-000001'}),field('Документ / причина / примітка','note','textarea',{required:true,maxLength:500})
+  form('Рух комплектуючих',`${lot.name} · ${lot.owner_name}. На складі ${materialQuantity(lot.warehouse,lot.uom)}, у роботі ${materialQuantity(lot.workbench,lot.uom)}.`,[
+    select('Дія','move',[['warehouse:workbench','Видати зі складу на виріб'],['workbench:installed','Підтвердити встановлення / витрату'],['workbench:warehouse','Повернути невикористане на склад'],['installed:warehouse','Повернути фактично зняте / невитрачене'],['warehouse:returned','Повернути залишок клієнту'],...(manager()?[['warehouse:scrap','Списати з причиною']]:[])]),
+    field(`Кількість, ${materialUnits[lot.uom]}`,'quantity','number',{min:lot.uom==='pcs'?1:0.001,step:lot.uom==='pcs'?1:0.001,max:1000000,required:true,value:1}),field('Внутрішній номер виробу','unitId','text',{placeholder:'LB-000001'}),field('Документ / причина / примітка','note','textarea',{required:true,maxLength:500})
   ],'Провести рух',v=>{const [from,to]=v.move.split(':');mutate(`stock/${lot.id}/move`,{from,to,quantity:Number(v.quantity),unitId:v.unitId?Number(v.unitId.replace(/^LB-/i,'')):null,note:v.note});});
 }
-async function showStockHistory(lot) {try{const rows=await api(`stock/${lot.id}/history`);const place={...labels,warehouse:'Склад'};openDialog(`${lot.name} · рухи`,table(['КОЛИ','РУХ','КІЛЬКІСТЬ','ПІДСТАВА'],rows.map(r=>[date(r.created_at,true),`${place[r.from_location]||r.from_location} → ${place[r.to_location]||r.to_location}`,r.quantity,el('div',{},r.note,el('span',{class:'table-sub'},`${r.actor}${r.unit_id?` · LB-${String(r.unit_id).padStart(6,'0')}`:''}`))])));}catch(error){notify(error.message,true);}}
+async function showStockHistory(lot) {try{const rows=await api(`stock/${lot.id}/history`);const place={...labels,warehouse:'Склад',installed:'Встановлено / витрачено'};openDialog(`${lot.name} · рухи`,table(['КОЛИ','РУХ','КІЛЬКІСТЬ','ПІДСТАВА'],rows.map(r=>[date(r.created_at,true),`${place[r.from_location]||r.from_location} → ${place[r.to_location]||r.to_location}`,materialQuantity(r.quantity,r.uom),el('div',{},r.note,el('span',{class:'table-sub'},`${r.actor}${r.unit_id?` · LB-${String(r.unit_id).padStart(6,'0')}`:''}`))])));}catch(error){notify(error.message,true);}}
 function editMember(member) {form('Доступ до виробництва',member.display_name||member.email,select('Роль','role',Object.entries(labels).filter(([k])=>['none','manager','warehouse','technician','inspector','observer'].includes(k))),'Зберегти',v=>mutate(`members/${member.id}`,v));dialog.querySelector('select').value=member.erp_role;}
 function newMember() {form('Додати майстра','Власний e-mail для входу через Cloudflare. Доступ до інших розділів LABA не призначається автоматично.',[field('Ім’я','name','text',{required:true,maxLength:120}),field('E-mail','email','email',{required:true,maxLength:254}),select('Роль','role',[['technician','Майстер'],['manager','Керівник'],['warehouse','Комірник'],['inspector','Контролер якості'],['observer','Спостерігач']])],'Додати',v=>mutate('members',v));}
 async function showMemberShifts(member) {try {const response=await api(`members/${member.id}/shifts`);openDialog(`Зміни · ${member.display_name||member.email}`,shiftTable(response));}catch(error){notify(error.message,true);}}
@@ -385,13 +392,16 @@ async function contributionHistory(order,unit,task) {
   }catch(error){notify(error.message,true);}
 }
 
+const materialUI=createMaterialUI({getData:()=>data,el,button,actions,icon,heading,panel,table,empty,field,select,form,openDialog,dialog,manager,warehouse,api,mutate,notify,date,searchToolbar,match,go,load,openOrder,clientOptions});
 async function load() {
   const revision=++loadRevision;
   const next=await api(`context?taskState=${taskFilter}&page=${taskPage}&q=${encodeURIComponent(section==='my'?search:'')}`);
   const selectedCrew=next.crews.some(c=>c.id===crewId)?crewId:null;
   const nextQueue=section==='crews'&&selectedCrew?await api(`crews/${selectedCrew}/tasks?taskState=${taskFilter}&page=${taskPage}&q=${encodeURIComponent(search)}`):null;
+  const nextMaterials=await materialUI.fetchState(next.materialPlanning?section:null);
   if(revision!==loadRevision)return;
   crewId=selectedCrew;crewQueue=nextQueue;
+  materialUI.acceptState(nextMaterials);
   data=next;
   document.querySelector('#connection').textContent='Облік актуальний';document.querySelector('#connection').classList.remove('offline');
   document.querySelector('#updated-at').textContent=`Оновлено ${date(next.serverTime,true)} · Київ`;
