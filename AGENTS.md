@@ -4,6 +4,8 @@
 
 ## ERP / Виробництво
 
+Hotfix повідомлень `0.26.1` розгорнуто (`7c925e7`, 2026-09-07 21:27:25 UTC) і fast-forward об'єднано/push у `main`. Native modal `showModal()` має browser top layer: ERP toast переноситься у sticky заголовок відкритого діалогу, а не підіймається body z-index. При змінах діалогів/помилок запускати `scripts/erp-notifications-browser-check.mjs`; зберігати введені поля та єдиний live region. Backend/схема/дані цим hotfix не змінені. Деталі deployment і handoff — `docs/CURRENT_STATE.md` та `docs/ERP_CONTINUATION.md`.
+
 Норми матеріалів та поповнення `0.26.0` розгорнуто (`70508a0`, 2026-09-07 21:13:53 UTC); `codex/erp-material-planning` fast-forward об'єднано й push у `main`. Нову роботу починати з актуальної `origin/main`. Перед змінами складу/норм/прийомки прочитати `docs/ERP_MATERIALS.md`: нові партії мають `quantity_scale=1000`, старі збережено зі scale=1. Не запускати старий ERP writable поверх нових кількостей. Підтверджений deployment дивитися тільки в `CURRENT_STATE.md`.
 
 Робочі команди `0.25.0` розгорнуто (`c947dcb`); `codex/erp-teams` fast-forward об'єднано в `main`. Деталі в `docs/ERP_TEAMS.md`; прочитати перед змінами призначень, часу, змін, QC або ролей. Нову роботу починати з актуальної `origin/main`. Не робити семантично несумісний rollback старої ERP поверх спільних таймерів.

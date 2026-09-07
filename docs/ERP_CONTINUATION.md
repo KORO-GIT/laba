@@ -1,14 +1,21 @@
 # Продовження ERP з іншого ПК
 
-## Робочий checkpoint 0.26.1 · повідомлення у діалозі
+## Поточний checkpoint 0.26.1 · повідомлення у діалозі
 
 Гілка `codex/erp-dialog-notifications` від clean `origin/main=00bab8e`. Власник показав помилку позаду розмитого backdrop. Причина: `showModal()` переносить dialog у browser top layer; звичайний body `#toast` із z-index50 залишається нижче, просте збільшення z-index не допомагає. Один існуючий toast тепер переміщується у sticky `.dialog-header` відкритого вікна, а після close/Escape повертається у body. DOM-вузол збережений між replaceChildren/reopen, тому успіх після save→повторне відкриття теж видимий. Помилки мають alert/assertive, успіх status/polite, aria-atomic; duplicate `.form-error` прибрано, введені поля не скидаються. Старі помилки очищуються при зміні/закритті діалогу, таймер лишається один, 5,5с. CSS переносить довгі рядки, теми/мобільний екран збережені.
 
-Змінено лише ERP frontend/asset version/package patch, browser regression та цю документацію. Серверні API/ACL/схема/проводки/час/дані й інші модулі не змінюються. На момент checkpoint підтверджений runtime ще70508a0/0.26.0; новий номер package не означає deploy. `scripts/erp-notifications-browser-check.mjs` запускає власний disposable localhost8086, перевіряє empty selection безPOST, реальний409 без втрати полів, один live region, topmost hit-test, sticky після scroll, довгу текстову помилку безHTML, success після заміни діалогу, Escape/timer, dark/light1440/390/360. Скриншоти лише ignored data, жодних тестових дій у production. Перед release — точні install/check/test/audit, на VPS staging й read-only migration-check; зберегти найсвіжіші `.env/data/backups`, перезапуск тількиLABA, Git push та final handoff.
+Змінено лише ERP frontend/asset version/package patch, browser regression та документацію. Серверні API/ACL/схема/проводки/час/дані й інші модулі не змінюються; diff `src/` від70508a0 порожній. Підтверджений runtime **7c925e7d490a9b5e565de69da28ec06318886a0a/0.26.1**, старт **2026-09-07 21:27:25 UTC**, health21:27:26. Після повторного fetch (origin/main=00bab8e, чужих commits немає) гілку fast-forward об'єднано й push у main. Наступний docs-only commit не є новим runtime SHA.
 
-Локальні точні `npm ci`, `npm run check`, `npm test` пройшли (33/33), `npm audit --omit=dev` —0 vulnerabilities. Новий browser smoke та повторні materials/crews smoke пройшли; скриншоти desktop1440 dark і довга помилка mobile360 light візуально перевірені. До release всі98 файлів VPS збігалися з70508a0; production4 вироби/1 команда, Cloudflare/SQL/FK ok, Caddy hash незмінний,5 служб active. У source/backend diff порожній. Фінальний deployedSHA/backup записати після фактичного завершення.
+`scripts/erp-notifications-browser-check.mjs` запускає власний disposable localhost8086, перевіряє empty selection безPOST, реальний409 без втрати полів, один live region, topmost hit-test, sticky після scroll, довгу текстову помилку безHTML, success після заміни діалогу, Escape/timer, dark/light1440/390/360. Додана regression-перевірка відсутності буквального `null` з nullable page blocks. Скриншоти лише ignored data; заповнені сценарії виконуються виключно на synthetic localhost.
 
-## Поточний checkpoint 0.26.0 · матеріали
+- Windows та VPS staging: точні `npm ci`, `npm run check`, `npm test` пройшли (33/33), `npm audit --omit=dev` —0 vulnerabilities. Новий browser smoke (двічі, включно з фінальною версією) та повторні початковий ERP/materials/crews smoke пройшли. Desktop1440 dark і довга помилка mobile360 light візуально перевірені. Локальні disposable сервери завершені.
+- До release всі98 VPS-файлів збігалися з70508a0; після — всі99 з7c925e7. Archive SHA-256 `c0854c6f02633497f6bf2b4d04fa15f10b46cfacf51c9df661f934845b342d6f`. Спочатку checksum guard зупинив staging, бо SCP ще не завершився; після завершення передачі checksum збігся, staging перевірено повторно. Production до повної перевірки не змінювався. У наступних deployment обов'язково дочекатися завершення SCP перед перевіркою архіву.
+- Read-only migration-check backup production двічі зберіг усі39 наявних таблиць/старі значення/markers, quick_check/FK ok; нової міграції немає. VPS in-memory 3000-unit/9000-task smoke: setup668ms, owner10/14ms, worker10/14ms (median/p95). Materials:201 замовлення/3181 виріб/3 матеріали/501 партія, setup667ms, read41/54ms, consume150×3 —670ms. Це вузькі smoke, не concurrent SLA.
+- Backup **`/opt/laba/backups/portal-20260907-2127-before-0.26.1.db`**, root600; попередній каталог **`/opt/laba-previous-20260907T2127Z-0.26.0`** збережено. Після stop лишеLABA скопійовано актуальні `.env/data/backups` і побайтово звірено перед стартом. Збережено4 вироби/1 команду та найсвіжіші користувацькі операції; попередні backups не видалено, БД старою копією не замінювали.
+- Після deployment: health200, authCloudflare, ERP/context/нові assets безJWT401, SQL/FK ok, root750/env640/data700/DB660 та sqlite-write-path-ok. Loopback3020, ~56MiB при незміненому MemoryMax512MiB, журнал err після старту порожній. Caddy SHA-256 незмінний,5 служб active; Task/Starlink/SignalSynch та інші модулі не змінювалися.
+- Live Chrome через Computer Use: після безпечного reload відкрито існуюче замовлення, натиснуто `Призначити` без вибраних виробів. Client-only помилка `Спочатку оберіть вироби` чітко видима в header над blur, скриншот перевірено; реальних призначень/записів не зроблено. Діалог закрито, відновлено початковий `/erp#team`. Майбутній UI-регрес не виправляти просто body z-index — native dialog top layer знаходиться вище.
+
+## Історичний checkpoint 0.26.0 · матеріали
 
 `codex/erp-material-planning` від clean `origin/main=eed5419`; перший checkpoint `b036322`, release **`70508a06c77de081968177f067d7ac3474d71453`**. Розгорнуто **2026-09-07 21:13:53 UTC**, health21:13:54; гілку fast-forward об'єднано й push у main. Реалізовані каталог/норми на шаблон і замовлення, розрахунок всіх відкритих потреб, внутрішні попередження, заявки з частковим надходженням, підтвердження фактичної витрати. Повністю прочитати `ERP_MATERIALS.md`.
 
@@ -19,7 +26,7 @@
 - Live Chrome: overview → каталог → форма без збереження → поповнення; візуально перевірено через Computer Use. На VPS матеріалів/норм/заявок ще0; це налаштовує власник за реальними даними, не seed. Підказки видимі, тестових проводок агент не робив. Для першого реального шаблону: каталог/власник/одиниці → норми на один виріб → прийомка запасу → замовлення зі snapshot норм → прогноз/заявка → фактичний розхід до QC.
 - Особливо важливо зберігати `quantity_scale` та незмінні legacy рухи; старий writable ERP несумісний. Немає зовнішніх сповіщень, hard reserve, автосписання при завершенні майстром чи offsite backup. Наступна робота — тільки нова codex/* від актуального origin/main; docs-only SHA не плутати з runtime70508a0.
 
-Оновлено: 2026-09-08 за Києвом після deployment матеріалів `0.26.0`. Виробничий контур, команди та матеріали запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+Оновлено: 2026-09-08 за Києвом після deployment повідомлень `0.26.1`. Виробничий контур, команди та матеріали запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
 
 ## Історичний checkpoint 0.25.0
 
@@ -41,7 +48,7 @@
 - Репозиторій: `https://github.com/KORO-GIT/laba` (не `kanban`, не Task).
 - Гілка першого ERP-релізу `codex/laba-erp` об'єднана fast-forward у `main` і збережена як checkpoint. Продовжувати з актуальної `origin/main`.
 - База гілки: `5000d27` — документація production LABA `0.23.3`.
-- Історична версія першого контуру: `0.24.0`, попередній production `e430efd1366eb663c2f79ab92d66a5924c027855`. Перший checkpoint — `f399a03`, release verification — `e430efd`, docs-only handoff — `1991d0e`. Поточний production команд — `c947dcb/0.25.0`, як зазначено вище. Не вважати номер у `package.json` підтвердженням наступного deployment.
+- Історична версія першого контуру: `0.24.0`, попередній production `e430efd1366eb663c2f79ab92d66a5924c027855`. Перший checkpoint — `f399a03`, release verification — `e430efd`, docs-only handoff — `1991d0e`. Наступні releases: команди `c947dcb/0.25.0`, матеріали `70508a0/0.26.0`; поточний `7c925e7/0.26.1`, як зазначено вище. Не вважати номер у `package.json` підтвердженням наступного deployment.
 - Працюючі `/workshop`, `/service`, `/devices`, SignalSynch та Task не мігруються в ERP і не замінюються.
 
 ```powershell
