@@ -1,16 +1,20 @@
 # Продовження ERP з іншого ПК
 
-Оновлено: 2026-09-07, checkpoint робочих команд `0.25.0` **до deployment**. Перший ERP-контур запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
+Оновлено: 2026-09-07 після deployment робочих команд `0.25.0`. Виробничий контур і команди запущено; повна ERP продовжує розвиватися. Точний підтверджений production — у `CURRENT_STATE.md`.
 
 ## Поточний checkpoint 0.25.0
 
-- Нова гілка `codex/erp-teams` від clean `origin/main=1991d0e`. До цього checkpoint production усе ще `0.24.0/e430efd`; новий номер package не є deployment.
+- `codex/erp-teams` створено від clean `origin/main=1991d0e`, checkpoint **`c947dcb38b6ff9982490801600d91b3f040cbb2b`** push і розгорнуто 2026-09-07 о 20:47 UTC. Після повторного fetch гілку fast-forward об'єднано й push у `main`. Наступний docs-only commit фіксує deployment, його не плутати з runtime SHA.
 - Нова вимога власника: команди для одного великого складного дрона та модернізації партії. Реалізовано склад/старший, `pool` і `shared`, особисті внески, незалежні таймери й зміни, server ACL/версії/історію. Повністю прочитати `ERP_TEAMS.md`.
 - Нові файли: `src/erp-crews.mjs`, `public/erp-crews.css`, `scripts/erp-crews-browser-check.mjs`, `docs/ERP_TEAMS.md`. Зміни інтегровані в ERP database/routes/UI/tests/check; залежності й інші модулі незмінні.
 - Windows: точні install/check/test/audit пройшли, **25/25**, audit 0. Новий browser smoke пройшов на двох незалежних synthetic mobile акаунтах (390/360, dark/light); створення/редагування/призначення, одночасна робота, внески та старший. Скриншоти візуально перевірені. Початковий ERP browser regression теж пройшов.
 - Міграція на старій synthetic ERP: збережено 33 таблиці; після повторного старту на вже оновленій synthetic DB — 36. Source тільки read-only, дві міграції backup, quick_check/FK ok. Тепер перевіряються також усі старі ERP-значення, не лише legacy LABA.
 - Останній локальний in-memory smoke: 3000 виробів/9000 операцій/20 майстрів, owner median 8/p95 9 ms, worker median 7/p95 9 ms, setup 497 ms. Не benchmark production або гарантія місткості.
-- Ще виконати для release: fresh fetch і звірка фактичних файлів VPS з `e430efd`, staged install/check/test/audit та міграція копії production, backup й deployment тільки LABA, health/auth/read-only Chrome/sibling checks. Потім fast-forward main, push, фактичні SHA/paths/results у `CURRENT_STATE.md` і цей handoff.
+- Release виконаний: перед оновленням усі 88 файлів VPS збігалися з попереднім `e430efd`; origin/main залишався `1991d0e`, нових commits іншого ПК не було. На staging install/check/test/audit — **25/25**, audit 0. Міграція read-only backup production двічі зберегла **33** наявні таблиці, старі колонки/рядки/markers, quick_check/FK ok. VPS in-memory smoke: owner median 9/p95 12 ms, worker median 10/p95 11 ms, setup 676 ms; не concurrent load test.
+- Перед stop зроблено backup `/opt/laba/backups/portal-20260907-2048-before-0.25.0.db`; попередній каталог `/opt/laba-previous-20260907T2048Z-0.24.0`. Назви шляхів містять `2048`, фактичний успішний старт — **20:47:13 UTC**, health підтверджено 20:47:15 UTC. Після stop тільки LABA скопійовано й побайтово звірено поточні `.env`, `data/`, `backups/`; нові користувацькі ERP-записи не загублені. На момент перевірки було 4 вироби, команд ще 0; тестових записів агент не додавав.
+- Усі **92** файли deployed archive відповідають `c947dcb` за SHA-256; health/SQLite/FK ok, Cloudflare auth збережено, без JWT ERP/context/crew API/crew CSS — 401. Caddy hash незмінний, усі п'ять служб active, журнал err після старту порожній; LABA loopback3020, близько 46 MiB MemoryCurrent при незміненому MemoryMax512MiB.
+- Live Chrome через навичку Computer Use: власницький ERP overview збережених виробів → `Робочі команди` → форма складу/старшого → закриття без запису. Темний екран перевірено візуально; синтетичні mobile dark/light перевірялися локально. Сторінку залишено `/erp#crews`. Реальні команди/майстрів створює власник за фактичним складом.
+- Наступне: продовжувати з main, провести пілот з реальними майстрами/старшим/незалежним контролером, не створювати довільні акаунти. Offsite backup та решта етапів `ERP.md` ще не виконані.
 - Обмеження: послідовний маршрут (не DAG); 200 команд/50 людей у команді/500 призначень за команду; без payroll/date-range/offline. Старий ERP не може безпечно обслуговувати shared-записи — rollback лише за правилами `ERP_TEAMS.md`, переважно fix-forward.
 
 ## Репозиторій та гілка
@@ -18,7 +22,7 @@
 - Репозиторій: `https://github.com/KORO-GIT/laba` (не `kanban`, не Task).
 - Гілка першого ERP-релізу `codex/laba-erp` об'єднана fast-forward у `main` і збережена як checkpoint. Продовжувати з актуальної `origin/main`.
 - База гілки: `5000d27` — документація production LABA `0.23.3`.
-- Версія першого контуру: `0.24.0`; **розгорнуто `e430efd1366eb663c2f79ab92d66a5924c027855`**. Перший checkpoint — `f399a03`, release verification — `e430efd`, наступний docs-only commit фіксує deployment. Не вважати номер у `package.json` підтвердженням наступного deployment.
+- Історична версія першого контуру: `0.24.0`, попередній production `e430efd1366eb663c2f79ab92d66a5924c027855`. Перший checkpoint — `f399a03`, release verification — `e430efd`, docs-only handoff — `1991d0e`. Поточний production команд — `c947dcb/0.25.0`, як зазначено вище. Не вважати номер у `package.json` підтвердженням наступного deployment.
 - Працюючі `/workshop`, `/service`, `/devices`, SignalSynch та Task не мігруються в ERP і не замінюються.
 
 ```powershell
@@ -43,12 +47,14 @@ git status --short --branch
 6. Дизайн уточнено власником: **як поточна LABA, темний графіт із помаранчевими акцентами; світла тема має перемикатися**. Початковий зелений варіант більше не є погодженим напрямком.
 7. Власник окремо вимагає регулярно зберігати код і детальну документацію в Git, щоб втрата цього ПК не блокувала продовження.
 8. Збільшення ресурсів VPS можливе, але ресурсів поки не змінювали. Спочатку виміряти навантаження.
+9. Людей можна об'єднувати у команди для спільного ремонту великого дрона (агродрон) або модернізації партії малих. Це реалізовано у двох режимах `ERP_TEAMS.md`, зі збереженням особистого обліку.
 
 ## Файли та відповідальність
 
 | Файл | Призначення |
 |---|---|
 | `src/erp-database.mjs` | Адитивна схема `erp_*`, бізнес-інваріанти, транзакційні команди, склад, час, контроль, видача |
+| `src/erp-crews.mjs` | Міграція `erp_crews_v1`, склад/старший, pool/shared, особисті внески, зміни та історія команд |
 | `src/erp-routes.mjs` | Строгі Zod-схеми, ERP ACL, exact-Origin CSRF, UUID ідемпотентності, ліміти, маршрути `/api/erp/*` |
 | `src/server.mjs` | Підключення ERP до наявного Fastify й авторизації; запис у список модулів |
 | `public/erp.html`, `erp.js` | Адміністративні екрани й мобільна черга майстра; DOM/textContent для користувацького вводу |
@@ -58,6 +64,7 @@ git status --short --branch
 | `test/erp.test.mjs` | Поведінкові тести цілісності, прав, retry, конкурентних змін, складу, часу й видачі |
 | `scripts/erp-demo.mjs` | Лише синтетична локальна база: 162 вироби, 3 майстри, 2 клієнти; відмовляється працювати в production або непорожній демобазі |
 | `scripts/erp-browser-check.mjs` | Playwright перевірка локального UI та дій майстра, desktop/mobile скриншоти в ignored `data/` |
+| `scripts/erp-crews-browser-check.mjs` | Власний disposable localhost8084 та два незалежні synthetic mobile учасники; створення, призначення, внески, старший |
 | `scripts/erp-migration-check.mjs` | Відкриває source SQLite тільки read-only; двічі мігрує тимчасову `.backup`, перевіряє hashes старих таблиць/схем, quick_check і foreign keys, видаляє лише власну тимчасову копію |
 | `scripts/erp-performance-check.mjs` | Ізольований in-memory smoke: 3000 виробів, 9000 операцій, 20 майстрів; не production load test |
 | `scripts/check.mjs` | Переносні JS/Python перевірки для Windows і Linux |
