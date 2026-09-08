@@ -1,0 +1,216 @@
+/* Shared ERP controls and responsive layouts, loaded after module styles. */
+body { line-height: 1.5; }
+body h1, body h2, body h3, body .metric-value, body .brand,
+body .brand small, body .workspace-label, body .eyebrow { letter-spacing: 0; }
+body h1 { font-size: 28px; line-height: 1.25; }
+body h2 { line-height: 1.4; }
+body svg { display: block; }
+body .button {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+  text-align: center;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+body .button.small { min-height: 38px; padding: 8px 12px; font-size: 13px; }
+body .button > svg {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  color: inherit;
+}
+.button-label { min-width: 0; overflow-wrap: anywhere; }
+body .close-button, body .theme-toggle {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+body .close-button > svg, body .theme-toggle > svg { width: 20px; height: 20px; margin: 0; }
+body .close-button .button-label { display: none; }
+body .empty-state > svg { margin: 0 auto 16px; }
+body .empty-state { padding: 36px 24px; }
+body .empty-state p { font-size: 14px; line-height: 1.65; }
+body .empty-state .button { margin-top: 20px; }
+
+body .sidebar { padding-top: 24px; padding-bottom: 18px; }
+@media (min-width: 761px) {
+  body .sidebar { overflow-y: auto; }
+  body #navigation, body .sidebar-bottom { flex-shrink: 0; }
+}
+body .workspace-label { margin-top: 28px; font-size: 11px; }
+body .sidebar-bottom { padding-top: 22px; gap: 12px; font-size: 13px; }
+body .nav-link { min-height: 44px; font-size: 14px; gap: 11px; }
+body .nav-count { flex-shrink: 0; font-size: 12px; }
+body .topbar { min-height: 72px; height: auto; padding-block: 14px; }
+body .breadcrumb { min-width: 0; font-size: 13px; align-items: center; }
+body .breadcrumb strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .topbar-end { flex-shrink: 0; gap: 14px; }
+body .identity { min-width: 0; max-width: 220px; }
+body .identity > span:not(.avatar) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body #content { padding-top: 28px; }
+body .page-heading { flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 24px; }
+body .page-heading > div { flex: 1 1 280px; min-width: 0; }
+body .page-heading > .button { flex-shrink: 0; }
+body .subtitle { font-size: 14px; line-height: 1.6; margin-top: 8px; }
+body .eyebrow { font-size: 11px; }
+body .panel-header { flex-wrap: wrap; }
+body .panel-header > div { min-width: 0; flex: 1; }
+body .panel-header p { font-size: 13px; line-height: 1.5; }
+body .panel-header .button { flex-shrink: 0; }
+body .panel, body .metric, body .task-card, body .guide-card,
+body .material-need, body .shift-banner, body .status-callout,
+body .material-alert, body .guide-callout { border-radius: 8px; }
+body .metric { min-height: 128px; }
+body .metric-label { font-size: 14px; line-height: 1.4; }
+body .metric-value { font-size: 32px; }
+body .metric small { font-size: 12px; line-height: 1.5; }
+body .metric-label svg { flex-shrink: 0; }
+body .section-link { font-size: 13px; }
+body .badge { font-size: 12px; line-height: 1.35; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+body .team-row .badge { flex: 0 0 auto; max-width: 130px; }
+body .team-info strong, body .unit-info strong { font-size: 14px; overflow-wrap: anywhere; }
+body .team-info p, body .unit-info small { font-size: 12px; line-height: 1.6; }
+body .task-context, body .task-instructions, body .task-note { font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+body .task-card h3 { font-size: 18px; overflow-wrap: anywhere; }
+body .task-top { flex-wrap: wrap; }
+body .task-bottom { flex-wrap: wrap; }
+body .task-bottom .actions { flex: 1 1 240px; justify-content: flex-end; }
+body .task-bottom .task-timer { font-size: 13px; }
+body .status-callout strong { font-size: 14px; }
+body .status-callout p, body .dialog-description, body .activity p { font-size: 13px; line-height: 1.65; }
+body .mobile-hint, body .field small, body .activity small { font-size: 12px; line-height: 1.6; }
+body .shift-meta { font-size: 13px; }
+
+body .toolbar { flex-wrap: wrap; }
+body .search { flex: 1 1 220px; min-width: 0; min-height: 44px; padding: 10px 13px; font-size: 14px; border-radius: 8px; }
+body .filter { font-size: 13px; min-height: 40px; }
+body .field { min-width: 0; font-size: 14px; gap: 8px; }
+body .field input, body .field select, body .field textarea { min-width: 0; border-radius: 8px; font-size: 14px; }
+.select-control { display: block; position: relative; min-width: 0; width: 100%; }
+body .select-control select { appearance: none; padding-inline: 12px 42px; text-overflow: ellipsis; }
+.select-control > svg { position: absolute; top: 50%; right: 14px; width: 16px; height: 16px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+body .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body .form-actions { flex-wrap: wrap; }
+body dialog { border-radius: 12px; }
+body .dialog-header { align-items: flex-start; gap: 12px; }
+body .dialog-header h2 { align-self: center; font-size: 20px; }
+body .dialog-body { min-width: 0; overflow-wrap: anywhere; }
+body .detail-stat small { font-size: 12px; }
+body .checkbox { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; }
+body .unit-row { min-width: 0; }
+body .crew-chip, body .crew-contributors > div { font-size: 13px; overflow-wrap: anywhere; }
+body .crew-picker { min-width: 0; }
+body .crew-picker label { min-width: 0; }
+body .crew-picker label span { overflow-wrap: anywhere; }
+body .guide-card-top { flex-wrap: wrap; }
+body .guide-symbol { flex-shrink: 0; }
+body .guide-summary { font-size: 14px; }
+body .guide-step-editor-head .actions { flex-wrap: wrap; }
+
+body .table-wrap { max-width: 100%; container-type: inline-size; }
+body table { font-size: 14px; }
+body th { font-size: 12px; padding: 12px 18px; }
+body td { padding: 16px 18px; }
+body .table-title { font-size: 14px; line-height: 1.5; }
+body .table-sub, body .code, body .progress-label { font-size: 12px; }
+.cell-value { min-width: 0; overflow-wrap: anywhere; }
+.cell-value > .actions { min-width: 130px; }
+@container (min-width: 601px) {
+  .data-table .button { min-width: max-content; }
+  .data-table .button-label { overflow-wrap: normal; }
+}
+
+@media (max-width: 1150px) {
+  body .page-heading > .button { max-width: 100%; }
+  body .material-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body h1 { font-size: 24px; }
+  body .topbar { min-height: 62px; padding: 10px 16px; gap: 10px; }
+  body .breadcrumb { flex: 1; font-size: 12px; gap: 7px; }
+  body .topbar-end { gap: 8px; }
+  body .connection { font-size: 0; gap: 0; }
+  body .identity { max-width: 30px; }
+  body .theme-toggle { width: 40px; height: 40px; }
+  body #content { padding: 22px 16px 16px; }
+  body .sidebar { padding: 0 0 env(safe-area-inset-bottom); }
+  body #navigation { justify-content: flex-start; padding: 5px 8px; gap: 4px; }
+  body .nav-link { flex: 1 0 80px; min-height: 58px; padding: 8px 6px; font-size: 11px; gap: 4px; }
+  body .page-heading { align-items: stretch; gap: 14px; }
+  body .page-heading > .button { width: 100%; font-size: 14px; padding: 10px 14px; }
+  body .subtitle { font-size: 13px; }
+  body .page-footer { padding-inline: 16px; font-size: 11px; flex-wrap: wrap; }
+  body .metrics { align-items: stretch; }
+  body .metric { padding: 16px 14px; min-height: 132px; }
+  body .metric-label { font-size: 13px; }
+  body .metric small { font-size: 12px; }
+  body .metric-value { font-size: 28px; margin-top: 12px; }
+  body .panel-header { gap: 10px; }
+  body .panel-header h2 { font-size: 17px; }
+  body .panel-header > div { flex-basis: 180px; }
+  body .panel-header > .button { max-width: 100%; }
+  body .section-link { white-space: normal; }
+  body .team-row { flex-wrap: wrap; }
+  body .team-info { flex-basis: 170px; }
+  body .toolbar .search { flex-basis: auto; width: 100%; font-size: 16px; }
+  body .filters { flex-wrap: wrap; }
+  body .filter { font-size: 13px; min-height: 44px; }
+  body .button.small { min-height: 44px; font-size: 13px; }
+  body .field input, body .field select, body .field textarea { font-size: 16px; }
+  body .form-grid { grid-template-columns: minmax(0, 1fr); }
+  body dialog { max-height: 94dvh; border-radius: 12px 12px 0 0; }
+  body .dialog-header, body .dialog-body { padding: 18px 16px; }
+  body .dialog-header h2 { font-size: 18px; }
+  body .dialog-header #toast { font-size: 13px; }
+  body .detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  body .detail-stat { padding: 12px; }
+  body .unit-row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; padding: 14px 12px; }
+  body .unit-row > .badge, body .unit-row > .actions { grid-column: 2; justify-self: start; }
+  body .unit-row .button.small { min-height: 44px; font-size: 13px; }
+  body .unit-info small { font-size: 12px; overflow-wrap: anywhere; }
+  body .detail-toolbar { align-items: stretch; }
+  body .detail-toolbar > .actions { width: 100%; }
+  body .task-bottom .actions { flex: none; justify-content: flex-start; }
+  body .task-bottom .button { font-size: 14px; }
+  body .guide-editor-step { padding: 14px 12px; }
+  body .guide-step-editor-head .button { padding: 8px; font-size: 12px; }
+  body .guide-step-editor-head .actions { gap: 6px; }
+  body .guide-editor-actions .button { flex: 1 1 160px; }
+  body .guide-card, body .task-card { padding: 18px; }
+  body .material-summary .panel-header h2 { font-size: 15px; }
+  body .material-editor-row { grid-template-columns: minmax(0, 1fr); }
+  body .material-need .actions .button { width: 100%; }
+  body .empty-state { padding: 30px 18px; }
+  body .empty-state .button { width: 100%; }
+}
+@container (max-width: 600px) {
+  /* Keep every value on the phone; each row carries its column labels. */
+  .data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .data-table, .data-table tbody { display: block; width: 100%; }
+  .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 16px; border-bottom: 1px solid var(--line); gap: 12px; }
+  .data-table tr:last-child { border-bottom: 0; }
+  body .data-table td { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 12px; border: 0; padding: 0; align-items: start; }
+  .data-table td::before { content: attr(data-label); font-size: 11px; font-weight: 500; line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
+  body .data-table td:first-child { display: block; }
+  .data-table td:first-child::before { display: block; margin-bottom: 6px; }
+  body .data-table td.cell-actions { display: block; }
+  .data-table .cell-actions::before { display: none; }
+  .cell-actions .button { width: 100%; }
+  .cell-value > .actions { min-width: 0; }
+  .cell-value .button { max-width: 100%; }
+  .cell-value .spaced { margin-top: 8px; }
+}
+@media (forced-colors: active) {
+  body .select-control select { appearance: auto; padding-right: 12px; }
+  .select-control > svg { display: none; }
+}

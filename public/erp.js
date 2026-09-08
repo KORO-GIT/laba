@@ -27,6 +27,7 @@ const icons = {
   plus: ['M12 5v14','M5 12h14'],
   arrow: ['M5 12h14','m13 6 6 6-6 6'],
   close: ['m6 6 12 12','M6 18 18 6'],
+  chevron: ['m6 9 6 6 6-6'],
   play: ['m8 4 13 8-13 8z'],
   pause: ['M8 4v16','M16 4v16'],
   check: ['m5 12 4 4L20 5'],
@@ -56,7 +57,7 @@ function icon(name) {
   for (const value of icons[name] || (name==='materials'?icons.stock:name==='replenishment'?icons.alert:icons.overview)) { const p = document.createElementNS(svg.namespaceURI,'path');p.setAttribute('d',value);svg.append(p); }
   return svg;
 }
-const button = (label, action, kind = '', glyph) => el('button',{type:'button',class:`button ${kind}`,onclick:action,'aria-label':label},glyph ? icon(glyph) : null,label);
+const button = (label, action, kind = '', glyph) => el('button',{type:'button',class:`button ${kind}`,onclick:action,'aria-label':label},glyph ? icon(glyph) : null,el('span',{class:'button-label'},label));
 const badge = (state) => el('span',{class:`badge ${state}`},labels[state] || state);
 const avatar = (name) => el('span',{class:'avatar'},String(name).split(/[\s@.]+/).slice(0,2).map(n=>n[0]).join('').toUpperCase());
 const actions = (...items) => el('div',{class:'actions'},items);
@@ -130,7 +131,11 @@ function heading(title,subtitle,action) { return el('div',{class:'page-heading'}
 function panel(title,body,action,description) { return el('section',{class:'panel'},el('div',{class:'panel-header'},el('div',{},el('h2',{},title),description?el('p',{},description):null),action),body); }
 function empty(title,description,action,glyph='orders') { return el('div',{class:'empty-state'},icon(glyph),el('h3',{},title),el('p',{},description),action); }
 function metric(title,value,note,glyph,highlight=false) { return el('article',{class:`metric${highlight?' highlight':''}`},el('div',{class:'metric-label'},title,icon(glyph)),el('div',{class:'metric-value'},number(value)),el('small',{},note)); }
-function table(headers,rows) {return el('div',{class:'table-wrap'},el('table',{},el('thead',{},el('tr',{},headers.map(h=>el('th',{},h)))),el('tbody',{},rows.map(row=>el('tr',{},row.map(cell=>el('td',{},cell)))))));}
+function table(headers,rows) {
+  return el('div',{class:'table-wrap'},el('table',{class:'data-table',role:'table'},
+    el('thead',{},el('tr',{},headers.map(h=>el('th',{scope:'col'},h)))),
+    el('tbody',{},rows.map(row=>el('tr',{},row.map((cell,index)=>el('td',{'data-label':headers[index],class:headers[index]?'':'cell-actions'},el('div',{class:'cell-value'},cell))))))));
+}
 function progress(done,total) {return el('div',{class:'progress-block'},el('div',{class:'progress-label'},el('span',{},`${done} / ${total}`),el('span',{},`${total?Math.round(done/total*100):0}%`)),el('progress',{max:Math.max(total,1),value:done,'aria-label':`Готово ${done} із ${total}`}));}
 function ordersTable(orders,compact=false) {
   if (!orders.length) return empty('Перша партія починається тут','Створіть клієнта, прийміть вироби за номерами та призначте маршрут робіт.',manager()?button('Прийняти партію',newOrder,'primary','plus'):null);
@@ -244,7 +249,10 @@ function openDialog(title,...body) {
   placeToast();
 }
 function field(label,name,type='text',options={}) {const input=type==='textarea'?el('textarea',{name,...options}):el('input',{name,type,...options});return el('label',{class:'field'},label,input);}
-function select(label,name,items,options={}) {return el('label',{class:'field'},label,el('select',{name,'aria-label':label,...options},items.map(([value,title])=>el('option',{value},title))));}
+function select(label,name,items,options={}) {
+  return el('label',{class:'field'},label,el('span',{class:'select-control'},
+    el('select',{name,'aria-label':label,...options},items.map(([value,title])=>el('option',{value},title))),icon('chevron')));
+}
 const clientOptions=()=>[['','Власність майстерні'],...data.clients.map(c=>[c.id,c.name])];
 function form(title,description,fields,submitLabel,handler) {
   const node=el('form',{},el('p',{class:'dialog-description'},description),fields,el('div',{class:'form-actions'},button('Скасувати',()=>dialog.close()),el('button',{type:'submit',class:'button primary'},submitLabel)));
