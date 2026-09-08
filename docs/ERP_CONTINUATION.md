@@ -1,6 +1,30 @@
 # Продовження ERP з іншого ПК
 
-## Новіше уточнення: UI spacing hotfix вже production
+## Поточний checkpoint: 0.27.0 розгорнуто 2026-09-08
+
+На запит власника «обнови на сервере» розгорнуто **`42a1dff40eb6352abc542309d1ab9299d0432604`**, старт **07:12:21 UTC / 10:12:21 Київ**, health 200 о 07:12:22 UTC. Код включає бібліотеку інструкцій і виправлення відступів. Історичні записи нижче про «НЕ production» та незавершений release більше не актуальні; не повторювати старий план swap/staging a481f5e.
+
+### Як користуватися
+
+- **`/erp#guides` → «Інструкції»** доступно всім ERP-ролям для читання публікацій. ERP admin (також глобальний admin) бачить **«Нова інструкція»**, чернетки, публікацію й архів. Це керування всередині бібліотеки, а не окрема сторінка `/admin`.
+- Фото додаються після першого збереження чернетки. Майстри отримують матеріал тільки після «Опублікувати». У момент deployment бібліотека порожня: агент не додавав реальних або демонстраційних процедур. Повний опис — `ERP_GUIDES.md`.
+
+### Release, дані та перевірки
+
+- Перед інтеграцією `git fetch origin` підтвердив `main=e27d2e4`; merge `42a1dff` зберіг обидві історії без force/reset. `public/erp.js` імпортує materials `0.26.2-spacing1` і guides `0.27.0`; HTML main JS `0.27.0-spacing1`. Код/тести/залежності тотожні feature `96d1a9e`, merge доповнив документацію й ancestry.
+- Новий staging **`/opt/laba-stage-42a1dff`**, archive **`/tmp/laba-0.27.0-42a1dff.tar.gz`**, 108 SHA перевірено до й після release. Archive checksum та всі результати — `CURRENT_STATE.md`. `a481f5e` залишено як застарілий артефакт, не кандидат на наступний deployment.
+- Code-only оновлення на місці `/opt/laba` після stop лише LABA. Свіжий backup після stop **`/opt/laba/backups/portal-20260908-before-0.27.0-42a1dff.db`**, попередній код **`/opt/laba/backups/source-20260908-before-0.27.0-42a1dff.tar.gz`**, обидві копії root-only 600, перевірені. `.env`, data/backups та inode живої БД збережено; DB не відновлювали з backup. `npm ci --omit=dev`, Sharp під `laba`, старт/health успішні; rollback не виконувався.
+- Windows і Linux staging clean install/check/test/audit: **40/40, audit 0**. Read-only migration checker двічі зберіг 39 старих таблиць. Post-release всі 23 старі ERP-таблиці/рядки збігаються зі свіжим backup, 4 вироби/1 команда збережені, 0 guides/images на момент перевірки. Guide reader/editor/photo/409/ACL/архів, materials 150-unit + 8 layout cases, notifications і scrollbars browser regressions пройшли на synthetic localhost.
+- Production: Cloudflare auth/401, FK/quick_check/sqlite-write-path, права, loopback3020, незмінний MemoryMax512MiB, 5 active services та Caddy hash перевірено. Нових секретів/портів/units/Caddy/Pi змін немає. Live Chrome підтвердив бібліотеку та admin кнопку; подальший вхід у редактор не перевірено через втрату browser debugger connection, production POST/фото/записів не робили.
+
+### Продовження з іншого ПК
+
+1. Fetch актуальний `origin/main`, перевірити clean/ancestry та локальні чужі зміни. Цей release і Git handoff вести в LABA, не KANBAN або Task; нова робота — окрема `codex/*` від актуальної main. Поточний runtime SHA залишається `42a1dff`, наступні docs-only commits не означають повторний deployment.
+2. Прочитати CURRENT_STATE, SECURITY, DEPLOYMENT та ERP_GUIDES. Не замінювати бібліотеку старим archive і не губити spacing hotfix. Новий deployment щоразу потребує свіжого backup/звірки коду іншого ПК, 40 tests і відповідних browser regressions.
+3. Для неполадок пріоритет fix-forward. Збережений source archive дозволяє повернути попередній код лише після перевірки сумісності; **не відновлювати стару БД поверх нових робочих записів/інструкцій/фото**. Не змінювати `AUTH_MODE`, `.npmrc`, ACL чи permissions для спрощення deployment.
+4. Власник додає фактичні інструкції й проводить пілот з майстрами. Offsite backup і решта дорожньої карти ERP окремо; Git не є резервною копією production SQLite/фото.
+
+## Історичне уточнення до release: UI spacing hotfix
 
 Після cherry-pick73983c3: clean npm ci/check,7guideAPI tests та повний guide browser regression пройшли. Browser test тепер чекає фактичного розблокування upload після refresh списку: повідомлення про save з'являється раніше за finally(), тому миттєва перевірка disabled давала race. Змінено лише очікування тесту, не поведінку форми. Інтеграція відступів не забрала draft/published/фото/ACL.
 
@@ -8,7 +32,7 @@
 
 Hotfix cherry-pick перенесений у цю гілку зі збереженням `createGuideUI` та всіхguideфайлів; HTMLmainJS tag `0.27.0-spacing1`, materialsCSS/importtag `0.26.2-spacing1`. Старий stageda481f5e застарів: наступний release зібрати з актуальної feature-гілки після інтеграції origin/main, не затерти чотири нові productionassets. Main і feature мають різну історію, тому перед майбутнім merge перевірити ancestry/конфлікти, безforce/reset. Нижчий checkpoint описує первісну заблоковану спробу0.27.0; актуальні productionфакти мають пріоритет. Бібліотека інструкцій ще НЕ production.
 
-## Checkpoint0.27.0 · бібліотека інструкцій
+## Історичний checkpoint 0.27.0 · підготовка бібліотеки інструкцій
 
 Гілка `codex/erp-instructions` від clean `origin/main=f55226b`. Запит власника: кнопка корисних матеріалів для майстрів, адміністратор додає інструкції з картинками. Реалізовано окрему бібліотеку `guides` з пошуком/24 на сторінку, кроками/фото, редактором та переглядом у dark/light/mobile. Draft окремий від published, архів без видалення, optimistic version409 зі збереженням введеного. Повний workflow, schema/upload boundaries, backup/rollback, обмеження та перевірки — `ERP_GUIDES.md`.
 
@@ -20,7 +44,7 @@ Hotfix cherry-pick перенесений у цю гілку зі збереже
 
 Команда stop/backup/copy/swap була відхилена виконавчим середовищем (`blocked by policy`) ДО виконання. Повторна read-only перевірка підтвердила незмінний production0.26.2/8670895, health200, start21:39:22UTC, усі5 служб active та незмінний Caddy. Планований backup2159 і rollback-каталог2159 не існують. Нових копій робочих даних і production-міграцій ця робота не виконала. Не обходити блокування: deployment має завершуватися дозволеним способом уповноваженим оператором/середовищем.
 
-### Що залишається для release
+### Історичний план незавершеної спроби (вже замінений release вище)
 
 1. Fetch origin, прочитати CURRENT_STATE/цей checkpoint/ERP_GUIDES; перевірити чистоту checkout і нові commits з іншого ПК. Перейти в `codex/erp-instructions`, не вносити бібліотеку у KANBAN або Task. main під час перевірки=f55226b, не припускати, що він не змінився пізніше.
 2. Read-only перевірити поточний runtime/служби/дані та108 staged hashes доa481f5e. Якщо каталог/код/production змінився, спочатку звірити зміни; не перезаписувати роботу іншого ПК.
