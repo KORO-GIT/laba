@@ -1,5 +1,15 @@
 # Продовження ERP з іншого ПК
 
+## Найновіший checkpoint: UI hotfix 2026-09-08
+
+**Production backend 0.27.0 / `42a1dff`, поверх нього ERP UI `0.27.1` / `f574667d14a295cf51a9033ecf82130790ae7acb`.** Опубліковано 17:24:44 UTC без restart: тільки `erp.html`, `erp.js`, новий `erp-ui.css`. Повний перелік перевірок і backups у верхньому розділі `CURRENT_STATE.md`; нижчий checkpoint 0.27.0 збережено як базу, але твердження про 108 незмінених assets вже історичне.
+
+- Гілка роботи `codex/erp-responsive-polish` створена від актуального `origin/main=3a4b28f` після clean ff-only оновлення; чужі commits збережені. Перед наступною роботою fetch актуальної main, не checkout старого staging.
+- Виправлена кнопка порожнього стану: `.empty-state svg` впливала на вкладений плюс. Контрольні 20px SVG/окрема `.button-label`, native select у `.select-control`, розміри торкання, читабельність, мобільні форми/списки й прокрутка короткої desktop sidebar. Спільний `table()` дає `scope=col`/`data-label`/`.cell-value`; container query до 600px не приховує колонки, а складає рядки. Широкі таблиці збережені. Не повернути старий CSS без цього шару.
+- Новий browser regression: `node scripts/erp-layout-browser-check.mjs`, Playwright через `PLAYWRIGHT_MODULE` або package, Chrome. Він сам створює/прибирає disposable localhost8089 і synthetic DB; зайнятий порт не перевикористовує. 12 розділів, 6 ширин360..1440, dark/light, long text, icon centers, touch sizes, select offsets, dialogs/table labels, short desktop1024x600. Інші scripts із materials/guides/notifications/scrollbars/crews теж пройшли; 40 tests/audit0. На production тестові записи не створювати.
+- Backup `/opt/laba/backups/ui-f574667-20260908-172443/`: перевірена SQLite `portal.db`, фактичний source `source.tar.gz`, `release.json`. Тільки ERP assets змінено; `.env`, DB inode, Caddy та всі services/start timestamps незмінні. Не відновлювати БД для UI rollback. Повний наступний deployment має включити цей hotfix.
+- Git archive на Windows за локальним core.autocrlf міг віддавати CRLF: 107 файлів baseline відрізнялися лише рядковими закінченнями, жодних змістових розбіжностей. Використовувати `git -c core.autocrlf=false archive` та звіряти канонічні SHA з Linux. Нові 3 файли побайтово перевірено; решта106 збережені.
+
 ## Поточний checkpoint: 0.27.0 розгорнуто 2026-09-08
 
 На запит власника «обнови на сервере» розгорнуто **`42a1dff40eb6352abc542309d1ab9299d0432604`**, старт **07:12:21 UTC / 10:12:21 Київ**, health 200 о 07:12:22 UTC. Код включає бібліотеку інструкцій і виправлення відступів. Історичні записи нижче про «НЕ production» та незавершений release більше не актуальні; не повторювати старий план swap/staging a481f5e.

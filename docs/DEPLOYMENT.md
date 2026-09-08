@@ -96,7 +96,9 @@ systemctl is-active --quiet caddy
 
 ## Оновлення
 
-**Поточний release 0.27.0 розгорнуто 2026-09-08; підтверджені SHA/час/backup — `CURRENT_STATE.md`.** Номер у package.json або старий staging не доводить, що цей код працює на сервері.
+**Поточний backend release 0.27.0 розгорнуто 2026-09-08; ERP UI hotfix `0.27.1/f574667` опубліковано о 17:24:44 UTC поверх нього. Підтверджені SHA/час/backup — `CURRENT_STATE.md`.** Номер у package.json або старий staging не доводить, що цей код працює на сервері.
+
+Цей UI hotfix оновив тільки `public/erp.html`, `public/erp.js`, `public/erp-ui.css`, без restart, npm install, міграцій чи змін backend. Перед атомарною заміною assets виконано повну звірку коду, свіжий online SQLite backup і backup попереднього source; HTML з новими cache tags встановлено останнім. Наступний повний release повинен зберегти ці assets. На Windows для Linux archive використовувати `git -c core.autocrlf=false archive`, щоб CRLF-конверсія не спотворювала контрольні суми. Не викладати checkout разом із `.env`/data і не замінювати живу SQLite резервною копією.
 
 Бібліотека додає `erp_guides`, `erp_guide_images` і marker `erp_guides_v1`; старі робочі записи не переписуються. Фото — приватні SQLite BLOB, тому перевірений SQLite backup включає і тексти, і фотографії; не експортувати їх у public/Git. Див. `ERP_GUIDES.md`. Нова залежність Sharp exact `0.35.4`; залишати `.npmrc ignore-scripts=true`, перевіряти clean Linux install і імпорт/обробку synthetic зображення також під runtime-користувачем `laba`. Перед release: 40 tests, guide/materials/notifications/scrollbars browser regressions та дворазова міграція disposable backup з перевіркою старих таблиць.
 

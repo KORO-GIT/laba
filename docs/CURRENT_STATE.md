@@ -1,6 +1,17 @@
 # Поточний стан LABA
 
-Актуально на 2026-09-08 за Києвом, після deployment 0.27.0 о 07:12 UTC (10:12 за Києвом). Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
+Актуально на 2026-09-08 за Києвом, після UI hotfix о 17:24:44 UTC (20:24:44 за Києвом). Це безпечний handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
+
+## ERP: адаптивний інтерфейс, поточний hotfix
+
+- На VPS розгорнуто **тільки 3 assets** з `f574667d14a295cf51a9033ecf82130790ae7acb`: `public/erp.html`, `public/erp.js`, новий `public/erp-ui.css`. Теги HTML/CSS/JS `0.27.1`; backend/package лишаються **0.27.0 / `42a1dff`**, без restart. Нижчий запис про всі 108 файлів `42a1dff` описує стан ДО цього hotfix.
+- Виправлено успадковані 30px/відступ SVG всередині кнопки порожнього стану. Спільні кнопки мають окрему текстову обгортку й центровані 20px іконки; select лишається нативним з відступом для стрілки. Покращено розміри шрифтів/форм, довгі назви, мобільні діалоги/список виробів, доступність навігації на низьких desktop екранах. Таблиці у контейнерах до 600px стають підписаними рядками без втрати даних; на широких контейнерах лишаються таблицями. Усе UI українською, бізнес-логіка/ACL/схема незмінні.
+- До запису звірено весь код VPS з `42a1dff`: зміст збігається, Windows archive мав CRLF замість LF. Для нового архіву використано **`git -c core.autocrlf=false archive`**. 106 попередніх файлів не змінено; 2 оновлено, 1 додано. Нові assets звірено побайтово. Archive `/tmp/laba-ui-f574667.tar`, SHA-256 `c9f754db6d6f36223efc9800be37644722a2bf79d361b00aa1b24d00879763c8`.
+- Свіжий online SQLite backup і копія всього фактичного попереднього коду: **`/opt/laba/backups/ui-f574667-20260908-172443/portal.db`** та `source.tar.gz`; каталог root700, файли root600. Assets встановлено атомарно, HTML останнім, root:laba640. Жива база не підмінялася, її inode та `.env` збережено; quick_check/FK ok. Усі 5 служб active і їхній час запуску не змінився, Caddy hash незмінний. Health200; ERP/context/нові CSS/JS без JWT401. Немає production POST або тестових даних.
+- Windows: `npm ci`, `npm run check`, `npm test` **40/40**, `npm audit --omit=dev` **0**. Новий `scripts/erp-layout-browser-check.mjs`: 12 розділів на 1440/1024/768/600/390/360px, dark/light, довгі назви, кнопки/іконки/select, форми, збереження всіх колонок, відсутність overflow; окремо sidebar1024x600. Повторні guides/materials/notifications/scrollbars/crews browser regressions успішні, включно з 150-unit materials та 8 spacing cases. Усі дані перевірок disposable localhost, screenshots у ignored `data/`.
+- Live Chrome після deployment: `/erp#templates` відкрито через чинну сесію, нові кнопки й вирівнювання перевірено скриншотом. Форму не зберігали. Повна mobile QA виконана локально, не на production акаунтах. Робота ведеться в `KORO-GIT/laba`, не у Starlink або Task; handoff commits після `f574667` не змінюють backend runtime.
+
+Наступному агенту: зберегти hotfix під час повного deployment; backend base плюс 3 assets є поточним production. Новий `erp-ui.css` завантажується після всіх ERP module styles. Не прибирати окремі spacing, top-layer toast, native scrolling чи guide ACL. Інші LABA-модулі та сусідні сервіси не змінювалися.
 
 ## Код і production
 

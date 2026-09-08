@@ -36,7 +36,7 @@ async function openSection(page,section){
   await page.locator('#connection').filter({hasText:'Облік актуальний'}).waitFor();
   await page.locator('#content h1').waitFor();
 }
-async function screenshot(page,name){await page.screenshot({path:path.resolve(`data/erp-layout-${name}.png`),fullPage:true});}
+async function screenshot(page,name){fs.mkdirSync(path.resolve('data'),{recursive:true});await page.screenshot({path:path.resolve(`data/erp-layout-${name}.png`),fullPage:true});}
 try {
   let ready=false;for(let n=0;n<150;n++){if(server.exitCode!==null)throw Error('Local server exited');try{if((await fetch(`${base}/healthz`)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(ready);
   browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome',ignoreDefaultArgs:['--hide-scrollbars']});
