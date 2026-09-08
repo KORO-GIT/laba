@@ -19,6 +19,8 @@
 
 ### Продовження з іншого ПК
 
+`codex/erp-instructions` fast-forward об'єднано й push у **`main=69672b7`** після повторного fetch/ancestry check; чужих нових commits не було. Checkout повернуто на clean main, код/документація збережені в GitHub. Наступний commit із цим handoff змінює тільки документацію, не deployed runtime `42a1dff`.
+
 1. Fetch актуальний `origin/main`, перевірити clean/ancestry та локальні чужі зміни. Цей release і Git handoff вести в LABA, не KANBAN або Task; нова робота — окрема `codex/*` від актуальної main. Поточний runtime SHA залишається `42a1dff`, наступні docs-only commits не означають повторний deployment.
 2. Прочитати CURRENT_STATE, SECURITY, DEPLOYMENT та ERP_GUIDES. Не замінювати бібліотеку старим archive і не губити spacing hotfix. Новий deployment щоразу потребує свіжого backup/звірки коду іншого ПК, 40 tests і відповідних browser regressions.
 3. Для неполадок пріоритет fix-forward. Збережений source archive дозволяє повернути попередній код лише після перевірки сумісності; **не відновлювати стару БД поверх нових робочих записів/інструкцій/фото**. Не змінювати `AUTH_MODE`, `.npmrc`, ACL чи permissions для спрощення deployment.
