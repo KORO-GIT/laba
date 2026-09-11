@@ -514,7 +514,12 @@ test('development server serves portal API and protected admin writes', async (c
     body: JSON.stringify({ records: [lostRecordAlreadyInKyiv] })
   });
   let service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
-  assert.equal(service.cards.length, 0);
+  assert.equal(service.cards.length, 1);
+  assert.equal(service.cards[0].lane, 'shipped');
+  await fetch(`${root}/api/internal/accounting/sync`, {
+    method: 'POST', headers: accountingHeaders,
+    body: JSON.stringify({ records: [{ ...lostRecordAlreadyInKyiv, status: 'СПРАВНИЙ' }] })
+  });
 
   const lostRecord = {
     ...repairRecord,
@@ -564,14 +569,16 @@ test('development server serves portal API and protected admin writes', async (c
     body: JSON.stringify({ results: [{ id: lostLocationAction.actions[0].id, success: true }] })
   });
   service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
-  assert.equal(service.cards.length, 0);
+  assert.equal(service.cards.length, 1);
+  assert.equal(service.cards[0].lane, 'shipped');
 
   await fetch(`${root}/api/internal/accounting/sync`, {
     method: 'POST', headers: accountingHeaders,
     body: JSON.stringify({ records: [{ ...lostRecord, caseLocation: 'КИЇВ' }] })
   });
   service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
-  assert.equal(service.cards.length, 0);
+  assert.equal(service.cards.length, 1);
+  assert.equal(service.cards[0].lane, 'shipped');
 
   const serviceRecord = {
     ...repairRecord,
@@ -586,8 +593,9 @@ test('development server serves portal API and protected admin writes', async (c
     method: 'POST', headers: accountingHeaders, body: JSON.stringify({ records: [serviceRecord] })
   });
   service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
-  assert.equal(service.cards.length, 1);
-  const movedServiceToShipped = await fetch(`${root}/api/maintenance/service/cards/${service.cards[0].id}/move`, {
+  assert.equal(service.cards.length, 2);
+  const serviceCard = service.cards.find(card => card.boardIdentifier === '021');
+  const movedServiceToShipped = await fetch(`${root}/api/maintenance/service/cards/${serviceCard.id}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: root },
     body: JSON.stringify({ lane: 'shipped', beforeCardId: null })
@@ -614,7 +622,8 @@ test('development server serves portal API and protected admin writes', async (c
     }] })
   });
   service = await fetch(`${root}/api/maintenance/service`).then((response) => response.json());
-  assert.equal(service.cards.length, 0);
+  assert.equal(service.cards.length, 2);
+  assert.ok(service.cards.every(card => card.lane === 'shipped'));
 
   const workshopSettings = workflowAdmin.boards[0];
   const updatedWorkflowResponse = await fetch(`${root}/api/admin/workflows/workshop`, {

@@ -96,6 +96,8 @@ systemctl is-active --quiet caddy
 
 ## Оновлення
 
+Зміна двостороннього `Сервісу` описана в `SERVICE_SYNC.md`. Вона додає лише nullable `source_board_location` / `source_case_location` до `maintenance_cards`; старі значення, ERP, секрети й налаштування не переписуються. Потрібні backup, restart тільки LABA та перевірка чергового snapshot SignalSynch. Залежності, Google credentials, Caddy й процес SignalSynch не змінюються. Старі правила `0.21.x` нижче є історичними: підтверджені сервісні відправлення тепер лишаються у `Відправлено`.
+
 **Поточний backend release 0.27.0 розгорнуто 2026-09-08; ERP UI hotfix `0.27.1/f574667` опубліковано о 17:24:44 UTC поверх нього. Підтверджені SHA/час/backup — `CURRENT_STATE.md`.** Номер у package.json або старий staging не доводить, що цей код працює на сервері.
 
 Цей UI hotfix оновив тільки `public/erp.html`, `public/erp.js`, `public/erp-ui.css`, без restart, npm install, міграцій чи змін backend. Перед атомарною заміною assets виконано повну звірку коду, свіжий online SQLite backup і backup попереднього source; HTML з новими cache tags встановлено останнім. Наступний повний release повинен зберегти ці assets. На Windows для Linux archive використовувати `git -c core.autocrlf=false archive`, щоб CRLF-конверсія не спотворювала контрольні суми. Не викладати checkout разом із `.env`/data і не замінювати живу SQLite резервною копією.

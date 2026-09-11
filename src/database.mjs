@@ -155,6 +155,8 @@ db.exec(`
     identifiers_json TEXT NOT NULL DEFAULT '[]',
     source_status TEXT NOT NULL,
     source_comment TEXT NOT NULL DEFAULT '',
+    source_board_location TEXT,
+    source_case_location TEXT,
     lane TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
@@ -287,6 +289,12 @@ if (!maintenanceCardColumns.has('report_number')) {
 }
 if (!maintenanceCardColumns.has('source_comment')) {
   db.exec("ALTER TABLE maintenance_cards ADD COLUMN source_comment TEXT NOT NULL DEFAULT ''");
+}
+if (!maintenanceCardColumns.has('source_board_location')) {
+  db.exec('ALTER TABLE maintenance_cards ADD COLUMN source_board_location TEXT');
+}
+if (!maintenanceCardColumns.has('source_case_location')) {
+  db.exec('ALTER TABLE maintenance_cards ADD COLUMN source_case_location TEXT');
 }
 
 const accountingOutboxColumns = new Set(db.pragma('table_info(accounting_outbox)').map((column) => column.name));

@@ -6,6 +6,7 @@ function run(command,args) {
   if(result.status!==0) process.exit(result.status||1);
 }
 for(const file of [
+  'scripts/maintenance-sync-browser-check.mjs',
   'scripts/erp-guides-browser-check.mjs',
   'src/erp-guides.mjs','src/erp-guide-images.mjs','public/erp-guides.js',
   'scripts/erp-scrollbars-browser-check.mjs',

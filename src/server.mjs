@@ -555,8 +555,8 @@ const accountingRecordSchema = z.object({
   boardIdentifier: z.string().trim().min(1).max(160),
   identifiers: z.array(z.string().trim().min(1).max(240)).max(20).default([]),
   status: z.string().trim().min(1).max(120),
-  boardLocation: z.string().trim().max(120).optional().default(''),
-  caseLocation: z.string().trim().max(120).optional().default(''),
+  boardLocation: z.string().trim().max(120).optional(),
+  caseLocation: z.string().trim().max(120).optional(),
   sourceComment: z.string().trim().max(45000).optional().default('')
 }).strict();
 const accountingSyncSchema = z.object({
@@ -666,9 +666,17 @@ function workflowAdminPayload(module) {
   };
 }
 
+function serviceShipmentConfirmed(card) {
+  if (card.module !== 'service') return false;
+  return normalizedStatus(card.source_status) === lostAccountingStatus
+    ? card.source_case_location === kyivLocation
+    : [kyivLocation, repairLocation].includes(card.source_board_location);
+}
+
 function accountingActionForLane(card, lane) {
   if (!lane) return null;
   if (card.module === 'service' && lane.key === serviceShippedLaneKey) {
+    if (serviceShipmentConfirmed(card)) return null;
     const lostContainer = normalizedStatus(card.source_status) === lostAccountingStatus;
     return {
       actionKind: 'locations',
@@ -719,7 +727,7 @@ function reconcileWorkflowOutbox(module) {
   if (!definition) return;
   const lanes = new Map(definition.lanes.map((lane) => [lane.key, lane]));
   const cards = db.prepare(`
-    SELECT id, module, lane, source_status
+    SELECT id, module, lane, source_status, source_board_location, source_case_location
     FROM maintenance_cards
     WHERE module = ? AND removed_at IS NULL
   `).all(module);
@@ -803,23 +811,12 @@ function reorderMaintenanceLane(module, cardId, lane, beforeCardId) {
 function synchronizeAccountingRecords(records) {
   const normalized = records.map((record) => {
     const status = normalizedStatus(record.status);
-    const boardLocation = normalizedStatus(record.boardLocation);
-    const caseLocation = normalizedStatus(record.caseLocation);
-    const sourceModule = statements.workflowModuleByStatus.get(status)?.module ?? null;
-    const lostContainer = sourceModule === 'service' && status === lostAccountingStatus;
-    const lostContainerInKyiv = lostContainer && caseLocation === kyivLocation;
-    const serviceBoardInRepair = sourceModule === 'service'
-      && !lostContainer
-      && boardLocation === repairLocation
-      && caseLocation === repairLocation;
-    const completedService = lostContainerInKyiv || serviceBoardInRepair;
-    const module = completedService ? null : sourceModule;
+    const module = statements.workflowModuleByStatus.get(status)?.module ?? null;
+    const lostContainer = module === 'service' && status === lostAccountingStatus;
     return {
       ...record,
       asset: lostContainer ? 'ТАРА' : record.asset,
       status,
-      boardLocation,
-      caseLocation,
       module,
       entryLaneKey: module ? statements.workflowBoardByModule.get(module)?.entry_lane_key : null,
       sourceKey: `${record.spreadsheetId}:${record.sheetId}:${record.rowNumber}`
@@ -832,8 +829,9 @@ function synchronizeAccountingRecords(records) {
     INSERT INTO maintenance_cards (
       module, source_key, source_spreadsheet_id, source_sheet_id, source_row_number,
       source_name, source_sheet_name, asset, board_identifier, identifiers_json,
-      source_status, source_comment, lane, sort_order, last_seen_at, removed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
+      source_status, source_comment, source_board_location, source_case_location,
+      lane, sort_order, last_seen_at, removed_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
     ON CONFLICT(module, source_key) DO UPDATE SET
       source_spreadsheet_id = excluded.source_spreadsheet_id,
       source_sheet_id = excluded.source_sheet_id,
@@ -845,8 +843,10 @@ function synchronizeAccountingRecords(records) {
       identifiers_json = excluded.identifiers_json,
       source_status = excluded.source_status,
       source_comment = excluded.source_comment,
-      lane = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.lane ELSE maintenance_cards.lane END,
-      sort_order = CASE WHEN maintenance_cards.removed_at IS NOT NULL THEN excluded.sort_order ELSE maintenance_cards.sort_order END,
+      source_board_location = excluded.source_board_location,
+      source_case_location = excluded.source_case_location,
+      lane = excluded.lane,
+      sort_order = excluded.sort_order,
       last_seen_at = CURRENT_TIMESTAMP,
       removed_at = NULL,
       updated_at = CURRENT_TIMESTAMP
@@ -855,11 +855,67 @@ function synchronizeAccountingRecords(records) {
     UPDATE maintenance_cards SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE source_key = ? AND module = ? AND removed_at IS NULL
   `);
+  const find = db.prepare('SELECT * FROM maintenance_cards WHERE module = ? AND source_key = ?');
+  const pending = db.prepare("SELECT * FROM accounting_outbox WHERE card_id = ? AND state = 'pending'");
+  const cancel = db.prepare(`
+    UPDATE accounting_outbox SET state = 'cancelled', updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND state = 'pending'
+  `);
+  const confirm = db.prepare(`
+    UPDATE accounting_outbox SET state = 'applied', last_error = NULL,
+      applied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND state = 'pending'
+  `);
+  const history = db.prepare(`
+    INSERT INTO maintenance_events (card_id, actor_email, action, from_lane, to_lane)
+    VALUES (?, 'Облік', 'lane.change', ?, ?)
+  `);
 
   db.transaction(() => {
     normalized.forEach((record, index) => {
       for (const module of ['workshop', 'service']) {
+        const previous = find.get(module, record.sourceKey);
+        const incoming = {
+          module,
+          source_status: record.status,
+          source_board_location: record.boardLocation === undefined
+            ? previous?.source_board_location ?? null : normalizedStatus(record.boardLocation),
+          source_case_location: record.caseLocation === undefined
+            ? previous?.source_case_location ?? null : normalizedStatus(record.caseLocation)
+        };
+        const shipped = record.module === module && serviceShipmentConfirmed(incoming);
+        const wasShipped = previous && serviceShipmentConfirmed(previous);
+        // The sheet wins only when it changes. An unchanged snapshot must not undo a local move.
+        const sourceChanged = previous && (
+          previous.source_status !== incoming.source_status
+          || previous.board_identifier !== record.boardIdentifier
+          || (previous.source_board_location !== null
+            && previous.source_board_location !== incoming.source_board_location)
+          || (previous.source_case_location !== null
+            && previous.source_case_location !== incoming.source_case_location)
+        );
+        for (const action of previous ? pending.all(previous.id) : []) {
+          const satisfied = previous.board_identifier === record.boardIdentifier && (
+            action.action_kind === 'status'
+              ? record.status === normalizedStatus(action.target_status)
+              : previous.source_status === record.status
+                && (action.target_board_location === null
+                  || incoming.source_board_location === normalizedStatus(action.target_board_location))
+                && (action.target_case_location === null
+                  || incoming.source_case_location === normalizedStatus(action.target_case_location))
+          );
+          if (satisfied) confirm.run(action.id);
+          else if (record.module !== module || shipped || sourceChanged) cancel.run(action.id);
+        }
         if (record.module === module) {
+          let lane = previous && !previous.removed_at ? previous.lane : record.entryLaneKey;
+          if (shipped && (!wasShipped || previous?.removed_at)) lane = serviceShippedLaneKey;
+          else if (wasShipped && !shipped && lane === serviceShippedLaneKey) lane = record.entryLaneKey;
+          else if (module === 'service' && sourceChanged && !shipped && lane === serviceShippedLaneKey) {
+            lane = record.entryLaneKey;
+          }
+          const sortOrder = previous && !previous.removed_at && previous.lane === lane
+            ? previous.sort_order : (index + 1) * 100;
           insert.run(
             module,
             record.sourceKey,
@@ -873,9 +929,12 @@ function synchronizeAccountingRecords(records) {
             JSON.stringify([...new Set(record.identifiers)]),
             record.status,
             record.sourceComment,
-            record.entryLaneKey,
-            (index + 1) * 100
+            incoming.source_board_location,
+            incoming.source_case_location,
+            lane,
+            sortOrder
           );
+          if (previous && previous.lane !== lane) history.run(previous.id, previous.lane, lane);
         } else {
           retire.run(record.sourceKey, module);
         }
@@ -1168,7 +1227,7 @@ app.post('/api/internal/accounting/ack', {
   const body = parseOrReply(accountingAckSchema, request.body, reply);
   if (!body) return;
   const find = db.prepare(`
-    SELECT o.*, c.id AS maintenance_card_id
+    SELECT o.*, c.id AS maintenance_card_id, c.module, c.lane
     FROM accounting_outbox o
     JOIN maintenance_cards c ON c.id = o.card_id
     WHERE o.id = ? AND o.state = 'pending'
@@ -1197,7 +1256,18 @@ app.post('/api/internal/accounting/ack', {
       if (!action) continue;
       if (result.success) {
         applied.run(result.id);
-        retireAppliedCard.run(action.maintenance_card_id, action.source_lane);
+        if (action.module === 'service' && action.source_lane === serviceShippedLaneKey) {
+          db.prepare(`
+            UPDATE maintenance_cards SET
+              source_board_location = COALESCE(?, source_board_location),
+              source_case_location = COALESCE(?, source_case_location),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND removed_at IS NULL AND lane = ?
+          `).run(action.target_board_location, action.target_case_location,
+            action.maintenance_card_id, action.source_lane);
+        } else {
+          retireAppliedCard.run(action.maintenance_card_id, action.source_lane);
+        }
       } else {
         failed.run(result.error || 'Помилка синхронізації', result.id);
       }
