@@ -20,8 +20,9 @@ const candidates=[process.env.PYTHON,process.env.PYTHON3,'python3','python'].fil
 const python=candidates.find(command=>spawnSync(command,['--version'],{encoding:'utf8'}).status===0);
 if(!python)throw new Error('Python 3 is required. Install Python or set PYTHON to its executable path.');
 run(python,['-m','py_compile',
-  'deploy/desktop/laba-wayvnc-attach.py','deploy/audio/laba-audio-agent.py','deploy/audio/laba_clap_detector.py','deploy/starlink/laba-starlink-agent.py','deploy/starlink/laba_starlink_model.py','deploy/starlink/provision-token.py',
+  'deploy/desktop/laba-wayvnc-attach.py','deploy/audio/laba-audio-agent.py','deploy/audio/laba_clap_detector.py','deploy/go2rtc/laba-wait-for-address.py','deploy/starlink/laba-starlink-agent.py','deploy/starlink/laba_starlink_model.py','deploy/starlink/provision-token.py',
   'scripts/test-audio-agent-config.py','scripts/test-clap-detector.py','scripts/test-starlink-model.py'
 ]);
+run(python,['deploy/go2rtc/laba-wait-for-address.py','127.0.0.1','1']);
 for(const file of ['scripts/test-audio-agent-config.py','scripts/test-clap-detector.py','scripts/test-starlink-model.py'])run(python,[file]);
 console.log('JavaScript syntax and Python checks passed.');

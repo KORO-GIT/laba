@@ -386,13 +386,14 @@ node --env-file=/opt/laba/.env -e "fetch(process.env.STARLINK_AGENT_URL + '/v1/s
 
 Джерело — Logitech C270 з постійним udev path `/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_200901010001-video-index0`. `laba-ustreamer.service` захоплює hardware MJPEG 1280×720@30, вимикає динамічне зниження FPS і слухає тільки loopback `127.0.0.1:8080`. `laba-h264-encoder.service` кодує browser-compatible H.264 Constrained Baseline 1280×720@25 приблизно у 2 Мбіт/с через `libx264 ultrafast/zerolatency`, використовує GOP 13, повторює SPS/PPS на кожному ключовому кадрі та слухає тільки `127.0.0.1:8556`. Це свідомий вибір: Raspberry Pi `h264_v4l2m2m` скидає GOP до 60 кадрів і не дає стабільно сформувати короткі декодовані HLS-сегменти. MJPEG залишається другим codec source тільки для snapshot і резервної сумісності.
 
-Сервіси навмисно не мають жорсткого `Requires=` між USB-захопленням, H.264-кодером і go2rtc. Після холодного старту USB-камера може з'явитися пізніше за `multi-user.target`: uStreamer продовжує повторні спроби, FFmpeg окремо повторює підключення до loopback-джерела, а go2rtc одразу лишається доступним для незалежної IP-камери. `StartLimitIntervalSec=0` і `Restart=always` не дають разовій помилці порядку запуску залишити відео вимкненим до ручного рестарту.
+Сервіси навмисно не мають жорсткого `Requires=` між USB-захопленням, H.264-кодером і go2rtc. Після холодного старту USB-камера може з'явитися пізніше за `multi-user.target`: uStreamer продовжує повторні спроби, FFmpeg окремо повторює підключення до loopback-джерела, а go2rtc лишається доступним для незалежної IP-камери. Перед запуском go2rtc helper робить тільки локальну спробу `bind()` і чекає появи exact Tailscale IP: сам go2rtc після невдалого API bind не завершує процес, тому одного `Restart=always` недостатньо. `StartLimitIntervalSec=0`, bounded pre-start wait і `Restart=always` не дають разовій помилці порядку запуску залишити відео вимкненим до ручного рестарту.
 
 Підготовлені файли:
 
 - `deploy/go2rtc/laba-ustreamer.service` — захоплення C270 через hardware MJPEG без мережевої публікації;
 - `deploy/go2rtc/laba-h264-encoder.service` — low-latency H.264-кодування в sandboxed FFmpeg без доступу до відеопристроїв;
 - `deploy/go2rtc/go2rtc.yaml` — API тільки на Tailscale IP Pi `100.69.168.10:1984`, exact allowlist endpoint’ів, без WebUI, RTSP-server, WebRTC, exec і вбудованого ffmpeg;
+- `deploy/go2rtc/laba-wait-for-address.py` — локальне bounded-очікування exact Tailscale IPv4 перед запуском go2rtc без мережевих запитів і shell;
 - `deploy/go2rtc/go2rtc.service` — DynamicUser, encrypted credentials, IP-фільтр і systemd sandbox;
 - назви потоків — `printer-usb-camera` і `labacam-01`;
 - API user — `laba-vps`;
@@ -409,6 +410,7 @@ curl --fail --location --output /tmp/go2rtc_linux_arm64 \
 echo '359fabade8a7a51e81a55fe6df6b0ef81764a5e1d63179577534eaaa71904b50  /tmp/go2rtc_linux_arm64' | sha256sum --check
 install -o root -g root -m 0755 /tmp/go2rtc_linux_arm64 /usr/local/bin/go2rtc
 install -d -o root -g root -m 0755 /etc/go2rtc /etc/credstore.encrypted
+install -o root -g root -m 0755 deploy/go2rtc/laba-wait-for-address.py /usr/local/lib/laba-wait-for-address.py
 install -o root -g root -m 0644 deploy/go2rtc/go2rtc.yaml /etc/go2rtc/go2rtc.yaml
 install -o root -g root -m 0644 deploy/go2rtc/laba-ustreamer.service /etc/systemd/system/laba-ustreamer.service
 install -o root -g root -m 0644 deploy/go2rtc/laba-h264-encoder.service /etc/systemd/system/laba-h264-encoder.service

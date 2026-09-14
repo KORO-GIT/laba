@@ -16,7 +16,9 @@ test('camera gateway remains available when the USB camera appears late', async 
 
   assert.match(unit, /^After=.*tailscaled\.service$/m);
   assert.match(unit, /^StartLimitIntervalSec=0$/m);
+  assert.match(unit, /^ExecStartPre=\/usr\/local\/lib\/laba-wait-for-address\.py 100\.69\.168\.10 60$/m);
   assert.match(unit, /^Restart=always$/m);
+  assert.match(unit, /^TimeoutStartSec=75$/m);
   assert.doesNotMatch(unit, /^Requires=.*laba-ustreamer\.service.*$/m);
   assert.doesNotMatch(unit, /^After=.*laba-ustreamer\.service.*$/m);
 });
