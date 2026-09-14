@@ -2,6 +2,14 @@
 
 Актуально на 2026-09-14, після діагностики запуску камер і попереднього оновлення синхронізації Сервісу. Це handoff для продовження роботи з іншого ПК або в новій задачі Codex. Секретів у цьому файлі немає.
 
+## Камери та пристрої після reboot 2026-09-14
+
+- Причину зникнення обох камер підтверджено на поточному boot: go2rtc запускався раніше за появу Tailscale IP і отримував `bind: cannot assign requested address`, але не завершував процес. Через це systemd показував `active (running)` без API-порту `1984`, а `Restart=always` не спрацьовував.
+- На Pi встановлено `laba-wait-for-address.py` та оновлений `go2rtc.service`. Перед запуском процесу helper перевіряє локальний `bind()` exact-адреси `100.69.168.10`; після bounded timeout unit повторює спробу. Попередній unit збережено як `/etc/systemd/system/go2rtc.service.before-3bffe73`. Portal, Caddy, SQLite, ERP та сусідні сервіси під час цієї зміни не оновлювалися.
+- Контрольний reboot підтвердив race fix: go2rtc почав очікування о `17:07:06 EEST`, побачив адресу о `17:07:07` і відкрив `100.69.168.10:1984`. `laba-ustreamer`, H.264 encoder, audio agent і Starlink agent active; локальні порти `8080`/`8556`, приватні `1984`/`1985`/`1986` слухають. WayVNC `5900` і browser endpoint `5901` теж відновилися після пізнішого запуску графічної сесії та успішного attach.
+- З VPS отримано справжні `image/jpeg` кадри `HTTP 200` з `labacam-01` та `printer-usb-camera`; portal probe показує `labacam` і `k1se-camera` online. Clean Windows і VPS Node.js 22 перевірки: `npm ci`, `npm run check`, **45/45 tests**, `npm audit --omit=dev` — 0 vulnerabilities.
+- Обидва принтери лишаються offline незалежно від VPN і камер: Pi має правильний маршрут через `wlan0`, але `192.168.0.70` (K1 SE) та `192.168.0.174` (Ender 3 V2) не відповідають у LAN. Для K1 ARP лишається `INCOMPLETE`, порти `80`, `4408`, `7125` закриті; сканування `192.168.0.0/24` не знайшло іншого Moonraker на `7125`. Потрібно перевірити живлення/Wi-Fi та фактичну адресу на екрані самого принтера; це не збій LABA або Tailscale.
+
 ## Сервіс: двостороння синхронізація
 
 - **Розгорнуто `f1eac7b`**, гілка `codex/service-table-sync`, поверх актуального `main=d20c201`. Перед записом усі 47 runtime-файлів `src/`, `public/`, package/lock/.npmrc VPS звірено з main (нормалізація CRLF); сторонніх змін не було. Оновлено атомарно лише `src/server.mjs` і `src/database.mjs`; ERP UI hotfix `0.27.1` та решта файлів збережені. Package version лишається `0.27.0`, номер пакета не описує цей вузький patch.
