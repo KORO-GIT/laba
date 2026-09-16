@@ -222,3 +222,119 @@ test('legacy archived shipment returns with its history and additive migration p
   assert.equal(restored.reportNumber, 'РП-1');
   assert.equal(restored.notes, 'Збережено');
 });
+
+test('shipment comments are persisted once per move, not on reorder, restart or settings save', async context => {
+  const f = await fixture(context);
+  await f.sync([record()]);
+  const card = (await f.board()).cards[0];
+  await f.move(card.id, 'shipped');
+  const action = (await f.sync([record()])).actions[0];
+  assert.match(action.commentAppend, /^Відправлено на сервіс: \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}:\d{2}$/);
+  await f.move(card.id, 'shipped');
+  await f.stop();
+  await f.start();
+  assert.deepEqual((await f.sync([record()])).actions[0], action);
+  const fieldsApplied = record({ boardLocation: 'НА РЕМОНТІ', caseLocation: 'НА РЕМОНТІ' });
+  assert.equal((await f.sync([fieldsApplied])).actions[0].id, action.id, 'Location alone does not acknowledge the comment');
+  const workflows = await f.request('/api/admin/workflows');
+  const service = workflows.boards.find(board => board.key === 'service');
+  await f.request('/api/admin/workflows/service', {
+    title: service.title, description: service.description, entryLaneKey: service.entryLaneKey,
+    sourceStatuses: service.sourceStatuses, lanes: service.lanes.map(({ system, ...lane }) => lane), access: service.access
+  }, 'PATCH');
+  assert.equal((await f.sync([fieldsApplied])).actions[0].commentAppend, action.commentAppend);
+  const confirmed = { ...fieldsApplied, sourceComment: `${fieldsApplied.sourceComment}\n${action.commentAppend}` };
+  assert.deepEqual((await f.sync([confirmed])).actions, []);
+  assert.equal((await f.ack(action.id)).accepted, 0, 'Snapshot recovered a lost acknowledgement');
+  await f.move(card.id, 'awaiting_shipment');
+  await f.move(card.id, 'shipped');
+  const repeat = (await f.sync([confirmed])).actions[0];
+  // A new move is an independent event even when physical location has not yet changed.
+  assert.notEqual(repeat.id, action.id);
+});
+
+test('return writes inspection, both LABA locations and a dated comment; service history coexists with workshop', async context => {
+  const f = await fixture(context);
+  const shipped = record({ boardLocation: 'НА РЕМОНТІ', caseLocation: 'НА РЕМОНТІ' });
+  await f.sync([shipped]);
+  const board = await f.board();
+  assert.equal(board.lanes.find(lane => lane.key === 'returned').title, 'Отримано після сервісу');
+  const card = board.cards[0];
+  await f.request(`/api/maintenance/service/cards/${card.id}`, { notes: 'Примітка', reportNumber: 'РП-2' }, 'PATCH');
+  await f.move(card.id, 'returned');
+  const action = (await f.sync([shipped])).actions[0];
+  assert.equal(action.actionKind, 'service_return');
+  assert.equal(action.targetStatus, 'ПОТРЕБУЄ ОГЛЯДУ');
+  assert.equal(action.targetBoardLocation, 'ЛАБА');
+  assert.equal(action.targetCaseLocation, 'ЛАБА');
+  assert.match(action.commentAppend, /^Повернувся із сервісу: /);
+  await f.ack(action.id);
+  const returned = record({ status: 'ПОТРЕБУЄ ОГЛЯДУ', sourceComment: `${shipped.sourceComment}\n${action.commentAppend}` });
+  assert.deepEqual((await f.sync([returned])).actions, []);
+  assert.equal((await f.board('workshop')).cards[0].lane, 'new');
+  await f.stop();
+  await f.start();
+  assert.deepEqual((await f.sync([returned])).actions, []);
+  const history = (await f.board()).cards[0];
+  assert.equal(history.id, card.id);
+  assert.equal(history.lane, 'returned');
+  assert.equal(history.reportNumber, 'РП-2');
+  assert.equal(history.notes, 'Примітка');
+  assert.equal(history.sourceComment, returned.sourceComment);
+  await f.sync([{ ...returned, status: 'НА ОБЛІТ' }]);
+  assert.equal((await f.board()).cards[0].lane, 'returned', 'Completed service history remains visible');
+  await f.sync([record()]);
+  assert.equal((await f.board()).cards[0].lane, 'new', 'A new service cycle reuses the card and history');
+});
+
+test('return acknowledgement recovery and source-side returns do not produce echo writes', async context => {
+  const f = await fixture(context);
+  const shipped = record({ boardLocation: 'КИЇВ' });
+  await f.sync([shipped]);
+  const card = (await f.board()).cards[0];
+  await f.move(card.id, 'returned');
+  const action = (await f.sync([shipped])).actions[0];
+  const returned = record({ status: 'ПОТРЕБУЄ ОГЛЯДУ' });
+  assert.equal((await f.sync([returned])).actions[0].id, action.id, 'A missing comment must still be appended');
+  assert.deepEqual((await f.sync([{ ...returned, sourceComment: action.commentAppend }])).actions, []);
+  assert.equal((await f.board()).cards[0].lane, 'returned');
+  assert.equal((await f.ack(action.id)).accepted, 0);
+  await f.sync([shipped]);
+  assert.equal((await f.board()).cards[0].lane, 'shipped');
+  assert.deepEqual((await f.sync([returned])).actions, []);
+  assert.equal((await f.board()).cards[0].lane, 'returned');
+});
+
+test('lost containers cannot be returned as a repaired board', async context => {
+  const f = await fixture(context);
+  await f.sync([record({ status: 'ВТРАЧЕНИЙ' })]);
+  const card = (await f.board()).cards[0];
+  const response = await fetch(`${f.root}/api/maintenance/service/cards/${card.id}/move`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal-Request': '1', Origin: f.root },
+    body: JSON.stringify({ lane: 'returned' })
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await f.board()).cards[0].lane, 'new');
+  await f.move(card.id, 'shipped');
+  const action = (await f.sync([record({ status: 'ВТРАЧЕНИЙ' })])).actions[0];
+  assert.equal(action.targetStatus, '');
+  assert.equal(action.targetBoardLocation, null);
+  assert.match(action.commentAppend, /^Тару відправлено: /);
+});
+
+test('return column migration is additive and does not overwrite customized lanes on restart', async context => {
+  const f = await fixture(context);
+  await f.stop();
+  const db = new Database(f.dbPath);
+  db.prepare("DELETE FROM workflow_lanes WHERE module='service' AND lane_key='returned'").run();
+  db.prepare("DELETE FROM schema_migrations WHERE name='service-returned-lane-v1'").run();
+  db.prepare("UPDATE workflow_lanes SET title='Надіслано', color='#112233', sort_order=90 WHERE module='service' AND lane_key='shipped'").run();
+  db.close();
+  await f.start();
+  const lanes = (await f.board()).lanes;
+  assert.equal(lanes.at(-1).key, 'returned');
+  assert.equal(lanes.find(lane => lane.key === 'shipped').title, 'Надіслано');
+  await f.stop();
+  await f.start();
+  assert.deepEqual((await f.board()).lanes, lanes);
+});

@@ -160,6 +160,9 @@ const maintenanceModules = ['workshop', 'service'];
 const moduleKeys = [...maintenanceModules, 'devices'];
 const moduleAccessLevels = ['viewer', 'operator', 'admin'];
 const serviceShippedLaneKey = 'shipped';
+const serviceReturnedLaneKey = 'returned';
+const inspectionAccountingStatus = 'ПОТРЕБУЄ ОГЛЯДУ';
+const labLocation = 'ЛАБА';
 const lostAccountingStatus = 'ВТРАЧЕНИЙ';
 const kyivLocation = 'КИЇВ';
 const repairLocation = 'НА РЕМОНТІ';
@@ -673,10 +676,10 @@ function serviceShipmentConfirmed(card) {
     : [kyivLocation, repairLocation].includes(card.source_board_location);
 }
 
-function accountingActionForLane(card, lane) {
+function accountingActionForLane(card, lane, force = false) {
   if (!lane) return null;
   if (card.module === 'service' && lane.key === serviceShippedLaneKey) {
-    if (serviceShipmentConfirmed(card)) return null;
+    if (!force && serviceShipmentConfirmed(card)) return null;
     const lostContainer = normalizedStatus(card.source_status) === lostAccountingStatus;
     return {
       actionKind: 'locations',
@@ -684,6 +687,17 @@ function accountingActionForLane(card, lane) {
       targetStatus: '',
       targetBoardLocation: lostContainer ? null : repairLocation,
       targetCaseLocation: lostContainer ? kyivLocation : repairLocation
+    };
+  }
+  if (card.module === 'service' && lane.key === serviceReturnedLaneKey) {
+    if (normalizedStatus(card.source_status) === lostAccountingStatus) return null;
+    if (!force && card.service_returned_at) return null;
+    return {
+      actionKind: 'service_return',
+      sourceLane: lane.key,
+      targetStatus: inspectionAccountingStatus,
+      targetBoardLocation: labLocation,
+      targetCaseLocation: labLocation
     };
   }
   const targetStatus = String(lane.targetStatus || '').trim();
@@ -695,6 +709,19 @@ function accountingActionForLane(card, lane) {
     targetBoardLocation: null,
     targetCaseLocation: null
   };
+}
+
+function serviceTransitionComment(card, lane) {
+  if (card.module !== 'service') return '';
+  const timestamp = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }).format(new Date());
+  if (lane === serviceReturnedLaneKey) return `Повернувся із сервісу: ${timestamp}`;
+  if (lane === serviceShippedLaneKey) {
+    return `${normalizedStatus(card.source_status) === lostAccountingStatus ? 'Тару відправлено' : 'Відправлено на сервіс'}: ${timestamp}`;
+  }
+  return '';
 }
 
 function accountingActionMatches(row, action) {
@@ -710,15 +737,16 @@ function enqueueAccountingAction(cardId, action) {
   db.prepare(`
     INSERT OR IGNORE INTO accounting_outbox (
       card_id, action_kind, source_lane, target_status,
-      target_board_location, target_case_location
-    ) VALUES (?, ?, ?, ?, ?, ?)
+      target_board_location, target_case_location, comment_append
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     cardId,
     action.actionKind,
     action.sourceLane,
     action.targetStatus,
     action.targetBoardLocation,
-    action.targetCaseLocation
+    action.targetCaseLocation,
+    action.commentAppend || ''
   );
 }
 
@@ -727,7 +755,7 @@ function reconcileWorkflowOutbox(module) {
   if (!definition) return;
   const lanes = new Map(definition.lanes.map((lane) => [lane.key, lane]));
   const cards = db.prepare(`
-    SELECT id, module, lane, source_status, source_board_location, source_case_location
+    SELECT id, module, lane, source_status, source_board_location, source_case_location, service_returned_at
     FROM maintenance_cards
     WHERE module = ? AND removed_at IS NULL
   `).all(module);
@@ -749,8 +777,8 @@ function reconcileWorkflowOutbox(module) {
   `);
   db.transaction(() => {
     for (const card of cards) {
-      const desired = accountingActionForLane(card, lanes.get(card.lane));
       const current = pendingByCard.get(card.id) || [];
+      const desired = accountingActionForLane(card, lanes.get(card.lane), current.some(action => action.comment_append));
       let matching = false;
       for (const action of current) {
         if (desired && !matching && accountingActionMatches(action, desired)) {
@@ -885,6 +913,17 @@ function synchronizeAccountingRecords(records) {
         };
         const shipped = record.module === module && serviceShipmentConfirmed(incoming);
         const wasShipped = previous && serviceShipmentConfirmed(previous);
+        const actions = previous ? pending.all(previous.id) : [];
+        const sameBoard = previous?.board_identifier === record.boardIdentifier;
+        const returnedFromSheet = module === 'service' && sameBoard
+          && previous.source_status !== lostAccountingStatus
+          && record.status === inspectionAccountingStatus
+          && incoming.source_board_location === labLocation
+          && (previous.lane === serviceShippedLaneKey || previous.lane === serviceReturnedLaneKey);
+        const returnedHistory = module === 'service' && sameBoard && previous.service_returned_at
+          && previous.lane === serviceReturnedLaneKey && record.module !== 'service'
+          && record.status !== lostAccountingStatus;
+        const keepReturned = returnedFromSheet || returnedHistory;
         // The sheet wins only when it changes. An unchanged snapshot must not undo a local move.
         const sourceChanged = previous && (
           previous.source_status !== incoming.source_status
@@ -894,22 +933,28 @@ function synchronizeAccountingRecords(records) {
           || (previous.source_case_location !== null
             && previous.source_case_location !== incoming.source_case_location)
         );
-        for (const action of previous ? pending.all(previous.id) : []) {
-          const satisfied = previous.board_identifier === record.boardIdentifier && (
-            action.action_kind === 'status'
-              ? record.status === normalizedStatus(action.target_status)
-              : previous.source_status === record.status
-                && (action.target_board_location === null
-                  || incoming.source_board_location === normalizedStatus(action.target_board_location))
-                && (action.target_case_location === null
-                  || incoming.source_case_location === normalizedStatus(action.target_case_location))
-          );
+        for (const action of actions) {
+          const fieldsSatisfied = sameBoard
+            && (action.target_status ? record.status === normalizedStatus(action.target_status)
+              : previous.source_status === record.status)
+            && (action.target_board_location === null
+              || incoming.source_board_location === normalizedStatus(action.target_board_location))
+            && (action.target_case_location === null
+              || incoming.source_case_location === normalizedStatus(action.target_case_location));
+          const satisfied = fieldsSatisfied && (!action.comment_append
+            || record.sourceComment.split(/\r?\n/).includes(action.comment_append));
           if (satisfied) confirm.run(action.id);
-          else if (record.module !== module || shipped || sourceChanged) cancel.run(action.id);
+          // A lost acknowledgement must finish the same comment, not create another event.
+          else if (fieldsSatisfied && action.comment_append) continue;
+          else if (record.module !== module || sourceChanged) cancel.run(action.id);
         }
-        if (record.module === module) {
+        if (record.module === module || keepReturned) {
           let lane = previous && !previous.removed_at ? previous.lane : record.entryLaneKey;
-          if (shipped && (!wasShipped || previous?.removed_at)) lane = serviceShippedLaneKey;
+          if (keepReturned) lane = serviceReturnedLaneKey;
+          else if (module === 'service' && lane === serviceReturnedLaneKey && sourceChanged) {
+            lane = shipped ? serviceShippedLaneKey : record.entryLaneKey;
+          }
+          else if (shipped && (!wasShipped || previous?.removed_at)) lane = serviceShippedLaneKey;
           else if (wasShipped && !shipped && lane === serviceShippedLaneKey) lane = record.entryLaneKey;
           else if (module === 'service' && sourceChanged && !shipped && lane === serviceShippedLaneKey) {
             lane = record.entryLaneKey;
@@ -934,6 +979,11 @@ function synchronizeAccountingRecords(records) {
             lane,
             sortOrder
           );
+          if (module === 'service') {
+            db.prepare(`UPDATE maintenance_cards SET service_returned_at =
+              CASE WHEN ? THEN COALESCE(service_returned_at, CURRENT_TIMESTAMP) ELSE NULL END
+              WHERE module = 'service' AND source_key = ?`).run(keepReturned ? 1 : 0, record.sourceKey);
+          }
           if (previous && previous.lane !== lane) history.run(previous.id, previous.lane, lane);
         } else {
           retire.run(record.sourceKey, module);
@@ -949,6 +999,7 @@ function synchronizeAccountingRecords(records) {
     targetStatus: row.target_status,
     targetBoardLocation: row.target_board_location,
     targetCaseLocation: row.target_case_location,
+    commentAppend: row.comment_append,
     attempts: row.attempts,
     source: {
       spreadsheetId: row.source_spreadsheet_id,
@@ -1093,6 +1144,10 @@ app.post('/api/maintenance/:module/cards/:id/move', {
   if (!body) return;
   const targetLane = definition.lanes.find((lane) => lane.key === body.lane);
   if (!targetLane) return reply.code(400).send({ error: 'Невідома колонка' });
+  if (module === 'service' && body.lane === serviceReturnedLaneKey
+    && normalizedStatus(card.source_status) === lostAccountingStatus) {
+    return reply.code(400).send({ error: 'У цю колонку можна повернути лише борт, а не тару втраченого борта' });
+  }
   if (body.beforeCardId) {
     const before = statements.maintenanceCardById.get(body.beforeCardId);
     if (!before || before.module !== module || before.lane !== body.lane || before.removed_at) {
@@ -1118,7 +1173,9 @@ app.post('/api/maintenance/:module/cards/:id/move', {
       `).run(card.id);
     }
     if (card.lane !== body.lane) {
-      enqueueAccountingAction(card.id, accountingActionForLane(card, targetLane));
+      const action = accountingActionForLane(card, targetLane, true);
+      if (action) action.commentAppend = serviceTransitionComment(card, body.lane);
+      enqueueAccountingAction(card.id, action);
     }
   })();
   audit(request.portalUser.email, 'maintenance.move', 'maintenance-card', card.id, {
@@ -1256,14 +1313,18 @@ app.post('/api/internal/accounting/ack', {
       if (!action) continue;
       if (result.success) {
         applied.run(result.id);
-        if (action.module === 'service' && action.source_lane === serviceShippedLaneKey) {
+        if (action.module === 'service'
+          && [serviceShippedLaneKey, serviceReturnedLaneKey].includes(action.source_lane)) {
           db.prepare(`
             UPDATE maintenance_cards SET
+              source_status = CASE WHEN ? != '' THEN ? ELSE source_status END,
               source_board_location = COALESCE(?, source_board_location),
               source_case_location = COALESCE(?, source_case_location),
+              service_returned_at = CASE WHEN ? = 'returned' THEN CURRENT_TIMESTAMP ELSE NULL END,
               updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND removed_at IS NULL AND lane = ?
-          `).run(action.target_board_location, action.target_case_location,
+          `).run(action.target_status, action.target_status,
+            action.target_board_location, action.target_case_location, action.source_lane,
             action.maintenance_card_id, action.source_lane);
         } else {
           retireAppliedCard.run(action.maintenance_card_id, action.source_lane);
@@ -1374,7 +1435,7 @@ app.patch('/api/admin/workflows/:module', {
       lane.title,
       lane.color.toLowerCase(),
       (index + 1) * 10,
-      module === 'service' && lane.key === serviceShippedLaneKey
+      module === 'service' && [serviceShippedLaneKey, serviceReturnedLaneKey].includes(lane.key)
         ? null
         : lane.targetStatus ? normalizedStatus(lane.targetStatus) : null
     ));

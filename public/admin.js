@@ -866,14 +866,17 @@ function renderWorkflowLanes() {
       renderWorkflowEntryLane();
     });
     const target = document.createElement('input');
-    const fixedServiceLocations = workflow.key === 'service' && lane.key === 'shipped';
+    const serviceReturn = workflow.key === 'service' && lane.key === 'returned';
+    const fixedServiceLocations = workflow.key === 'service' && ['shipped', 'returned'].includes(lane.key);
     target.value = fixedServiceLocations ? '' : lane.targetStatus || '';
     target.maxLength = 120;
     target.placeholder = fixedServiceLocations ? 'Розташування змінюються автоматично' : 'Не змінювати статус';
+    if (serviceReturn) target.placeholder = 'Потребує огляду · ЛАБА';
     target.setAttribute('aria-label', fixedServiceLocations
       ? 'Розташування в Обліку змінюються автоматично'
       : 'Статус для запису в Облік');
     target.disabled = fixedServiceLocations;
+    if (serviceReturn) target.setAttribute('aria-label', 'Після повернення: Потребує огляду, борт і тара — ЛАБА');
     target.addEventListener('input', () => { lane.targetStatus = target.value; });
     const remove = workflowIconButton('close', lane.system ? 'Системну колонку не можна видалити' : 'Видалити колонку', lane.system, () => {
       if (!window.confirm(`Видалити колонку «${lane.title}»?`)) return;

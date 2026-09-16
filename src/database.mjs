@@ -36,7 +36,8 @@ const defaultWorkflows = [
       ['documents_preparing', 'Готуються документи', '#f4b942', 20, null],
       ['documents_submitted', 'Документи подано', '#4f9de8', 30, null],
       ['awaiting_shipment', 'Очікує відправлення', '#bb86fc', 40, null],
-      ['shipped', 'Відправлено', '#b6ee73', 50, null]
+      ['shipped', 'Відправлено', '#b6ee73', 50, null],
+      ['returned', 'Отримано після сервісу', '#55c6d0', 60, null]
     ]
   }
 ];
@@ -271,6 +272,20 @@ if (!db.prepare('SELECT 1 FROM schema_migrations WHERE name = ?').get(serviceLos
   })();
 }
 
+const serviceReturnMigration = 'service-returned-lane-v1';
+if (!db.prepare('SELECT 1 FROM schema_migrations WHERE name = ?').get(serviceReturnMigration)) {
+  db.transaction(() => {
+    db.prepare(`
+      INSERT OR IGNORE INTO workflow_lanes
+        (module, lane_key, title, color, sort_order, target_status, is_system)
+      SELECT 'service', 'returned', 'Отримано після сервісу', '#55c6d0',
+        COALESCE(MAX(sort_order), 0) + 10, NULL, 1
+      FROM workflow_lanes WHERE module = 'service'
+    `).run();
+    db.prepare('INSERT INTO schema_migrations (name) VALUES (?)').run(serviceReturnMigration);
+  })();
+}
+
 const deviceColumns = new Set(db.pragma('table_info(devices)').map((column) => column.name));
 if (!deviceColumns.has('stream_name')) {
   db.exec('ALTER TABLE devices ADD COLUMN stream_name TEXT');
@@ -284,6 +299,9 @@ if (!deviceColumns.has('parent_device_id')) {
 db.exec('CREATE INDEX IF NOT EXISTS idx_devices_parent ON devices(parent_device_id, sort_order)');
 
 const maintenanceCardColumns = new Set(db.pragma('table_info(maintenance_cards)').map((column) => column.name));
+if (!maintenanceCardColumns.has('service_returned_at')) {
+  db.exec('ALTER TABLE maintenance_cards ADD COLUMN service_returned_at TEXT');
+}
 if (!maintenanceCardColumns.has('report_number')) {
   db.exec("ALTER TABLE maintenance_cards ADD COLUMN report_number TEXT NOT NULL DEFAULT ''");
 }
@@ -298,6 +316,9 @@ if (!maintenanceCardColumns.has('source_case_location')) {
 }
 
 const accountingOutboxColumns = new Set(db.pragma('table_info(accounting_outbox)').map((column) => column.name));
+if (!accountingOutboxColumns.has('comment_append')) {
+  db.exec("ALTER TABLE accounting_outbox ADD COLUMN comment_append TEXT NOT NULL DEFAULT ''");
+}
 if (!accountingOutboxColumns.has('action_kind')) {
   db.exec("ALTER TABLE accounting_outbox ADD COLUMN action_kind TEXT NOT NULL DEFAULT 'status'");
 }
@@ -464,7 +485,7 @@ export const statements = {
   `),
   pendingAccountingActions: db.prepare(`
     SELECT o.id, o.card_id, o.action_kind, o.source_lane, o.target_status,
-      o.target_board_location, o.target_case_location, o.attempts,
+      o.target_board_location, o.target_case_location, o.comment_append, o.attempts,
       c.source_spreadsheet_id, c.source_sheet_id, c.source_row_number,
       c.board_identifier, c.source_status
     FROM accounting_outbox o
