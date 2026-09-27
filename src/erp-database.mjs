@@ -325,6 +325,33 @@ export function createErp(db) {
     return { id };
   }
 
+  function completeTasks(user, body) {
+    requireRole(user, ['admin','manager','technician']);
+    const time = now();
+    const shift = activeShift(user.id);
+    if (!shift || shift.state !== 'active' || time - shift.started_at >= MAX_SHIFT_MS) fail(409, 'Спочатку відкрийте активну зміну тривалістю до 16 годин');
+    // Validate the entire selection before changing anything: a batch never skips
+    // a predecessor, claims unassigned pool work, or signs for a shared team.
+    const tasks = body.tasks.map(selected => {
+      const task = entity('erp_tasks', selected.id);
+      if (task.assigned_to !== user.id || task.work_mode === 'shared' || (task.crew_id && !crews.member(task.crew_id,user.id))) fail(403, 'Пакетом можна завершити лише власні персональні завдання, не спільні операції');
+      version(task, selected.version);
+      if (!['pending','paused','in_progress'].includes(task.state)) fail(409, 'У виборі є завершена або заблокована операція. Оновіть вибір');
+      if (['ready','delivered'].includes(entity('erp_units',task.unit_id).state)) fail(409, 'Виріб уже пройшов контроль або виданий');
+      if (get("SELECT id FROM erp_tasks WHERE unit_id=? AND sequence<? AND state!='done'", task.unit_id,task.sequence)) fail(409, 'Попередня операція ще не завершена. Завершуйте партію по одному етапу');
+      return task;
+    });
+    for (const task of tasks) {
+      stopTimer(task.id,time);
+      run("UPDATE erp_tasks SET state='done',completed_by=?,completed_at=?,version=version+1 WHERE id=?",user.id,time,task.id);
+      run("UPDATE erp_units SET state=?,version=version+1 WHERE id=?", get("SELECT id FROM erp_tasks WHERE unit_id=? AND state!='done'",task.unit_id) ? 'working' : 'quality',task.unit_id);
+      // No invented timer intervals: record explicit completion even without a timer.
+      // This permanent evidence also prevents self-QC after rework/reassignment.
+      event(user,'task.complete','task',task.id,{unitId:task.unit_id,completionMode:'batch',previousState:task.state,workRound:task.work_round});
+    }
+    return { count: tasks.length };
+  }
+
   function shiftAction(user, body) {
     requireRole(user, ['admin','manager','technician']);
     const shift = activeShift(user.id);
@@ -359,6 +386,7 @@ export function createErp(db) {
     version(unit, body.version);
     if (unit.state !== 'quality') fail(409, 'Виріб ще не готовий до контролю якості');
     if (get('SELECT t.id FROM erp_tasks t JOIN erp_time_entries e ON e.task_id=t.id WHERE t.unit_id=? AND e.user_id=?', id, user.id)) fail(409, 'Перевірку має виконати інша людина, ніж виконавець робіт');
+    if (get("SELECT e.id FROM erp_events e JOIN erp_tasks t ON t.id=e.entity_id WHERE e.entity_type='task' AND e.action='task.complete' AND t.unit_id=? AND e.actor_id=? AND json_extract(e.details_json,'$.completionMode')='batch'",id,user.id)) fail(409, 'Перевірку має виконати інша людина, ніж виконавець робіт');
     if (body.result === 'pass') {
       if (get("SELECT id FROM erp_tasks WHERE unit_id=? AND state!='done'", id)) fail(409, 'Є незавершені операції');
       if (get("SELECT lot_id,SUM(CASE WHEN to_location='workbench' THEN quantity ELSE 0 END-CASE WHEN from_location='workbench' THEN quantity ELSE 0 END) AS qty FROM erp_stock_moves WHERE unit_id=? GROUP BY lot_id HAVING qty>0", id)) fail(409, 'Спочатку підтвердьте встановлення або повернення всіх виданих деталей');
@@ -440,7 +468,7 @@ export function createErp(db) {
     return { id: moveId };
   }
 
-  return { ...guides, role, requireRole, command, replayCommand, snapshot, orderDetail, taskAction, shiftAction, quality, deliver, receiveStock, moveStock,
+  return { ...guides, role, requireRole, command, replayCommand, snapshot, orderDetail, taskAction, completeTasks, shiftAction, quality, deliver, receiveStock, moveStock,
     saveMaterial:materials.saveMaterial,saveMaterialSpec:materials.saveSpec,linkMaterialLot:materials.linkLot,
     replenishments:materials.requests,saveReplenishment:materials.saveReplenishment,consumeMaterials:materials.consume,previewConsumption:materials.previewConsumption,
     saveCrew:crews.saveCrew, assignCrew:crews.assignCrew, workHistory:crews.workHistory,

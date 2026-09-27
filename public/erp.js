@@ -16,6 +16,7 @@ let toastTimer;
 let crewId = null;
 let crewQueue = null;
 const pendingRequests = new Map();
+const selectedTasks = new Map();
 const icons = {
   guides: ['M12 5v16','M12 5C8 2 4 3 2 4v16c3-2 6-2 10 1','M12 5c4-3 8-2 10-1v16c-3-2-6-2-10 1'],
   overview: ['M3 3h7v7H3z','M14 3h7v7h-7z','M3 14h7v7H3z','M14 14h7v7h-7z'],
@@ -126,7 +127,7 @@ function navSections() {
   if (data.me.role==='inspector') return ['overview','orders','guides'];
   return ['overview','orders','stock','materials','replenishment','team','crews',...(worker()?['my','history']:[]),'clients','templates','guides'];
 }
-function go(key) { section=key;search='';taskPage=0;guideUI.resetPage();location.hash=key;if(['my','crews','replenishment','guides'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
+function go(key) { selectedTasks.clear();section=key;search='';taskPage=0;guideUI.resetPage();location.hash=key;if(['my','crews','replenishment','guides'].includes(key))load().catch(error=>notify(error.message,true));else render(); }
 function heading(title,subtitle,action) { return el('div',{class:'page-heading'},el('div',{},el('p',{class:'eyebrow'},'LABA / ВИРОБНИЦТВО'),el('h1',{},title),el('p',{class:'subtitle'},subtitle)),action); }
 function panel(title,body,action,description) { return el('section',{class:'panel'},el('div',{class:'panel-header'},el('div',{},el('h2',{},title),description?el('p',{},description):null),action),body); }
 function empty(title,description,action,glyph='orders') { return el('div',{class:'empty-state'},icon(glyph),el('h3',{},title),el('p',{},description),action); }
@@ -160,7 +161,35 @@ function overview() {
       el('div',{},data.team?panel('Команда зараз',teamRows.length?el('div',{},teamRows.map(u=>el('div',{class:'team-row'},avatar(u.display_name||u.email),el('div',{class:'team-info'},el('strong',{},u.display_name||u.email),el('p',{},u.current?`${u.current.title} · ${u.current.serial||u.current.unit_code}`:u.shift?'На зміні · немає активної операції':'Поза зміною')),badge(u.current?'in_progress':u.shift?.state||'closed')))):empty('Команда ще не налаштована','Додайте майстрів і призначте доступ до виробництва.',null,'team'),el('a',{href:'#team',onclick:()=>go('team'),class:'section-link'},'Команда →'),`${working.length} майстрів виконують операції`):null,
       el('div',{class:'status-callout neutral'},icon('my'),el('div',{},el('strong',{},'Від прийомки до повернення'),el('p',{},'Кожен виріб має свій номер, історію робіт і власника. Готовність та видача обліковуються окремо.')))))];
 }
-function searchToolbar(placeholder,extra) {const input=el('input',{class:'search',type:'search',placeholder,value:search,maxLength:120,'aria-label':placeholder});input.addEventListener('input',()=>{search=input.value;const start=input.selectionStart;const refresh=()=>{const next=document.querySelector('.search');next?.focus();next?.setSelectionRange(start,start);};if(section==='my'||section==='guides'||(section==='crews'&&crewId)){taskPage=0;guideUI.resetPage();clearTimeout(searchTimer);searchTimer=setTimeout(()=>load().then(refresh).catch(error=>notify(error.message,true)),300);}else{render();refresh();}});return el('div',{class:'toolbar'},input,extra);}
+function searchToolbar(placeholder,extra) {const input=el('input',{class:'search',type:'search',placeholder,value:search,maxLength:120,'aria-label':placeholder});input.addEventListener('input',()=>{selectedTasks.clear();search=input.value;const start=input.selectionStart;const refresh=()=>{const next=document.querySelector('.search');next?.focus();next?.setSelectionRange(start,start);};if(section==='my'||section==='guides'||(section==='crews'&&crewId)){taskPage=0;guideUI.resetPage();clearTimeout(searchTimer);searchTimer=setTimeout(()=>load().then(refresh).catch(error=>notify(error.message,true)),300);}else{render();refresh();}});return el('div',{class:'toolbar'},input,extra);}
+function canSelectTask(t) {
+  return t.can_start && t.assigned_to===data.me.id && t.work_mode!=='shared' && !t.waiting_for && ['pending','paused','in_progress'].includes(t.state) && !['ready','delivered'].includes(t.unit_state);
+}
+function selectTask(t, checked) {
+  if (busy) return;
+  if (checked && !selectedTasks.has(t.id) && selectedTasks.size>=500) {notify('За один раз — до 500 завдань',true);return;}
+  if (checked) selectedTasks.set(t.id,{id:t.id,version:t.version,title:t.title,unit:t.serial||t.unit_code});
+  else selectedTasks.delete(t.id);
+}
+function completeSelectedTasks() {
+  const chosen=[...selectedTasks.values()];
+  if (!chosen.length || busy) return;
+  openDialog(`Завершити ${chosen.length} завдань?`,
+    el('p',{class:'dialog-description'},'Підтвердіть, що кожну вибрану операцію виконано повністю. Активний таймер цих завдань зупиниться; час без таймера не додається. Контроль якості та облік матеріалів залишаються окремими.'),
+    el('ul',{class:'batch-task-list'},chosen.map(t=>el('li',{},el('strong',{},t.unit),` · ${t.title}`))),
+    el('p',{class:'muted'},'У разі конфлікту жодне завдання цього пакета не буде змінене. Закрийте вікно, оновіть список і перевиберіть актуальні завдання.'),
+    actions(button('Скасувати',()=>dialog.close()),button('Підтвердити завершення',()=>mutate('tasks/complete-batch',{tasks:chosen.map(({id,version})=>({id,version}))},()=>{selectedTasks.clear();render();}),'primary','check')));
+}
+function taskSelectionToolbar(shift, expired) {
+  const eligible=data.myTasks.filter(canSelectTask);
+  const all=eligible.length>0&&eligible.every(t=>selectedTasks.has(t.id));
+  const finish=button(`Завершити вибрані (${selectedTasks.size})`,completeSelectedTasks,'primary','check');
+  finish.disabled=!selectedTasks.size||!shift||shift.state!=='active'||expired||busy;
+  return el('section',{class:'batch-task-toolbar','aria-label':'Пакетне завершення'},
+    el('div',{class:'batch-task-controls'},el('label',{class:'batch-task-select'},el('input',{type:'checkbox',checked:all,indeterminate:!all&&eligible.some(t=>selectedTasks.has(t.id)),disabled:!eligible.length||busy,onchange:event=>{if(!busy){eligible.forEach(t=>selectTask(t,event.target.checked));render();}}}), 'Обрати доступні на сторінці'),
+      actions(button('Скинути вибір',()=>{selectedTasks.clear();render();},'quiet'),finish)),
+    el('p',{class:'muted'},`Вибрано ${selectedTasks.size} · Вибір зберігається між сторінками, але очищується при зміні пошуку або фільтра. Спільні, заблоковані та наступні етапи не вибираються.`));
+}
 function ordersView() {return [heading('Замовлення','Партії клієнтів, серійні номери та готовність до видачі.',manager()?button('Прийняти партію',newOrder,'primary','plus'):null),searchToolbar('Пошук замовлення або клієнта'),panel(`Замовлення · ${data.orderCount}`,ordersTable(data.orders.filter(match))),data.orderCount>200?el('p',{class:'mobile-hint'},'Показано останні 200 замовлень.'):null];}
 function myView() {
   const shift=data.shifts.find(s=>!s.ended_at);
@@ -169,7 +198,8 @@ function myView() {
   return [heading('Моя робота','Ваші операції, поточна зміна та зафіксований результат.',data.crews.some(c=>!c.archived)?button('Роботи моїх команд',()=>go('crews'),'','team'):null),
     el('div',{class:'shift-banner'},el('div',{},el('div',{class:'shift-title'},shift?expired?'Зміну потрібно закрити':shift.state==='paused'?'Ви на перерві':'Зміна триває':'Готові до нової зміни?'),el('p',{class:'shift-meta'},shift?`${duration(shift.elapsed_ms)} без перерв · початок ${date(shift.started_at,true)}`:'Почніть зміну перед виконанням першої операції.')),
       actions(!shift?button('Почати зміну',()=>mutate('shifts/action',{action:'start'}),'primary','play'):null,shift&&!expired?button(shift.state==='active'?'Перерва':'Продовжити зміну',()=>mutate('shifts/action',{action:shift.state==='active'?'pause':'resume',version:shift.version}),'',shift.state==='active'?'pause':'play'):null,shift?button('Завершити зміну',()=>confirmAction('Завершити зміну?','Активна робота буде призупинена. Облік часу зупиниться.',()=>mutate('shifts/action',{action:'end',version:shift.version})),'quiet'):null)),
-    searchToolbar('Номер виробу або назва операції',el('div',{class:'filters'},[['open',`До виконання · ${data.myTaskCounts.open}`],['blocked',`Блокування · ${data.myTaskCounts.blocked}`],['done',`Завершені · ${data.myTaskCounts.done}`]].map(([key,label])=>el('button',{class:`filter${taskFilter===key?' active':''}`,onclick:()=>{taskFilter=key;taskPage=0;load().catch(error=>notify(error.message,true));}},label)))),
+    searchToolbar('Номер виробу або назва операції',el('div',{class:'filters'},[['open',`До виконання · ${data.myTaskCounts.open}`],['blocked',`Блокування · ${data.myTaskCounts.blocked}`],['done',`Завершені · ${data.myTaskCounts.done}`]].map(([key,label])=>el('button',{class:`filter${taskFilter===key?' active':''}`,onclick:()=>{selectedTasks.clear();taskFilter=key;taskPage=0;load().catch(error=>notify(error.message,true));}},label)))),
+    (tasks.some(canSelectTask)||selectedTasks.size)?taskSelectionToolbar(shift,expired):null,
     tasks.length?el('div',{class:'task-grid'},tasks.map(task=>taskCard(task,shift,expired))):panel('Мої операції',empty(taskFilter==='done'?'Ще немає завершених операцій':'Черга вільна',taskFilter==='done'?'Виконані роботи з’являться тут.':'Керівник призначить вам вироби й операції. Оновлення з’являться автоматично.',null,'my')),
     data.myTaskCount>50?el('div',{class:'toolbar spaced'},el('span',{class:'muted'},`Сторінка ${taskPage+1} з ${Math.ceil(data.myTaskCount/50)} · ${data.myTaskCount} операцій`),actions(taskPage?button('Попередня',()=>{taskPage--;load().catch(error=>notify(error.message,true));}):null,(taskPage+1)*50<data.myTaskCount?button('Наступна',()=>{taskPage++;load().catch(error=>notify(error.message,true));}):null)):null,
     el('p',{class:'mobile-hint'},'Додайте цю сторінку на головний екран телефона через меню браузера. Дія вважається виконаною лише після підтвердження «Збережено в обліку».')];
@@ -201,7 +231,7 @@ function taskCard(t,shift,expired) {
     controls.push(startButton(t.work_mode==='pool'&&t.assigned_to===null?'Взяти в роботу':t.state==='pending'?'Почати':'Продовжити'));
   }
   if (mayWork&&t.state!=='done'&&t.state!=='blocked'&&(shared?part&&part.state!=='finished':t.assigned_to===data.me.id)) controls.push(button('Перешкода',()=>noteAction('Що заважає роботі?','Зупиниться лише ваш таймер. Причина буде видима команді та керівнику.',note=>mutate(`tasks/${t.id}/action`,{action:'block',version:t.version,note})),'quiet','alert'));
-  return el('article',{class:`task-card${t.my_active?' running':''}`,'data-task-id':t.id},el('div',{class:'task-top'},el('span',{class:'code'},`${t.unit_code} · ${t.order_code}`),badge(t.state)),el('p',{class:'task-context'},`${t.model} · ${t.serial||'Без заводського номера'}`),el('h3',{},t.title),el('p',{class:'task-context'},t.order_title),t.crew_name?el('p',{class:'crew-tag'},icon('team'),`${t.crew_name} · ${shared?'Спільна операція':'Черга команди'}`):null,t.work_mode==='pool'&&t.assigned_to?el('p',{class:'task-context'},`Виконавець: ${t.assignee}`):null,t.instructions?el('p',{class:'task-instructions'},t.instructions):null,t.note?el('p',{class:'task-note'},t.note):null,
+  return el('article',{class:`task-card${t.my_active?' running':''}${section==='my'&&selectedTasks.has(t.id)?' batch-selected':''}`,'data-task-id':t.id},section==='my'&&canSelectTask(t)?el('label',{class:'batch-task-select'},el('input',{type:'checkbox',checked:selectedTasks.has(t.id),disabled:busy,'aria-label':`Обрати ${t.serial||t.unit_code} · ${t.title}`,onchange:event=>{selectTask(t,event.target.checked);render();}}),'Обрати завдання'):null,el('div',{class:'task-top'},el('span',{class:'code'},`${t.unit_code} · ${t.order_code}`),badge(t.state)),el('p',{class:'task-context'},`${t.model} · ${t.serial||'Без заводського номера'}`),el('h3',{},t.title),el('p',{class:'task-context'},t.order_title),t.crew_name?el('p',{class:'crew-tag'},icon('team'),`${t.crew_name} · ${shared?'Спільна операція':'Черга команди'}`):null,t.work_mode==='pool'&&t.assigned_to?el('p',{class:'task-context'},`Виконавець: ${t.assignee}`):null,t.instructions?el('p',{class:'task-instructions'},t.instructions):null,t.note?el('p',{class:'task-note'},t.note):null,
     shared?el('div',{class:'crew-contributors'},t.contributors.length?t.contributors.map(p=>el('div',{},el('strong',{},p.name||`Майстер #${p.user_id}`),el('span',{},p.state==='active'?'Працює':p.state==='finished'?'Внесок готовий':'На паузі'),p.note?el('small',{},p.note):null)):el('p',{class:'task-context'},'Перший учасник може долучитися після початку зміни.')):null,
     shared&&part?.state==='finished'?el('p',{class:'task-context'},'Ваш внесок завершено. Спільну операцію закриває старший або керівник.'):null,
     t.waiting_for?el('p',{class:'task-context spaced'},`Очікує попередні операції: ${t.waiting_for}`):null,el('div',{class:'task-bottom'},el('span',{class:'task-timer'},`Ваш час: ${duration(t.my_elapsed_ms)}`,shared?` · Сумарний час учасників: ${duration(t.elapsed_ms)}`:t.planned_minutes?` / план ${t.planned_minutes} хв`:''),actions(controls)));
@@ -439,7 +469,7 @@ async function load() {
   document.querySelector('#updated-at').textContent=`Оновлено ${date(next.serverTime,true)} · Київ`;
   render();
 }
-window.addEventListener('hashchange',()=>{if(location.hash.slice(1)!==section){section=location.hash.slice(1);search='';taskPage=0;load().catch(error=>notify(error.message,true));}});
+window.addEventListener('hashchange',()=>{if(location.hash.slice(1)!==section){selectedTasks.clear();section=location.hash.slice(1);search='';taskPage=0;load().catch(error=>notify(error.message,true));}});
 window.addEventListener('offline',()=>{document.querySelector('#connection').textContent='Немає мережі';document.querySelector('#connection').classList.add('offline');notify('Немає мережі. Зміни тимчасово недоступні.',true);});
 window.addEventListener('online',()=>load().catch(error=>notify(error.message,true)));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!dialog.open&&!busy)load().catch(()=>{});});

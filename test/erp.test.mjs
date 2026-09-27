@@ -142,6 +142,67 @@ async function crew(f, mode='shared', count=1) {
   return {group,orderId:created.id,unitId:detail.units[0].id,taskId:detail.tasks[0].id};
 }
 const freshTask=(f,id)=>f.db.prepare('SELECT * FROM erp_tasks WHERE id=?').get(id);
+const batchBody=tasks=>({tasks:tasks.map(({id,version})=>({id,version}))});
+
+test('ERP bulk completion handles 150 units atomically, retries once and preserves timer/stock history',async context=>{
+  const f=fixture(context);const o=await order(f,150);let detail=await assign(f,o.id);
+  await f.post('shifts/action',{action:'start'},2);
+  await taskDo(f,detail.tasks[0].id,'start');await taskDo(f,detail.tasks[0].id,'pause');
+  const other=detail.tasks.find(t=>t.sequence===0&&t.id!==detail.tasks[0].id);await taskDo(f,other.id,'start');
+  detail=await f.get(`orders/${o.id}`);
+  const body=batchBody(detail.tasks.filter(t=>t.sequence===0)),key=crypto.randomUUID();
+  assert.equal((await f.request('tasks/complete-batch',body,2,key)).status,200);
+  assert.equal((await f.request('tasks/complete-batch',body,2,key)).body.count,150);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM erp_events WHERE action='task.complete'").get().n,150);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM erp_time_entries').get().n,2,'no invented timer history');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM erp_time_entries WHERE ended_at IS NULL').get().n,0);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM erp_stock_moves').get().n,0);
+  assert.equal((await f.request('tasks/complete-batch',body,2)).status,409);
+  detail=await f.get(`orders/${o.id}`);await f.post('tasks/complete-batch',batchBody(detail.tasks.filter(t=>t.sequence===1)),2);
+  assert.ok((await f.get(`orders/${o.id}`)).units.every(u=>u.state==='quality'));
+  assert.equal(f.db.prepare("SELECT count(*) n FROM erp_events WHERE action='task.complete'").get().n,300);
+});
+
+test('ERP bulk rejects stale, duplicate, foreign, blocked, shared and future tasks without partial writes',async context=>{
+  const f=fixture(context);const o=await order(f);const d=await assign(f,o.id);const first=d.tasks.filter(t=>t.sequence===0);
+  await f.post('shifts/action',{action:'start'},2);
+  const before=f.db.prepare('SELECT count(*) n FROM erp_events').get().n;
+  for(const [body,status] of [[batchBody([first[0],{...first[1],version:999}]),409],[batchBody([first[0],first[0]]),400],[{tasks:[]},400],[batchBody(Array(501).fill(first[0])),400],[batchBody([first[0],d.tasks.find(t=>t.sequence===1)]),409]]){
+    assert.equal((await f.request('tasks/complete-batch',body,2)).status,status);
+    assert.ok((await f.get(`orders/${o.id}`)).tasks.every(t=>t.state==='pending'));
+    assert.equal(f.db.prepare('SELECT count(*) n FROM erp_events').get().n,before);
+  }
+  await f.post('assign',{userId:3,tasks:batchBody([first[1]]).tasks});
+  assert.equal((await f.request('tasks/complete-batch',batchBody(first),2)).status,403);
+  await f.post(`tasks/${first[0].id}/action`,{action:'block',version:first[0].version,note:'Перешкода'},2);
+  assert.equal((await f.request('tasks/complete-batch',batchBody([freshTask(f,first[0].id)]),2)).status,409);
+  const c=await crew(f);assert.equal((await f.request('tasks/complete-batch',batchBody([freshTask(f,c.taskId)]),2)).status,403);
+  const p=await crew(f,'pool');assert.equal((await f.request('tasks/complete-batch',batchBody([freshTask(f,p.taskId)]),2)).status,403);
+  await taskDo(f,p.taskId,'start');await f.post('tasks/complete-batch',batchBody([freshTask(f,p.taskId)]),2);
+});
+
+test('ERP bulk enforces active shift, role, CSRF, UUID and independent QC even after rework',async context=>{
+  const f=fixture(context);const o=await order(f,1);let d=await assign(f,o.id);let body=batchBody([d.tasks[0]]);
+  assert.equal((await f.request('tasks/complete-batch',body,2)).status,409);
+  assert.equal((await f.request('tasks/complete-batch',body,4)).status,403);
+  await f.post('shifts/action',{action:'start'},2);
+  assert.equal((await f.request('tasks/complete-batch',body,2,crypto.randomUUID(),{origin:'https://other.test'})).status,403);
+  assert.equal((await f.request('tasks/complete-batch',body,2,'bad-key')).status,400);
+  await f.post('tasks/complete-batch',body,2);
+  await f.post('tasks/complete-batch',batchBody([d.tasks[1]]),2);
+  f.db.exec("UPDATE erp_members SET role='manager' WHERE user_id=2");
+  d=await f.get(`orders/${o.id}`);const u=d.units[0];
+  assert.equal((await f.request(`units/${u.id}/quality`,{result:'pass',version:u.version},2)).status,409);
+  await f.post(`units/${u.id}/quality`,{result:'rework',version:u.version,taskId:d.tasks[0].id,note:'Ще раз'},4);
+  await assign(f,o.id,3);await f.post('shifts/action',{action:'start'},3);
+  d=await f.get(`orders/${o.id}`);for(const t of d.tasks)await f.post('tasks/complete-batch',batchBody([t]),3);
+  d=await f.get(`orders/${o.id}`);
+  assert.equal((await f.request(`units/${u.id}/quality`,{result:'pass',version:d.units[0].version},2)).status,409,'historical no-timer worker still cannot self-QC');
+  await f.post(`units/${u.id}/quality`,{result:'pass',version:d.units[0].version},4);
+  const more=await order(f,1);d=await assign(f,more.id);body=batchBody([d.tasks[0]]);
+  f.db.prepare('UPDATE erp_shifts SET started_at=? WHERE user_id=2').run(Date.now()-MAX_SHIFT_MS-1);
+  assert.equal((await f.request('tasks/complete-batch',body,2)).status,409);
+});
 const createMaterial=(f,overrides={})=>f.post('materials',{sku:`MAT-${crypto.randomUUID()}`,name:'Витратний матеріал',uom:'pcs',minimum:0,target:0,...overrides});
 const receiveMaterial=(f,materialId,quantity,overrides={})=>f.post('stock',{materialId,sku:'ignored',name:'ignored',quantity,condition:'new',reference:'Synthetic receipt',...overrides});
 const materialRow=async(f,id,owner=null)=>(await f.get('context')).materialPlanning.rows.find(r=>r.materialId===id&&r.clientId===owner);

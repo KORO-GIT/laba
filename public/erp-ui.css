@@ -1,4 +1,13 @@
 /* Shared ERP controls and responsive layouts, loaded after module styles. */
+.batch-task-toolbar { padding: 16px; margin-bottom: 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+.batch-task-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.batch-task-toolbar p { margin: 10px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.batch-task-select { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 14px; }
+.batch-task-select input { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.task-card.batch-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.batch-task-list { max-height: 38vh; overflow: auto; padding: 0 0 0 22px; overflow-wrap: anywhere; }
+.batch-task-list li { padding: 6px 0; }
+@media (max-width: 600px) { .batch-task-controls > .actions { width: 100%; } .batch-task-controls > .actions > .primary { flex: 1 1 100%; } }
 body { line-height: 1.5; }
 body h1, body h2, body h3, body .metric-value, body .brand,
 body .brand small, body .workspace-label, body .eyebrow { letter-spacing: 0; }

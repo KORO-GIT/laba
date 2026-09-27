@@ -26,6 +26,7 @@ const schemas = {
   receipt: z.object(receipt).strict(),
   assign: z.object({ userId: id, tasks: selected }).strict(),
   task: z.object({ action: z.enum(['start','pause','block','complete','finish_part']), version: id, note }).strict(),
+  completeTasks: z.object({ tasks: selected }).strict(),
   crew:z.object(crewFields).strict(),
   crewUpdate:z.object({...crewFields,archived:z.boolean(),version:id}).strict(),
   crewAssign:z.object({crewId:id,mode:z.enum(['pool','shared']),tasks:selected}).strict(),
@@ -128,6 +129,7 @@ export function registerErpRoutes(app, erp) {
   write('crews/:id',schemas.crewUpdate,managers,(u,b,id)=>erp.saveCrew(u,id,b));
   write('assign-crew',schemas.crewAssign,managers,(u,b)=>erp.assignCrew(u,b));
   write('tasks/:id/action', schemas.task, [...managers,'technician'], (u,b,id) => erp.taskAction(u,id,b));
+  write('tasks/complete-batch', schemas.completeTasks, [...managers,'technician'], (u,b) => erp.completeTasks(u,b));
   write('shifts/action', schemas.shift, [...managers,'technician'], (u,b) => erp.shiftAction(u,b));
   write('units/:id/quality', schemas.quality, [...managers,'inspector'], (u,b,id) => erp.quality(u,id,b));
   write('orders/:id/deliver', schemas.delivery, [...managers,'warehouse'], (u,b,id) => erp.deliver(u,id,b));
