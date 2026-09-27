@@ -1,6 +1,6 @@
 # LABA
 
-ERP `0.28.0`: вибір кількох власних завдань у `Моя робота` та пакетне завершення. Інструкція й статус розгортання: [ERP_BULK_COMPLETION](docs/ERP_BULK_COMPLETION.md), [CURRENT_STATE](docs/CURRENT_STATE.md).
+ERP `0.28.0`: вибір кількох власних завдань у `Моя робота` та пакетне завершення. Розгорнуто `e100793` 27.09.2026 о 20:03:23 UTC. Інструкція, backup і перевірки: [ERP_BULK_COMPLETION](docs/ERP_BULK_COMPLETION.md), [CURRENT_STATE](docs/CURRENT_STATE.md).
 
 Закритий портал лабораторії з окремими модулями ремонту, гарантійного сервісу та віддаленого доступу до пристроїв. Пристрої залишаються в домашній мережі; VPS бачить їх лише через Tailscale subnet router на Raspberry Pi.
 

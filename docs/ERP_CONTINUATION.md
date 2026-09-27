@@ -2,7 +2,11 @@
 
 ## Найновіший checkpoint: пакетне завершення 2026-09-27
 
-Підготовлено `0.28.0`, **не deployed**: `docs/ERP_BULK_COMPLETION.md` описує UI, ACL, транзакції, незалежний QC, перевірки й обмеження rollback. Зміни іншого ПК з `main=7140e04` збережено. До будь-якого deployment перечитати `CURRENT_STATE` та звірити живий код із Git; старі записи нижче історичні. Починати нову роботу від актуального `origin/main`, не від старих ERP-гілок.
+**Розгорнуто `0.28.0`, runtime `e10079303bf56ddde794c14be3e4e58321bedce8`, 20:03:23 UTC**: `docs/ERP_BULK_COMPLETION.md` описує UI, ACL, транзакції, незалежний QC, перевірки й обмеження rollback. У production перенесено тільки 15 змінених/нових файлів; зміни іншого ПК з `main=7140e04`, сервісне повернення, guides, UI та камери збережено. Усі 47 runtime-файлів звірено з Git. Backup `/opt/laba/backups/erp-bulk-e100793-20260927/` містить свіжу SQLite-копію та попередні файли, root-only. Перед стартом збігалися всі 41 стара таблиця; після старту весь ERP та решта облікових даних незмінні, лише live sync оновив timestamps `maintenance_cards`.
+
+Windows і Linux staging: clean install/check, **53/53 tests, audit 0**; Linux readonly migration checker двічі зберіг 41 таблицю, Sharp під користувачем laba працює. Health 200, неавторизовані ERP/API — 401, quick/FK та права перевірені. Production браузер залишився на вході Cloudflare, авторизоване завершення перевіряли тільки синтетичними browser tests; production завдань/фото/Signal для тестів не створювали. Деталі — найновіший `CURRENT_STATE`.
+
+Того самого вечора окремо оновлено Starlink `440a8e9`; це інший репозиторій/БД/backup. Task, SignalSynch, Pi/камери не оновлювалися; Caddyfile і `.env` незмінні. Починати нову роботу від актуального `origin/main` після fetch/status, не від старих ERP-гілок. Наступний docs-only commit **не змінює runtime SHA**. Не відкочувати QC на стару перевірку time entries після пакетних завершень; не відновлювати стару БД поверх нових робіт. До нового deployment повторити звірку/backup — сьогоднішня перевірка не гарантує відсутності майбутніх змін іншого ПК. Старі записи нижче історичні.
 
 ## Найновіший checkpoint: UI hotfix 2026-09-08
 

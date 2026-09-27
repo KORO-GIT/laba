@@ -1,6 +1,6 @@
 # Пакетне завершення персональних завдань · 0.28.0
 
-Підготовлено 27.09.2026 від `main=7140e04`, гілка `codex/erp-bulk-complete`. **Ще не розгорнуто на VPS.** Зміни іншого ПК (сервіс, повернення в облік, камери, ERP guides/layout) збережено; вони не входять до цього patch.
+Підготовлено 27.09.2026 від `main=7140e04`, гілка `codex/erp-bulk-complete`. **Розгорнуто `e100793` о 20:03:23 UTC.** Зміни іншого ПК (сервіс, повернення в облік, камери, ERP guides/layout) збережено; вони не входять до цього patch. Backup, Linux та production перевірки — у найновішому записі `CURRENT_STATE.md`.
 
 ## Для майстра
 
@@ -32,6 +32,8 @@
 - Windows: за потреби `PYTHON` вказує на Python executable, `PLAYWRIGHT_MODULE` — на `playwright/index.mjs`; локальні шляхи/скріншоти не комітити.
 
 ## Продовження / deployment
+
+Deployment 27.09.2026 завершений: 15 файлів patch перенесено, 47 runtime-файлів звірено; нової схеми/залежностей немає. Linux clean install/check/53 tests/audit0, readonly migration checker (41 таблиця, 2 запуски), Sharp, health/auth/quick/FK checks пройдені. Backup `/opt/laba/backups/erp-bulk-e100793-20260927/` збережено root-only. У браузері немає чинної Cloudflare-сесії для live UI; робочі операції на production не змінювали для тестів. Наступний Git handoff змінює документацію, не runtime.
 
 Перед розгортанням заново fetch та звірити VPS runtime з Git, зробити свіжий SQLite backup і backup коду. Не підмінювати робочу БД локальною, не відновлювати стару БД поверх нових робіт. Перенести лише цей ERP patch плюс package/cache version; не відкочувати `src/database.mjs`, `src/server.mjs`, камери або SignalSynch. Після запуску перевірити health, auth, DB quick/FK checks, права та інші служби; не створювати тестові production завдання.
 
